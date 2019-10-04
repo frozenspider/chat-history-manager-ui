@@ -44,8 +44,8 @@ libraryDependencies ++= Seq(
   "commons-codec"             %  "commons-codec"            % "1.11",
   "org.apache.commons"        %  "commons-lang3"            % "3.4",
   "com.github.nscala-time"    %% "nscala-time"              % "2.16.0",
-  "org.json4s"                %% "json4s-jackson"           % "3.5.3",
-  "org.json4s"                %% "json4s-ext"               % "3.5.3",
+  "org.json4s"                %% "json4s-jackson"           % "3.6.7",
+  "org.json4s"                %% "json4s-ext"               % "3.6.7",
   "com.typesafe"              %  "config"                   % "1.3.2",
   "org.scala-lang.modules"    %% "scala-parser-combinators" % "1.1.1",
   // Test
