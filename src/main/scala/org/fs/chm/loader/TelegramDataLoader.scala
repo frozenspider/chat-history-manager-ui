@@ -2,68 +2,37 @@ package org.fs.chm.loader
 
 import java.io.File
 import java.io.FileNotFoundException
-import java.time.format.DateTimeFormatter
 
 import scala.collection.immutable.ListMap
 
 import com.github.nscala_time.time.Imports.DateTime
 import org.fs.chm.dao._
-import org.joda.time.format.DateTimeFormat
 import org.json4s._
 import org.json4s.jackson.JsonMethods
-import org.json4s.prefs.EmptyValueStrategy
 
 class TelegramDataLoader extends DataLoader {
-  implicit private val formats: Formats = DefaultFormats.withLong
+  implicit private val formats: Formats = DefaultFormats.withLong.withBigDecimal
 
   override def loadDataInner(path: File): ChatHistoryDao = {
+    implicit val dummyTracker = new FieldUsageTracker
     val resultJsonFile: File = new File(path, "result.json")
     if (!resultJsonFile.exists()) throw new FileNotFoundException("result.json not found in " + path.getAbsolutePath)
     val parsed = JsonMethods.parse(resultJsonFile)
     val contacts = for {
-      contact <- getCheckedField(parsed, "contacts", "list").extract[Seq[JValue]]
-    } yield
-      Contact(
-        id                = getCheckedField(contact, "user_id").extract[Long],
-        firstNameOption   = stringToOpt(getCheckedField(contact, "first_name").extract[String]),
-        lastNameOption    = stringToOpt(getCheckedField(contact, "last_name").extract[String]),
-        phoneNumberOption = stringToOpt(getCheckedField(contact, "phone_number").extract[String]),
-        // TODO: timezone?
-        lastSeenDateOption = stringToDateTimeOpt(getCheckedField(contact, "date").extract[String])
-      )
+      contact <- getCheckedField[Seq[JValue]](parsed, "contacts", "list")
+    } yield parseContact(contact)
 
     val chatsWithMessages = for {
-      chat      <- getCheckedField(parsed, "chats", "list").extract[Seq[JValue]]
-      tpeString = getCheckedField(chat, "type").extract[String]
-      if (tpeString != "saved_messages")
+      chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
+      if (getCheckedField[String](chat, "type") != "saved_messages")
     } yield {
       val messagesRes = for {
-        messages <- getCheckedField(chat, "messages").extract[IndexedSeq[JValue]]
-        if getCheckedField(messages, "type").extract[String] == "message"
+        message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
+        if getCheckedField[String](message, "type") == "message"
         // FIXME: Service messages, phone calls
-      } yield {
-        Message.Regular(
-          id                     = getCheckedField(messages, "id").extract[Long],
-          date                   = stringToDateTimeOpt(getCheckedField(messages, "date").extract[String]).get,
-          editDateOption         = stringToDateTimeOpt(getCheckedField(messages, "edited").extract[String]),
-          fromName               = getCheckedField(messages, "from").extract[String],
-          fromId                 = getCheckedField(messages, "from_id").extract[Long],
-          forwardFromNameOption  = (messages \ "forwarded_from").extractOpt[String],
-          replyToMessageIdOption = (messages \ "reply_to_message_id").extractOpt[Long],
-          textOption             = stringToOpt(getCheckedField(messages, "text").toString), // FIXME
-          contentOption          = None // FIXME
-        )
-      }
-      val chatRes = Chat(
-        id         = getCheckedField(chat, "id").extract[Long],
-        nameOption = getCheckedField(chat, "name").extractOpt[String],
-        tpe = tpeString match {
-          case "personal_chat" => ChatType.Personal
-          case "private_group" => ChatType.PrivateGroup
-          case s               => throw new IllegalArgumentException("Illegal format, unknown chat type '$s'")
-        },
-        msgNum = messagesRes.size
-      )
+      } yield parseMessage(message)
+
+      val chatRes = parseChat(chat, messagesRes.size)
       (chatRes, messagesRes)
     }
     val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
@@ -71,51 +40,249 @@ class TelegramDataLoader extends DataLoader {
     new EagerChatHistoryDao(contacts = contacts, chatsWithMessages = chatsWithMessagesLM)
   }
 
-  //{
-  //"id": 5165,
-  //"type": "message",
-  //"date": "2016-11-18T20:09:04",
-  //"edited": "1970-01-01T05:00:00",
-  //"from": "Vadim Lazarenko",
-  //"from_id": 182120723,
-  //"file": "chats/chat_01/stickers/sticker (14).webp",
-  //"thumbnail": "chats/chat_01/stickers/sticker (14).webp_thumb.jpg",
-  //"media_type": "sticker",
-  //"sticker_emoji": "💪",
-  //"width": 438,
-  //"height": 512,
-  //"text": ""
-  //},
-  //{
-  //"id": 5167,
-  //"type": "message",
-  //"date": "2016-11-19T15:31:59",
-  //"edited": "1970-01-01T05:00:00",
-  //"from": "Alex Abdugafarov",
-  //"from_id": 92139334,
-  //"text": "Кошка заходит в кафе, заказывает кофе и пирожное. Официант стоит с открытым ртом.\nКошка:\n— Что?\n— Эээ... вы кошка!\n— Да.\n— Вы разговариваете!\n— Какая новость. Вы принесете мой заказ или нет?\n— Ооо, простите, пожалуйста, конечно, принесу. Я просто никогда раньше не видел...\n— А я тут раньше и не бывала. Я ищу работу, была на собеседовании, решила вот выпить кофе.\nОфициант возвращается с заказом, видит кошку, строчащую что-то на клавиатуре ноутбука.\n— Ваш кофе. Эээ... я тут подумал... Вы ведь ищете работу, да? Просто мой дядя — директор цирка, и он с удовольствием взял бы вас на отличную зарплату!\n— Цирк? — говорит кошка. — Это где арена, купол, оркестр?\n— Да!\n— Клоуны, акробаты, слоны?\n— Да!\n— Сахарная вата, попкорн, леденцы на палочке?\n— Да-да-да!\n— Звучит заманчиво! А нахрена им программист?"
-  //},
-
-  private def stringToOpt(s: String): Option[String] = {
-    if (s.isEmpty) None else Some(s)
-  }
-
-  private def stringToDateTimeOpt(s: String): Option[DateTime] = {
-    stringToOpt(s).map(DateTime.parse) match {
-      case Some(dt) if dt.year.get == 1970 => None // TG puts minimum timestamp in place of absent
-      case other                           => other
+  private def parseContact(jv: JValue): Contact = {
+    implicit val tracker = new FieldUsageTracker
+    tracker.ensuringUsage(jv) {
+      Contact(
+        id                = getCheckedField[Long](jv, "user_id"),
+        firstNameOption   = getStringOpt(jv, "first_name", true),
+        lastNameOption    = getStringOpt(jv, "last_name", true),
+        phoneNumberOption = getStringOpt(jv, "phone_number", true),
+        // TODO: timezone?
+        lastSeenDateOption = stringToDateTimeOpt(getCheckedField[String](jv, "date"))
+      )
     }
   }
 
-  private def getCheckedField(jv: JValue, fn: String): JValue = {
-    val res = jv \ fn
-    require(res != JNothing, s"Incompatible format! Field '$fn' not found in $jv")
+  private def parseMessage(jv: JValue): Message = {
+    implicit val tracker = new FieldUsageTracker
+    tracker.markUsed("type")
+    tracker.markUsed("via_bot") // Ignored
+    tracker.ensuringUsage(jv) {
+      Message.Regular(
+        id                     = getCheckedField[Long](jv, "id"),
+        date                   = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+        editDateOption         = stringToDateTimeOpt(getCheckedField[String](jv, "edited")),
+        fromName               = getCheckedField[String](jv, "from"),
+        fromId                 = getCheckedField[Long](jv, "from_id"),
+        forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
+        replyToMessageIdOption = getFieldOpt[Long](jv, "reply_to_message_id", false),
+        textOption             = parseText(jv),
+        contentOption          = ContentParser.parseContentOption(jv)
+      )
+    }
+  }
+
+  private def parseText(jv: JValue)(implicit tracker: FieldUsageTracker): Option[String] = {
+    // FIXME
+    tracker.markUsed("text")
+    Some((jv \ "text").toString)
+  }
+
+  private object ContentParser {
+    def parseContentOption(jv: JValue)(implicit tracker: FieldUsageTracker): Option[Content] = {
+      val mediaTypeOption     = getFieldOpt[String](jv, "media_type", false)
+      val photoOption         = getFieldOpt[String](jv, "photo", false)
+      val fileOption          = getFieldOpt[String](jv, "file", false)
+      val locPresent          = (jv \ "location_information") != JNothing
+      val pollQuestionPresent = (jv \ "poll" \ "question") != JNothing
+      val contactInfoPresent  = (jv \ "contact_information") != JNothing
+      (mediaTypeOption, photoOption, fileOption, locPresent, pollQuestionPresent, contactInfoPresent) match {
+        case (None, None, None, false, false, false)                     => None
+        case (Some("sticker"), None, Some(_), false, false, false)       => Some(parseSticker(jv))
+        case (Some("animation"), None, Some(_), false, false, false)     => Some(parseAnimation(jv))
+        case (Some("video_message"), None, Some(_), false, false, false) => Some(parseVideoMsg(jv))
+        case (Some("voice_message"), None, Some(_), false, false, false) => Some(parseVoiceMsg(jv))
+        case (Some("video_file"), None, Some(_), false, false, false)    => Some(parseFile(jv))
+        case (Some("audio_file"), None, Some(_), false, false, false)    => Some(parseFile(jv))
+        case (None, Some(_), None, false, false, false)                  => Some(parsePhoto(jv))
+        case (None, None, Some(_), false, false, false)                  => Some(parseFile(jv))
+        case (None, None, None, true, false, false)                      => Some(parseLocation(jv))
+        case (None, None, None, false, true, false)                      => Some(parsePoll(jv))
+        case (None, None, None, false, false, true)                      => Some(parseSharedContact(jv))
+        case _ =>
+          throw new IllegalArgumentException(s"Couldn't determine content type for '$jv'")
+      }
+    }
+
+    private def parseSticker(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Sticker = {
+      Content.Sticker(
+        pathOption          = getStringOpt(jv, "file", true),
+        thumbnailPathOption = getStringOpt(jv, "thumbnail", true),
+        emojiOption         = getStringOpt(jv, "sticker_emoji", false),
+        widthOption         = getFieldOpt[Int](jv, "width", false),
+        heightOption        = getFieldOpt[Int](jv, "height", false)
+      )
+    }
+
+    private def parsePhoto(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Photo = {
+      Content.Photo(
+        pathOption = getStringOpt(jv, "photo", true),
+        width      = getCheckedField[Int](jv, "width"),
+        height     = getCheckedField[Int](jv, "height"),
+      )
+    }
+
+    private def parseAnimation(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Animation = {
+      Content.Animation(
+        pathOption          = getStringOpt(jv, "file", true),
+        thumbnailPathOption = getStringOpt(jv, "thumbnail", true),
+        mimeTypeOption      = Some(getCheckedField[String](jv, "mime_type")),
+        durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
+        width               = getCheckedField[Int](jv, "width"),
+        height              = getCheckedField[Int](jv, "height"),
+      )
+    }
+
+    private def parseVoiceMsg(jv: JValue)(implicit tracker: FieldUsageTracker): Content.VoiceMsg = {
+      Content.VoiceMsg(
+        pathOption        = getStringOpt(jv, "file", true),
+        mimeTypeOption    = Some(getCheckedField[String](jv, "mime_type")),
+        durationSecOption = getFieldOpt[Int](jv, "duration_seconds", false),
+      )
+    }
+
+    private def parseVideoMsg(jv: JValue)(implicit tracker: FieldUsageTracker): Content.VideoMsg = {
+      Content.VideoMsg(
+        pathOption          = getStringOpt(jv, "file", true),
+        thumbnailPathOption = getStringOpt(jv, "thumbnail", true),
+        mimeTypeOption      = Some(getCheckedField[String](jv, "mime_type")),
+        durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
+        width               = getCheckedField[Int](jv, "width"),
+        height              = getCheckedField[Int](jv, "height"),
+      )
+    }
+
+    private def parseFile(jv: JValue)(implicit tracker: FieldUsageTracker): Content.File = {
+      Content.File(
+        pathOption          = getStringOpt(jv, "file", true),
+        thumbnailPathOption = getStringOpt(jv, "thumbnail", false),
+        mimeTypeOption      = getStringOpt(jv, "mime_type", true),
+        titleOption         = getStringOpt(jv, "title", false),
+        performerOption     = getStringOpt(jv, "performer", false),
+        durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
+        widthOption         = getFieldOpt[Int](jv, "width", false),
+        heightOption        = getFieldOpt[Int](jv, "height", false)
+      )
+    }
+
+    private def parseLocation(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Location = {
+      Content.Location(
+        lat                   = getCheckedField[BigDecimal](jv, "location_information", "latitude"),
+        lon                   = getCheckedField[BigDecimal](jv, "location_information", "longitude"),
+        liveDurationSecOption = getFieldOpt[Int](jv, "live_location_period_seconds", false)
+      )
+    }
+
+    private def parsePoll(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Poll = {
+      Content.Poll(
+        question = getCheckedField[String](jv, "poll", "question")
+      )
+    }
+
+    private def parseSharedContact(jv: JValue)(implicit tracker: FieldUsageTracker): Content.SharedContact = {
+      val ci = getRawField(jv, "contact_information", true)
+      Content.SharedContact(
+        firstNameOption   = getStringOpt(ci, "first_name", true),
+        lastNameOption    = getStringOpt(ci, "last_name", true),
+        phoneNumberOption = getStringOpt(ci, "phone_number", true),
+        vcardPathOption   = getStringOpt(jv, "contact_vcard", false)
+      )
+    }
+  }
+
+  private def parseChat(jv: JValue, msgNum: Int): Chat = {
+    implicit val tracker = new FieldUsageTracker
+    tracker.markUsed("messages")
+    tracker.ensuringUsage(jv) {
+      Chat(
+        id         = getCheckedField[Long](jv, "id"),
+        nameOption = getCheckedField[Option[String]](jv, "name"),
+        tpe = getCheckedField[String](jv, "type") match {
+          case "personal_chat" => ChatType.Personal
+          case "private_group" => ChatType.PrivateGroup
+          case s               => throw new IllegalArgumentException("Illegal format, unknown chat type '$s'")
+        },
+        msgNum = msgNum
+      )
+    }
+  }
+
+  private def stringToDateTimeOpt(s: String): Option[DateTime] = {
+    DateTime.parse(s) match {
+      case dt if dt.year.get == 1970 => None // TG puts minimum timestamp in place of absent
+      case other                     => Some(other)
+    }
+  }
+
+  private def getRawField(jv: JValue, fieldName: String, mustPresent: Boolean)(
+      implicit tracker: FieldUsageTracker): JValue = {
+    val res = jv \ fieldName
+    tracker.markUsed(fieldName)
+    if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in $jv")
     res
   }
 
-  private def getCheckedField(jv: JValue, fn1: String, fn2: String): JValue = {
+  private def getFieldOpt[A](jv: JValue, fieldName: String, mustPresent: Boolean)(
+      implicit formats: Formats,
+      mf: scala.reflect.Manifest[A],
+      tracker: FieldUsageTracker): Option[A] = {
+    getRawField(jv, fieldName, mustPresent).extractOpt[A]
+  }
+
+  private def getStringOpt[A](jv: JValue, fieldName: String, mustPresent: Boolean)(
+      implicit formats: Formats,
+      tracker: FieldUsageTracker): Option[String] = {
+    val res = jv \ fieldName
+    tracker.markUsed(fieldName)
+    if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in $jv")
+    res.extractOpt[String] match {
+      case Some("")                                                                 => None
+      case Some("(File not included. Change data exporting settings to download.)") => None
+      case other                                                                    => other
+    }
+  }
+
+  private def getCheckedField[A](jv: JValue, fieldName: String)(implicit formats: Formats,
+                                                                mf: scala.reflect.Manifest[A],
+                                                                tracker: FieldUsageTracker): A = {
+    getRawField(jv, fieldName, true).extract[A]
+  }
+
+  private def getCheckedField[A](jv: JValue, fn1: String, fn2: String)(implicit formats: Formats,
+                                                                       mf: scala.reflect.Manifest[A],
+                                                                       tracker: FieldUsageTracker): A = {
     val res = jv \ fn1 \ fn2
     require(res != JNothing, s"Incompatible format! Path '$fn1 \\ $fn2' not found in $jv")
-    res
+    tracker.markUsed(fn1)
+    res.extract[A]
+  }
+
+  /** Tracks JSON fields being used and ensures that nothing is left unattended */
+  class FieldUsageTracker {
+    private var markedFields: Set[String] = Set.empty
+
+    def markUsed(fieldName: String): Unit = {
+      markedFields = markedFields + fieldName
+    }
+
+    def ensuringUsage[A](jv: JValue)(codeBlock: => A): A = {
+      val res: A = codeBlock
+      ensureUsage(jv)
+      res
+    }
+
+    def ensureUsage(jv: JValue): Unit = {
+      jv match {
+        case JObject(children) =>
+          val objFields = Set.empty ++ children.map(_._1)
+          val unused    = objFields.diff(markedFields)
+          if (unused.nonEmpty) {
+            throw new IllegalArgumentException(s"Unused fields! $unused for ${jv.toString.take(500)}")
+          }
+        case _ =>
+          throw new IllegalArgumentException("Not a JObject! " + jv)
+      }
+    }
   }
 }
