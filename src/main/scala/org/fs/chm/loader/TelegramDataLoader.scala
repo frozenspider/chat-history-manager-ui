@@ -86,17 +86,73 @@ class TelegramDataLoader extends DataLoader {
     }
 
     private def parseService(jv: JValue)(implicit tracker: FieldUsageTracker): Message.Service = {
+      tracker.markUsed("edited") // Service messages can't be edited
       getCheckedField[String](jv, "action") match {
+        case "phone_call" =>
+          Message.PhoneCall(
+            id                  = getCheckedField[Long](jv, "id"),
+            date                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromName            = getCheckedField[String](jv, "actor"),
+            fromId              = getCheckedField[Long](jv, "actor_id"),
+            durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
+            discardReasonOption = getStringOpt(jv, "discard_reason", false),
+            textOption          = parseText(jv)
+          )
+        case "pin_message" =>
+          Message.PinMessage(
+            id         = getCheckedField[Long](jv, "id"),
+            date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromName   = getCheckedField[String](jv, "actor"),
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            messageId  = getCheckedField[Long](jv, "message_id"),
+            textOption = parseText(jv)
+          )
         case "create_group" =>
           Message.CreateGroup(
-            id             = getCheckedField[Long](jv, "id"),
-            date           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            editDateOption = stringToDateTimeOpt(getCheckedField[String](jv, "edited")),
-            fromName       = getCheckedField[String](jv, "actor"),
-            fromId         = getCheckedField[Long](jv, "actor_id"),
-            title          = getCheckedField[String](jv, "title"),
-            members        = getCheckedField[Seq[String]](jv, "members"),
-            textOption     = parseText(jv)
+            id         = getCheckedField[Long](jv, "id"),
+            date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromName   = getCheckedField[String](jv, "actor"),
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            title      = getCheckedField[String](jv, "title"),
+            members    = getCheckedField[Seq[String]](jv, "members"),
+            textOption = parseText(jv)
+          )
+        case "invite_members" =>
+          Message.InviteGroupMembers(
+            id         = getCheckedField[Long](jv, "id"),
+            date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromName   = getCheckedField[String](jv, "actor"),
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            members    = getCheckedField[Seq[String]](jv, "members"),
+            textOption = parseText(jv)
+          )
+        case "remove_members" =>
+          Message.RemoveGroupMembers(
+            id         = getCheckedField[Long](jv, "id"),
+            date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromName   = getCheckedField[String](jv, "actor"),
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            members    = getCheckedField[Seq[String]](jv, "members"),
+            textOption = parseText(jv)
+          )
+        case "clear_history" =>
+          Message.ClearHistory(
+            id         = getCheckedField[Long](jv, "id"),
+            date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromName   = getCheckedField[String](jv, "actor"),
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            textOption = parseText(jv)
+          )
+        case "edit_group_photo" =>
+          Message.EditGroupPhoto(
+            id           = getCheckedField[Long](jv, "id"),
+            date         = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromName     = getCheckedField[String](jv, "actor"),
+            fromId       = getCheckedField[Long](jv, "actor_id"),
+            pathOption   = getStringOpt(jv, "photo", true),
+            widthOption  = getFieldOpt[Int](jv, "width", false),
+            heightOption = getFieldOpt[Int](jv, "height", false),
+            textOption   = parseText(jv)
           )
         case other =>
           throw new IllegalArgumentException(
@@ -267,7 +323,7 @@ class TelegramDataLoader extends DataLoader {
     getRawField(jv, fieldName, mustPresent).extractOpt[A]
   }
 
-  private def getStringOpt[A](jv: JValue, fieldName: String, mustPresent: Boolean)(
+  private def getStringOpt(jv: JValue, fieldName: String, mustPresent: Boolean)(
       implicit formats: Formats,
       tracker: FieldUsageTracker): Option[String] = {
     val res = jv \ fieldName

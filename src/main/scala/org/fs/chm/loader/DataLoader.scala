@@ -11,5 +11,5 @@ trait DataLoader {
     loadDataInner(path)
   }
 
-  def loadDataInner(path: File): ChatHistoryDao
+  protected def loadDataInner(path: File): ChatHistoryDao
 }

@@ -39,7 +39,6 @@ case class Chat(
 sealed trait Message {
   val id: Long
   val date: DateTime
-  val editDateOption: Option[DateTime]
   val fromName: String
   val fromId: Long
 }
@@ -57,18 +56,73 @@ object Message {
   ) extends Message
 
   sealed trait Service extends Message
+
+  case class PhoneCall(
+      id: Long,
+      date: DateTime,
+      fromName: String,
+      fromId: Long,
+      durationSecOption: Option[Int],
+      discardReasonOption: Option[String],
+      textOption: Option[String]
+  ) extends Service
+
+  case class PinMessage(
+      id: Long,
+      date: DateTime,
+      fromName: String,
+      fromId: Long,
+      messageId: Long,
+      textOption: Option[String]
+  ) extends Service
+
   case class CreateGroup(
       id: Long,
       date: DateTime,
-      editDateOption: Option[DateTime],
       fromName: String,
       fromId: Long,
       title: String,
       members: Seq[String],
       textOption: Option[String]
   ) extends Service
-  //case class CreateMessage
-  // FIXME: Other types of msgs
+
+  case class InviteGroupMembers(
+      id: Long,
+      date: DateTime,
+      fromName: String,
+      fromId: Long,
+      members: Seq[String],
+      textOption: Option[String]
+  ) extends Service
+
+  case class RemoveGroupMembers(
+      id: Long,
+      date: DateTime,
+      fromName: String,
+      fromId: Long,
+      members: Seq[String],
+      textOption: Option[String]
+  ) extends Service
+
+  case class EditGroupPhoto(
+      id: Long,
+      date: DateTime,
+      fromName: String,
+      fromId: Long,
+      pathOption: Option[String],
+      widthOption: Option[Int],
+      heightOption: Option[Int],
+      textOption: Option[String]
+  ) extends Service
+
+  /** Note: for Telegram, from is not always meaningful */
+  case class ClearHistory(
+      id: Long,
+      date: DateTime,
+      fromName: String,
+      fromId: Long,
+      textOption: Option[String]
+  ) extends Service
 }
 
 //
