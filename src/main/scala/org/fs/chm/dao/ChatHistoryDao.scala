@@ -36,7 +36,13 @@ case class Chat(
     msgNum: Long
 )
 
-sealed trait Message
+sealed trait Message {
+  val id: Long
+  val date: DateTime
+  val editDateOption: Option[DateTime]
+  val fromName: String
+  val fromId: Long
+}
 object Message {
   case class Regular(
       id: Long,
@@ -49,6 +55,18 @@ object Message {
       textOption: Option[String], // TODO: RichText
       contentOption: Option[Content]
   ) extends Message
+
+  sealed trait Service extends Message
+  case class CreateGroup(
+      id: Long,
+      date: DateTime,
+      editDateOption: Option[DateTime],
+      fromName: String,
+      fromId: Long,
+      title: String,
+      members: Seq[String],
+      textOption: Option[String]
+  ) extends Service
   //case class CreateMessage
   // FIXME: Other types of msgs
 }

@@ -7,6 +7,7 @@ import scala.collection.immutable.ListMap
 
 import com.github.nscala_time.time.Imports.DateTime
 import org.fs.chm.dao._
+import org.fs.utility.Imports._
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
@@ -26,11 +27,9 @@ class TelegramDataLoader extends DataLoader {
       chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
       if (getCheckedField[String](chat, "type") != "saved_messages")
     } yield {
-      val messagesRes = for {
+      val messagesRes = (for {
         message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
-        if getCheckedField[String](message, "type") == "message"
-        // FIXME: Service messages, phone calls
-      } yield parseMessage(message)
+      } yield MessageParser.parseMessageOption(message)).yieldDefined
 
       val chatRes = parseChat(chat, messagesRes.size)
       (chatRes, messagesRes)
@@ -40,25 +39,39 @@ class TelegramDataLoader extends DataLoader {
     new EagerChatHistoryDao(contacts = contacts, chatsWithMessages = chatsWithMessagesLM)
   }
 
+  //
+  // Parsers
+  //
+
   private def parseContact(jv: JValue): Contact = {
     implicit val tracker = new FieldUsageTracker
     tracker.ensuringUsage(jv) {
       Contact(
-        id                = getCheckedField[Long](jv, "user_id"),
-        firstNameOption   = getStringOpt(jv, "first_name", true),
-        lastNameOption    = getStringOpt(jv, "last_name", true),
-        phoneNumberOption = getStringOpt(jv, "phone_number", true),
-        // TODO: timezone?
+        id                 = getCheckedField[Long](jv, "user_id"),
+        firstNameOption    = getStringOpt(jv, "first_name", true),
+        lastNameOption     = getStringOpt(jv, "last_name", true),
+        phoneNumberOption  = getStringOpt(jv, "phone_number", true),
         lastSeenDateOption = stringToDateTimeOpt(getCheckedField[String](jv, "date"))
       )
     }
   }
 
-  private def parseMessage(jv: JValue): Message = {
-    implicit val tracker = new FieldUsageTracker
-    tracker.markUsed("type")
-    tracker.markUsed("via_bot") // Ignored
-    tracker.ensuringUsage(jv) {
+  private object MessageParser {
+    def parseMessageOption(jv: JValue): Option[Message] = {
+      implicit val tracker = new FieldUsageTracker
+      tracker.markUsed("via_bot") // Ignored
+      tracker.ensuringUsage(jv) {
+        getCheckedField[String](jv, "type") match {
+          case "message" => Some(parseRegular(jv))
+          case "service" => Some(parseService(jv))
+          case other =>
+            throw new IllegalArgumentException(
+              s"Don't know how to parse message of type '$other' for ${jv.toString.take(500)}")
+        }
+      }
+    }
+
+    private def parseRegular(jv: JValue)(implicit tracker: FieldUsageTracker): Message.Regular = {
       Message.Regular(
         id                     = getCheckedField[Long](jv, "id"),
         date                   = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
@@ -70,6 +83,25 @@ class TelegramDataLoader extends DataLoader {
         textOption             = parseText(jv),
         contentOption          = ContentParser.parseContentOption(jv)
       )
+    }
+
+    private def parseService(jv: JValue)(implicit tracker: FieldUsageTracker): Message.Service = {
+      getCheckedField[String](jv, "action") match {
+        case "create_group" =>
+          Message.CreateGroup(
+            id             = getCheckedField[Long](jv, "id"),
+            date           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            editDateOption = stringToDateTimeOpt(getCheckedField[String](jv, "edited")),
+            fromName       = getCheckedField[String](jv, "actor"),
+            fromId         = getCheckedField[Long](jv, "actor_id"),
+            title          = getCheckedField[String](jv, "title"),
+            members        = getCheckedField[Seq[String]](jv, "members"),
+            textOption     = parseText(jv)
+          )
+        case other =>
+          throw new IllegalArgumentException(
+            s"Don't know how to parse service message for action '$other' for ${jv.toString.take(500)}")
+      }
     }
   }
 
@@ -208,6 +240,11 @@ class TelegramDataLoader extends DataLoader {
     }
   }
 
+  //
+  // Utility
+  //
+
+  /** Dates in TG history is exported in local timezone, so we'll try to import in current one as well */
   private def stringToDateTimeOpt(s: String): Option[DateTime] = {
     DateTime.parse(s) match {
       case dt if dt.year.get == 1970 => None // TG puts minimum timestamp in place of absent
