@@ -1,17 +1,26 @@
 package org.fs.chm.dao
 
 import scala.collection.immutable.ListMap
+import scala.collection.immutable.TreeMap
 
 class EagerChatHistoryDao(
     override val contacts: Seq[Contact],
     chatsWithMessages: ListMap[Chat, IndexedSeq[Message]]
 ) extends ChatHistoryDao {
 
+  // We can't use mapValues because it's lazy...
+  val messagesMap: ListMap[Chat, TreeMap[Long, Message]] = chatsWithMessages map {
+    case (c, ms) => (c, TreeMap(ms.map(m => (m.id, m)): _*))
+  }
+
   override def chats = chatsWithMessages.keys.toSeq
 
   override def messages(chat: Chat, offset: Int, limit: Int) = {
     chatsWithMessages.get(chat) map (_.slice(offset, offset + limit)) getOrElse IndexedSeq.empty
   }
+
+  override def messageOption(chat: Chat, id: Long): Option[Message] =
+    messagesMap.get(chat) flatMap (_ get id)
 
   override def toString: String = {
     Seq(

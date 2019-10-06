@@ -172,6 +172,8 @@ class TelegramDataLoader extends DataLoader {
           None
         case s: JString =>
           Some(RichText(Seq(parsePlain(s))))
+        case other =>
+          throw new IllegalArgumentException(s"Don't know how to parse RichText container '$jv'")
       }
     }
 
