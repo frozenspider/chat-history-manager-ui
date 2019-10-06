@@ -1,7 +1,7 @@
 name           := "chat-history-manager"
 version        := "0.1-SNAPSHOT"
 homepage       := Some(url("https://github.com/frozenspider/chat-history-manager"))
-scalaVersion   := "2.12.8"
+scalaVersion   := "2.12.10"
 
 // Show tests duration and full stacktrace on test errors
 testOptions in Test += Tests.Argument("-oDF")
@@ -39,6 +39,8 @@ libraryDependencies ++= Seq(
   "org.slf4s"                 %% "slf4s-api"                % "1.7.25",
   "org.slf4j"                 %  "jcl-over-slf4j"           % "1.7.25",
   "ch.qos.logback"            %  "logback-classic"          % "1.1.2",
+  // UI
+  "org.scala-lang.modules"    %% "scala-swing"              % "2.1.1",
   // Other
   "com.github.frozenspider"   %% "fs-common-utils"          % "0.1.3",
   "commons-codec"             %  "commons-codec"            % "1.11",
