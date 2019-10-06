@@ -80,7 +80,7 @@ class TelegramDataLoader extends DataLoader {
         fromId                 = getCheckedField[Long](jv, "from_id"),
         forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
         replyToMessageIdOption = getFieldOpt[Long](jv, "reply_to_message_id", false),
-        textOption             = parseText(jv),
+        textOption             = RichTextParser.parseRichTextOption(jv),
         contentOption          = ContentParser.parseContentOption(jv)
       )
     }
@@ -96,7 +96,7 @@ class TelegramDataLoader extends DataLoader {
             fromId              = getCheckedField[Long](jv, "actor_id"),
             durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
             discardReasonOption = getStringOpt(jv, "discard_reason", false),
-            textOption          = parseText(jv)
+            textOption          = RichTextParser.parseRichTextOption(jv)
           )
         case "pin_message" =>
           Message.PinMessage(
@@ -105,7 +105,7 @@ class TelegramDataLoader extends DataLoader {
             fromName   = getCheckedField[String](jv, "actor"),
             fromId     = getCheckedField[Long](jv, "actor_id"),
             messageId  = getCheckedField[Long](jv, "message_id"),
-            textOption = parseText(jv)
+            textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "create_group" =>
           Message.CreateGroup(
@@ -115,7 +115,7 @@ class TelegramDataLoader extends DataLoader {
             fromId     = getCheckedField[Long](jv, "actor_id"),
             title      = getCheckedField[String](jv, "title"),
             members    = getCheckedField[Seq[String]](jv, "members"),
-            textOption = parseText(jv)
+            textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "invite_members" =>
           Message.InviteGroupMembers(
@@ -124,7 +124,7 @@ class TelegramDataLoader extends DataLoader {
             fromName   = getCheckedField[String](jv, "actor"),
             fromId     = getCheckedField[Long](jv, "actor_id"),
             members    = getCheckedField[Seq[String]](jv, "members"),
-            textOption = parseText(jv)
+            textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "remove_members" =>
           Message.RemoveGroupMembers(
@@ -133,7 +133,7 @@ class TelegramDataLoader extends DataLoader {
             fromName   = getCheckedField[String](jv, "actor"),
             fromId     = getCheckedField[Long](jv, "actor_id"),
             members    = getCheckedField[Seq[String]](jv, "members"),
-            textOption = parseText(jv)
+            textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "clear_history" =>
           Message.ClearHistory(
@@ -141,7 +141,7 @@ class TelegramDataLoader extends DataLoader {
             date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
             fromId     = getCheckedField[Long](jv, "actor_id"),
-            textOption = parseText(jv)
+            textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "edit_group_photo" =>
           Message.EditGroupPhoto(
@@ -152,7 +152,7 @@ class TelegramDataLoader extends DataLoader {
             pathOption   = getStringOpt(jv, "photo", true),
             widthOption  = getFieldOpt[Int](jv, "width", false),
             heightOption = getFieldOpt[Int](jv, "height", false),
-            textOption   = parseText(jv)
+            textOption   = RichTextParser.parseRichTextOption(jv)
           )
         case other =>
           throw new IllegalArgumentException(
@@ -161,10 +161,92 @@ class TelegramDataLoader extends DataLoader {
     }
   }
 
-  private def parseText(jv: JValue)(implicit tracker: FieldUsageTracker): Option[String] = {
-    // FIXME
-    tracker.markUsed("text")
-    Some((jv \ "text").toString)
+  private object RichTextParser {
+    def parseRichTextOption(jv: JValue)(implicit tracker: FieldUsageTracker): Option[RichText] = {
+      val jText = getRawField(jv, "text", true)
+      jText match {
+        case arr: JArray =>
+          val elements = arr.extract[Seq[JValue]] map parseElement
+          Some(RichText(elements))
+        case JString("") =>
+          None
+        case s: JString =>
+          Some(RichText(Seq(parsePlain(s))))
+      }
+    }
+
+    private def parseElement(jv: JValue): RichText.Element = {
+      jv match {
+        case s: JString  => parsePlain(s)
+        case jo: JObject => parseElementObject(jo)
+        case other       => throw new IllegalArgumentException(s"Don't know how to parse RichText element '$jv'")
+      }
+    }
+
+    private def parseElementObject(jo: JObject): RichText.Element = {
+      val values = jo.values
+      values("type") match {
+        case "bold" =>
+          require(values.keys == Set("type", "text"), s"Unexpected bold format: $jo")
+          RichText.Bold(values("text").asInstanceOf[String])
+        case "italic" =>
+          require(values.keys == Set("type", "text"), s"Unexpected italic format: $jo")
+          RichText.Italic(values("text").asInstanceOf[String])
+        case "code" =>
+          require(values.keys == Set("type", "text"), s"Unexpected code format: $jo")
+          RichText.PrefmtInline(values("text").asInstanceOf[String])
+        case "pre" =>
+          require(values.keys == Set("type", "text", "language"), s"Unexpected pre format: $jo")
+          RichText.PrefmtBlock(
+            text           = values("text").asInstanceOf[String],
+            languageOption = stringToOpt(values("language").asInstanceOf[String])
+          )
+        case "text_link" =>
+          require(values.keys == Set("type", "text", "href"), s"Unexpected text_link format: $jo")
+          RichText.Link(
+            textOption = stringToOpt(values("text").asInstanceOf[String]),
+            href       = values("href").asInstanceOf[String]
+          )
+        case "link" =>
+          // Link format is hyperlink alone
+          require(values.keys == Set("type", "text"), s"Unexpected link format: $jo")
+          RichText.Link(
+            textOption = None,
+            href       = values("text").asInstanceOf[String]
+          )
+        case "email" =>
+          // No special treatment for email
+          require(values.keys == Set("type", "text"), s"Unexpected email format: $jo")
+          RichText.Plain(values("text").asInstanceOf[String])
+        case "mention" =>
+          // No special treatment for mention
+          require(values.keys == Set("type", "text"), s"Unexpected mention format: $jo")
+          RichText.Plain(values("text").asInstanceOf[String])
+        case "mention_name" =>
+          // No special treatment for mention_name, but prepent @
+          require(values.keys == Set("type", "text", "user_id"), s"Unexpected mention_name format: $jo")
+          RichText.Plain("@" + values("text").asInstanceOf[String])
+        case "phone" =>
+          // No special treatment for phone
+          require(values.keys == Set("type", "text"), s"Unexpected phone format: $jo")
+          RichText.Plain(values("text").asInstanceOf[String])
+        case "hashtag" =>
+          // No special treatment for hashtag
+          require(values.keys == Set("type", "text"), s"Unexpected hashtag format: $jo")
+          RichText.Plain(values("text").asInstanceOf[String])
+        case "bot_command" =>
+          // No special treatment for bot_command
+          require(values.keys == Set("type", "text"), s"Unexpected bot_command format: $jo")
+          RichText.Plain(values("text").asInstanceOf[String])
+        case other =>
+          throw new IllegalArgumentException(
+            s"Don't know how to parse RichText element of type '${values("type")}' for ${jo.toString.take(500)}")
+      }
+    }
+
+    private def parsePlain(s: JString): RichText.Plain = {
+      RichText.Plain(s.extract[String])
+    }
   }
 
   private object ContentParser {
@@ -300,6 +382,14 @@ class TelegramDataLoader extends DataLoader {
   // Utility
   //
 
+  private def stringToOpt(s: String): Option[String] = {
+    s match {
+      case ""                                                                 => None
+      case "(File not included. Change data exporting settings to download.)" => None
+      case other                                                              => Some(other)
+    }
+  }
+
   /** Dates in TG history is exported in local timezone, so we'll try to import in current one as well */
   private def stringToDateTimeOpt(s: String): Option[DateTime] = {
     DateTime.parse(s) match {
@@ -329,11 +419,7 @@ class TelegramDataLoader extends DataLoader {
     val res = jv \ fieldName
     tracker.markUsed(fieldName)
     if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in $jv")
-    res.extractOpt[String] match {
-      case Some("")                                                                 => None
-      case Some("(File not included. Change data exporting settings to download.)") => None
-      case other                                                                    => other
-    }
+    res.extractOpt[String] flatMap stringToOpt
   }
 
   private def getCheckedField[A](jv: JValue, fieldName: String)(implicit formats: Formats,

@@ -36,6 +36,47 @@ case class Chat(
     msgNum: Long
 )
 
+//
+// Rich Text
+//
+case class RichText(
+    components: Seq[RichText.Element]
+)
+object RichText {
+  sealed trait Element
+
+  case class Plain(
+      text: String
+  ) extends Element
+
+  case class Bold(
+      text: String
+  ) extends Element
+
+  case class Italic(
+      text: String
+  ) extends Element
+
+  case class Link(
+      textOption: Option[String],
+      href: String
+  ) extends Element
+
+  case class PrefmtInline(
+      text: String
+  ) extends Element
+
+  case class PrefmtBlock(
+      text: String,
+      languageOption: Option[String]
+  ) extends Element
+
+}
+
+//
+// Message
+//
+
 sealed trait Message {
   val id: Long
   val date: DateTime
@@ -51,7 +92,7 @@ object Message {
       fromId: Long,
       forwardFromNameOption: Option[String],
       replyToMessageIdOption: Option[Long],
-      textOption: Option[String], // TODO: RichText
+      textOption: Option[RichText],
       contentOption: Option[Content]
   ) extends Message
 
@@ -64,7 +105,7 @@ object Message {
       fromId: Long,
       durationSecOption: Option[Int],
       discardReasonOption: Option[String],
-      textOption: Option[String]
+      textOption: Option[RichText]
   ) extends Service
 
   case class PinMessage(
@@ -73,7 +114,7 @@ object Message {
       fromName: String,
       fromId: Long,
       messageId: Long,
-      textOption: Option[String]
+      textOption: Option[RichText]
   ) extends Service
 
   case class CreateGroup(
@@ -83,7 +124,7 @@ object Message {
       fromId: Long,
       title: String,
       members: Seq[String],
-      textOption: Option[String]
+      textOption: Option[RichText]
   ) extends Service
 
   case class InviteGroupMembers(
@@ -92,7 +133,7 @@ object Message {
       fromName: String,
       fromId: Long,
       members: Seq[String],
-      textOption: Option[String]
+      textOption: Option[RichText]
   ) extends Service
 
   case class RemoveGroupMembers(
@@ -101,7 +142,7 @@ object Message {
       fromName: String,
       fromId: Long,
       members: Seq[String],
-      textOption: Option[String]
+      textOption: Option[RichText]
   ) extends Service
 
   case class EditGroupPhoto(
@@ -112,7 +153,7 @@ object Message {
       pathOption: Option[String],
       widthOption: Option[Int],
       heightOption: Option[Int],
-      textOption: Option[String]
+      textOption: Option[RichText]
   ) extends Service
 
   /** Note: for Telegram, from is not always meaningful */
@@ -121,7 +162,7 @@ object Message {
       date: DateTime,
       fromName: String,
       fromId: Long,
-      textOption: Option[String]
+      textOption: Option[RichText]
   ) extends Service
 }
 
