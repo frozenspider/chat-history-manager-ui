@@ -15,8 +15,8 @@ class EagerChatHistoryDao(
 
   override def chats = chatsWithMessages.keys.toSeq
 
-  override def messages(chat: Chat, offset: Int, limit: Int) = {
-    chatsWithMessages.get(chat) map (_.slice(offset, offset + limit)) getOrElse IndexedSeq.empty
+  override def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message] = {
+    chatsWithMessages.get(chat) map (_.takeRight(limit)) getOrElse IndexedSeq.empty
   }
 
   override def messageOption(chat: Chat, id: Long): Option[Message] =

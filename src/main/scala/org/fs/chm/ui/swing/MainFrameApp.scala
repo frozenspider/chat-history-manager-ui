@@ -2,10 +2,13 @@ package org.fs.chm.ui.swing
 
 import java.io.StringReader
 
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.swing.Dimension
 import scala.swing._
 import scala.swing.event.ButtonClicked
 
+import java.awt.{ Container => AwtContainer }
 import javax.swing.text.Element
 import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
@@ -50,10 +53,8 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
     layout(new ScrollPane(new BoxPanel(Orientation.Vertical) {
       for (c <- dao.chats) {
         val el = new Button(c.nameOption getOrElse "<Unnamed>")
-        listenTo(el)
-
         contents += el
-
+        listenTo(el)
         reactions += {
           case ButtonClicked(`el`) => chatSelected(c)
         }
@@ -75,23 +76,49 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
     })
   }
 
+  lazy val pleaseWaitDoc: HTMLDocument = {
+    val md = createStubDoc
+    md.doc.insertAfterStart(md.contentParent, "<div><h1>Please wait...</h1></div>")
+    md.doc
+  }
+
+  def changeChatsClickable(enabled: Boolean): Unit = {
+    chatsPane.enabled = enabled
+    def changeClickableRecursive(c: AwtContainer): Unit = {
+      c.setEnabled(enabled)
+      c.getComponents foreach {
+        case c: AwtContainer => changeClickableRecursive(c)
+        case _               => //NOOP
+      }
+    }
+    changeClickableRecursive(chatsPane.peer)
+  }
+
   //
   // Events
   //
 
   def chatSelected(c: Chat): Unit = {
     // If the chat has been already rendered, restore previous document as-is
-    // TODO: Add throbber, make async
-    if (!documentsCache.contains(c)) {
-      val md = createStubDoc
-      md.doc.remove(0, md.doc.getLength)
-      val messages = dao.messages(c, 0, 100)
-      for (m <- messages) {
-        renderMessage(md, c, m, MessageInsertPosition.Trailing)
+    messagesArea.peer.setStyledDocument(pleaseWaitDoc)
+    changeChatsClickable(false)
+    val f = Future {
+      if (!documentsCache.contains(c)) {
+        val md = createStubDoc
+        md.doc.remove(0, md.doc.getLength)
+        val messages = dao.lastMessages(c, 100)
+        for (m <- messages) {
+          renderMessage(md, c, m, MessageInsertPosition.Trailing)
+        }
+        documentsCache = documentsCache + ((c, md))
       }
-      documentsCache = documentsCache + ((c, md))
     }
-    messagesArea.peer.setStyledDocument(documentsCache(c).doc)
+    f foreach { _ =>
+      Swing.onEDTWait {
+        changeChatsClickable(true)
+        messagesArea.peer.setStyledDocument(documentsCache(c).doc)
+      }
+    }
   }
 
   //
