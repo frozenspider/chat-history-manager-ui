@@ -41,37 +41,54 @@ case class Chat(
 //
 // Rich Text
 //
+
 case class RichText(
     components: Seq[RichText.Element]
-)
+) {
+  def toPlainSearchableString: String = components map (_.toPlainSearchableString) mkString " "
+}
 object RichText {
-  sealed trait Element
+  sealed trait Element {
+    def toPlainSearchableString: String
+  }
 
   case class Plain(
       text: String
-  ) extends Element
+  ) extends Element {
+    override def toPlainSearchableString = text.replace("\n+", " ").trim
+  }
 
   case class Bold(
       text: String
-  ) extends Element
+  ) extends Element {
+    override def toPlainSearchableString = text.trim
+  }
 
   case class Italic(
       text: String
-  ) extends Element
+  ) extends Element {
+    override def toPlainSearchableString = text.trim
+  }
 
   case class Link(
       textOption: Option[String],
       href: String
-  ) extends Element
+  ) extends Element {
+    override def toPlainSearchableString = (textOption getOrElse href).trim
+  }
 
   case class PrefmtInline(
       text: String
-  ) extends Element
+  ) extends Element {
+    override def toPlainSearchableString = text.trim
+  }
 
   case class PrefmtBlock(
       text: String,
       languageOption: Option[String]
-  ) extends Element
+  ) extends Element {
+    override def toPlainSearchableString = text.replace("\n+", " ").trim
+  }
 
 }
 
