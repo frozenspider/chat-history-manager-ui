@@ -19,13 +19,15 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   // word-wrap and narrower width
   // dynamic loading
   // search
+  // stickers
+  // emoji and fonts
 
   override def top = new MainFrame {
 //    import BuildInfo._
 //    title    = s"$name ${version}b${buildInfoBuildNumber}"
-    title = "Chat History Manager"
+    title    = "Chat History Manager"
     contents = ui
-    size = new Dimension(1000, 700)
+    size     = new Dimension(1000, 700)
     peer.setLocationRelativeTo(null)
   }
 
@@ -34,7 +36,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
 
 //    val browseBtn = new Button("Browse")
 //    listenTo(startBtn, browseBtn)
-    layout(chatsPane) = West
+    layout(chatsPane)    = West
     layout(messagesPane) = Center
 //    reactions += {
 //      case ButtonClicked(`startBtn`)  => eventStartClick
@@ -141,7 +143,11 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
       val components = for (rtel <- rt.components) yield {
         renderComponent(rtel)
       }
-      components.mkString
+      val hiddenLinkOption = rt.components collectFirst { case l: RichText.Link if l.hidden => l }
+      val link = hiddenLinkOption map { l =>
+        "<p> &gt; Link: " + renderComponent(l.copy(textOption = Some(l.href), hidden = false))
+      } getOrElse ""
+      components.mkString + link
     }
 
     def renderComponent(rtel: RichText.Element): String = {
@@ -152,6 +158,8 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
           s"<b>${rtel.text replace ("\n", "<br>")}</b>"
         case rtel: RichText.Italic =>
           s"<i>${rtel.text replace ("\n", "<br>")}</i>"
+        case rtel: RichText.Link if rtel.hidden =>
+          rtel.plainSearchableString
         case rtel: RichText.Link =>
           val text = rtel.textOption getOrElse rtel.href
           s"""<a href="${rtel.href}">${text}</a> """ // Space in the end is needed if link is followed by text

@@ -45,49 +45,59 @@ case class Chat(
 case class RichText(
     components: Seq[RichText.Element]
 ) {
-  def toPlainSearchableString: String = components map (_.toPlainSearchableString) mkString " "
+  val plainSearchableString: String = {
+    val joined = (components map (_.plainSearchableString) mkString " ")
+      .replaceAll("[\\s\\p{Cf}\n]+", " ")
+      .trim
+    // Adding all links to the end to enable search over hrefs/hidden links too
+    val links = components.collect({ case l: RichText.Link => l.href }).mkString(" ")
+    joined + links
+  }
 }
 object RichText {
   sealed trait Element {
-    def toPlainSearchableString: String
+    def plainSearchableString: String
   }
 
   case class Plain(
       text: String
   ) extends Element {
-    override def toPlainSearchableString = text.replace("\n+", " ").trim
+    override val plainSearchableString = text.replaceAll("[\\s\\p{Cf}\n]+", " ")
   }
 
   case class Bold(
       text: String
   ) extends Element {
-    override def toPlainSearchableString = text.trim
+    override val plainSearchableString = text.trim
   }
 
   case class Italic(
       text: String
   ) extends Element {
-    override def toPlainSearchableString = text.trim
+    override val plainSearchableString = text.trim
   }
 
   case class Link(
+      /** Empty text would mean that this link is hidden - but it can still be hidden even if it's not */
       textOption: Option[String],
-      href: String
+      href: String,
+      /** Some TG chats use text_links with empty/invisible text to be shown as preview but not appear in text */
+      hidden: Boolean
   ) extends Element {
-    override def toPlainSearchableString = (textOption getOrElse href).trim
+    override val plainSearchableString = (textOption getOrElse href).replaceAll("[\\s\\p{Cf}\n]+", " ")
   }
 
   case class PrefmtInline(
       text: String
   ) extends Element {
-    override def toPlainSearchableString = text.trim
+    override val plainSearchableString = text.trim
   }
 
   case class PrefmtBlock(
       text: String,
       languageOption: Option[String]
   ) extends Element {
-    override def toPlainSearchableString = text.replace("\n+", " ").trim
+    override val plainSearchableString = text.replaceAll("[\\s\\p{Cf}\n]+", " ")
   }
 
 }

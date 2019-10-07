@@ -162,27 +162,19 @@ class TelegramDataLoader extends DataLoader {
   }
 
   private object RichTextParser {
-    // We need to make a hack here.
-    // Some TG chats use text_links with empty/invisible text to be shown as preview but not appear in text.
-    // We're wrapping them to rearrange them to the bottom and show them as plaintext
-
     def parseRichTextOption(jv: JValue)(implicit tracker: FieldUsageTracker): Option[RichText] = {
       val jText = getRawField(jv, "text", true)
       jText match {
         case arr: JArray =>
           val elements = arr.extract[Seq[JValue]] map parseElement
-
-          val hiddenTextLinks = elements
-            .filter(_.isTextLink)
-            .filter(_.el.asInstanceOf[RichText.Link].textOption.isEmpty)
-          require(hiddenTextLinks.size <= 1, s"Too many text_link with empty text, no idea how to handle that! ${jv}")
-          // This is ugly, but oh well
-          val reordered = hiddenTextLinks.headOption match {
-            case None     => elements
-            case Some(tl) => (elements filter (_ != tl)) :+ WrappedRichTextElement(RichText.Plain("\n")) :+ tl
+          // Make sure there no more than one hidden link
+          val links = elements collect {
+            case l: RichText.Link => l
           }
-          Some(RichText(reordered map (_.el)))
-
+          if (links.size > 1) {
+            require(links.tail forall (!_.hidden), s"Only the first link can be hidden! ${jv}")
+          }
+          Some(RichText(elements))
         case JString("") =>
           None
         case s: JString =>
@@ -192,75 +184,72 @@ class TelegramDataLoader extends DataLoader {
       }
     }
 
-    private def parseElement(jv: JValue): WrappedRichTextElement = {
+    private def parseElement(jv: JValue): RichText.Element = {
       jv match {
-        case s: JString  => WrappedRichTextElement(parsePlain(s))
+        case s: JString  => parsePlain(s)
         case jo: JObject => parseElementObject(jo)
         case other       => throw new IllegalArgumentException(s"Don't know how to parse RichText element '$jv'")
       }
     }
 
-    private def parseElementObject(jo: JObject): WrappedRichTextElement = {
+    private def parseElementObject(jo: JObject): RichText.Element = {
       val values = jo.values
       values("type") match {
         case "bold" =>
           require(values.keys == Set("type", "text"), s"Unexpected bold format: $jo")
-          WrappedRichTextElement(RichText.Bold(values("text").asInstanceOf[String]))
+          RichText.Bold(values("text").asInstanceOf[String])
         case "italic" =>
           require(values.keys == Set("type", "text"), s"Unexpected italic format: $jo")
-          WrappedRichTextElement(RichText.Italic(values("text").asInstanceOf[String]))
+          RichText.Italic(values("text").asInstanceOf[String])
         case "code" =>
           require(values.keys == Set("type", "text"), s"Unexpected code format: $jo")
-          WrappedRichTextElement(RichText.PrefmtInline(values("text").asInstanceOf[String]))
+          RichText.PrefmtInline(values("text").asInstanceOf[String])
         case "pre" =>
           require(values.keys == Set("type", "text", "language"), s"Unexpected pre format: $jo")
-          WrappedRichTextElement(
-            RichText.PrefmtBlock(
-              text           = values("text").asInstanceOf[String],
-              languageOption = stringToOpt(values("language").asInstanceOf[String])
-            ))
+          RichText.PrefmtBlock(
+            text           = values("text").asInstanceOf[String],
+            languageOption = stringToOption(values("language").asInstanceOf[String])
+          )
         case "text_link" =>
           require(values.keys == Set("type", "text", "href"), s"Unexpected text_link format: $jo")
-          WrappedRichTextElement(
-            RichText.Link(
-              textOption = stringToOpt(values("text").asInstanceOf[String]),
-              href       = values("href").asInstanceOf[String]
-            ),
-            isTextLink = true
+          val textOption = stringToOption(values("text").asInstanceOf[String])
+          RichText.Link(
+            textOption = textOption,
+            href       = values("href").asInstanceOf[String],
+            hidden     = textOption forall isWhitespaceOrInvisible
           )
         case "link" =>
           // Link format is hyperlink alone
           require(values.keys == Set("type", "text"), s"Unexpected link format: $jo")
-          WrappedRichTextElement(
-            RichText.Link(
-              textOption = None,
-              href       = values("text").asInstanceOf[String]
-            )
+          RichText.Link(
+            textOption = Some(values("text").asInstanceOf[String]),
+            href       = values("text").asInstanceOf[String],
+            hidden     = false
           )
         case "email" =>
           // No special treatment for email
           require(values.keys == Set("type", "text"), s"Unexpected email format: $jo")
-          WrappedRichTextElement(RichText.Plain(values("text").asInstanceOf[String]))
+          RichText.Plain(values("text").asInstanceOf[String])
         case "mention" =>
           // No special treatment for mention
           require(values.keys == Set("type", "text"), s"Unexpected mention format: $jo")
-          WrappedRichTextElement(RichText.Plain(values("text").asInstanceOf[String]))
+          RichText.Plain(values("text").asInstanceOf[String])
         case "mention_name" =>
           // No special treatment for mention_name, but prepent @
           require(values.keys == Set("type", "text", "user_id"), s"Unexpected mention_name format: $jo")
-          WrappedRichTextElement(RichText.Plain("@" + values("text").asInstanceOf[String]))
+          RichText.Plain("@" + values("text").asInstanceOf[String])
         case "phone" =>
           // No special treatment for phone
           require(values.keys == Set("type", "text"), s"Unexpected phone format: $jo")
-          WrappedRichTextElement(RichText.Plain(values("text").asInstanceOf[String]))
+          RichText.Plain(values("text").asInstanceOf[String])
         case "hashtag" =>
           // No special treatment for hashtag
           require(values.keys == Set("type", "text"), s"Unexpected hashtag format: $jo")
-          WrappedRichTextElement(RichText.Plain(values("text").asInstanceOf[String]))
+          RichText.Plain(values("text").asInstanceOf[String])
         case "bot_command" =>
           // No special treatment for bot_command
           require(values.keys == Set("type", "text"), s"Unexpected bot_command format: $jo")
-          WrappedRichTextElement(RichText.Plain(values("text").asInstanceOf[String]))
+          RichText.Plain(values("text").asInstanceOf[String])
         case other =>
           throw new IllegalArgumentException(
             s"Don't know how to parse RichText element of type '${values("type")}' for ${jo.toString.take(500)}")
@@ -270,8 +259,6 @@ class TelegramDataLoader extends DataLoader {
     private def parsePlain(s: JString): RichText.Plain = {
       RichText.Plain(s.extract[String])
     }
-
-    private case class WrappedRichTextElement(el: RichText.Element, isTextLink: Boolean = false)
   }
 
   private object ContentParser {
@@ -407,13 +394,17 @@ class TelegramDataLoader extends DataLoader {
   // Utility
   //
 
-  private def stringToOpt(s: String): Option[String] = {
+  private def stringToOption(s: String): Option[String] = {
     s match {
-      // Accounts for invisible formatting indicator, e.g. zero-width space \u200B
-      case s if s.trim matches "[\\p{Cf}]*"                                   => None
+      case ""                                                                 => None
       case "(File not included. Change data exporting settings to download.)" => None
       case other                                                              => Some(other)
     }
+  }
+
+  private def isWhitespaceOrInvisible(s: String): Boolean = {
+    // Accounts for invisible formatting indicator, e.g. zero-width space \u200B
+    s matches "[\\s\\p{Cf}]*"
   }
 
   /** Dates in TG history is exported in local timezone, so we'll try to import in current one as well */
@@ -445,7 +436,7 @@ class TelegramDataLoader extends DataLoader {
     val res = jv \ fieldName
     tracker.markUsed(fieldName)
     if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in $jv")
-    res.extractOpt[String] flatMap stringToOpt
+    res.extractOpt[String] flatMap stringToOption
   }
 
   private def getCheckedField[A](jv: JValue, fieldName: String)(implicit formats: Formats,
