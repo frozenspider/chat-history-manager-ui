@@ -9,6 +9,8 @@ trait ChatHistoryDao {
 
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
+  def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
+
   def messageOption(chat: Chat, id: Long): Option[Message]
 }
 

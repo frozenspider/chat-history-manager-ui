@@ -1,14 +1,16 @@
 package org.fs.chm.ui.swing
 
+import java.awt.event.AdjustmentEvent
+import java.awt.{ Container => AwtContainer }
 import java.io.StringReader
+import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.swing.Dimension
 import scala.swing._
 import scala.swing.event.ButtonClicked
 
-import java.awt.{ Container => AwtContainer }
 import javax.swing.text.Element
 import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
@@ -16,7 +18,14 @@ import org.fs.chm.dao._
 import org.fs.utility.Imports._
 
 class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
-  var documentsCache: Map[Chat, MessageDocument] = Map.empty
+  val Lock             = new Object
+  val MsgBatchLoadSize = 10
+
+  var documentsCache:  Map[Chat, MessageDocument] = Map.empty
+  var loadStatusCache: Map[Chat, LoadStatus]      = Map.empty
+
+  var currentChatOption:      Option[Chat]  = None
+  var loadMessagesInProgress: AtomicBoolean = new AtomicBoolean(false)
 
   // TODO:
   // word-wrap and narrower width
@@ -64,21 +73,29 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
 
   lazy val htmlKit = new HTMLEditorKit
 
-  lazy val (messagesArea: TextPane, messagesPane) = {
+  lazy val (messagesArea: TextPane, messagesScrollPane: ScrollPane, messagesPane) = {
     val ta = new TextPane()
     ta.peer.setEditorKit(htmlKit)
     ta.peer.setEditable(false)
     ta.peer.setSize(new Dimension(10, 10))
 
-    (ta, new BorderPanel {
-      import scala.swing.BorderPanel.Position._
-      layout(new ScrollPane(ta)) = Center
+    val sp = new ScrollPane(ta)
+    sp.verticalScrollBar.peer.addAdjustmentListener((e: AdjustmentEvent) => {
+      if (e.getValue < 100) {
+        println(s"Adj: ${e.getValue}, ${e.getValueIsAdjusting}")
+        tryLoadPreviousMessages()
+      }
     })
+    val mp = new BorderPanel {
+      import scala.swing.BorderPanel.Position._
+      layout(sp) = Center
+    }
+    (ta, sp, mp)
   }
 
   lazy val pleaseWaitDoc: HTMLDocument = {
     val md = createStubDoc
-    md.doc.insertAfterStart(md.contentParent, "<div><h1>Please wait...</h1></div>")
+    md.insert("<div><h1>Please wait...</h1></div>", MessageInsertPosition.Leading)
     md.doc
   }
 
@@ -99,28 +116,85 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   //
 
   def chatSelected(c: Chat): Unit = {
-    // If the chat has been already rendered, restore previous document as-is
-    messagesArea.peer.setStyledDocument(pleaseWaitDoc)
-    changeChatsClickable(false)
+    Lock.synchronized {
+      currentChatOption = None
+      // If the chat has been already rendered, restore previous document as-is
+      messagesArea.peer.setStyledDocument(pleaseWaitDoc)
+      changeChatsClickable(false)
+    }
     val f = Future {
       if (!documentsCache.contains(c)) {
-        val md = createStubDoc
-        md.doc.remove(0, md.doc.getLength)
-        val messages = dao.lastMessages(c, 100)
+        val md       = createStubDoc
+        val messages = dao.lastMessages(c, MsgBatchLoadSize)
         for (m <- messages) {
           renderMessage(md, c, m, MessageInsertPosition.Trailing)
         }
-        documentsCache = documentsCache + ((c, md))
+        val loadStatus = LoadStatus(
+          firstId      = messages.headOption map (_.id) getOrElse (-1),
+          lastId       = messages.lastOption map (_.id) getOrElse (-1),
+          beginReached = messages.size < MsgBatchLoadSize,
+          endReached   = true
+        )
+        Lock.synchronized {
+          loadStatusCache = loadStatusCache + ((c, loadStatus))
+          documentsCache  = documentsCache + ((c, md))
+        }
       }
     }
     f foreach { _ =>
-      Swing.onEDTWait {
+      Swing.onEDTWait(Lock.synchronized {
+        currentChatOption = Some(c)
+        val doc = documentsCache(c).doc
+        messagesArea.peer.setStyledDocument(doc)
+        // messagesArea.validate()
+        // Scroll to the end
+        messagesArea.caret.position = documentsCache(c).doc.getLength
+        // messagesScrollPane.peer.getViewport.setViewPosition(new Point(0, messagesArea.preferredSize.height))
         changeChatsClickable(true)
-        messagesArea.peer.setStyledDocument(documentsCache(c).doc)
-      }
+      })
     }
   }
 
+  def tryLoadPreviousMessages(): Unit =
+    currentChatOption match {
+      case _ if loadMessagesInProgress.get => // NOOP
+      case None                            => // NOOP
+      case Some(c) =>
+        Lock.synchronized {
+          val loadStatus = loadStatusCache(c)
+          if (!loadStatus.beginReached) {
+            changeChatsClickable(false)
+            loadMessagesInProgress set true
+            val md = documentsCache(c)
+            val f = Future {
+              Lock.synchronized {
+                md.insert("<div id=\"loading\"><hr><p> Loading... </p><hr></div>", MessageInsertPosition.Leading)
+                val addedMessages = dao.messagesBefore(c, loadStatus.firstId, MsgBatchLoadSize)
+                loadStatusCache = loadStatusCache.updated(
+                  c,
+                  loadStatusCache(c).copy(
+                    firstId      = addedMessages.headOption map (_.id) getOrElse (-1),
+                    beginReached = addedMessages.size < MsgBatchLoadSize
+                  )
+                )
+                // We're still holding the lock
+                Swing.onEDTWait {
+                  // TODO: Restore view
+                  md.removeFirst()
+                  for (m <- addedMessages.reverse) {
+                    renderMessage(md, c, m, MessageInsertPosition.Leading)
+                  }
+                }
+              }
+            }
+            f.onComplete(_ =>
+              Swing.onEDTWait(Lock.synchronized {
+                loadMessagesInProgress set false
+                changeChatsClickable(true)
+              }))
+          }
+        }
+    }
   //
   // Renderers and helpers
   //
@@ -129,6 +203,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
     val doc     = htmlKit.createDefaultDocument().asInstanceOf[HTMLDocument]
     val content = """
                     |<html>
+                    | <head></head>
                     | <body>
                     |   <div id="messages"></div>
                     | </body>
@@ -157,12 +232,9 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
                           |   <div class="message-title">${msgTitleHtmlString}</div>
                           |   <div class="message-body">${msgHtmlString}</div>
                           |</div>
-                          |<p>
+                          |<p />
     """.stripMargin
-    pos match {
-      case MessageInsertPosition.Leading  => md.doc.insertAfterStart(md.contentParent, htmlToInsert)
-      case MessageInsertPosition.Trailing => md.doc.insertBeforeEnd(md.contentParent, htmlToInsert)
-    }
+    md.insert(htmlToInsert, pos)
   }
 
   object RichTextRenderer {
@@ -204,14 +276,40 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
     }
   }
 
+  case class MessageDocument(
+      doc: HTMLDocument,
+      contentParent: Element
+  ) {
+
+    // We need to account for "p-implied" parasitic element...
+    private lazy val pImplied = contentParent.getElement(0)
+
+    def removeFirst(): Unit = {
+      doc.removeElement(contentParent.getElement(1))
+    }
+
+    def insert(htmlToInsert: String, pos: MessageInsertPosition): Unit = {
+      pos match {
+        case MessageInsertPosition.Leading  => doc.insertAfterEnd(pImplied, htmlToInsert)
+        case MessageInsertPosition.Trailing => doc.insertBeforeEnd(contentParent, htmlToInsert)
+      }
+    }
+
+    def clear(): Unit = {
+      doc.remove(0, doc.getLength)
+    }
+  }
+
   sealed trait MessageInsertPosition
   object MessageInsertPosition {
     case object Leading  extends MessageInsertPosition
     case object Trailing extends MessageInsertPosition
   }
 
-  case class MessageDocument(
-      doc: HTMLDocument,
-      contentParent: Element
+  case class LoadStatus(
+      firstId: Long,
+      lastId: Long,
+      beginReached: Boolean,
+      endReached: Boolean
   )
 }

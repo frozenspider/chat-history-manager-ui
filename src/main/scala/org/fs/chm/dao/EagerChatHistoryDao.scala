@@ -15,6 +15,14 @@ class EagerChatHistoryDao(
 
   override def chats = chatsWithMessages.keys.toSeq
 
+  override def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
+    val messages = chatsWithMessages(chat)
+    val idx      = messages.indexWhere(_.id == msgId)
+    require(idx > -1, "Message not found, that's unexpected")
+    val upperLimit = (idx - limit) max 0
+    messages.slice(upperLimit, idx)
+  }
+
   override def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message] = {
     chatsWithMessages.get(chat) map (_.takeRight(limit)) getOrElse IndexedSeq.empty
   }
