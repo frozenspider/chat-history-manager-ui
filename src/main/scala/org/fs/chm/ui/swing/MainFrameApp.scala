@@ -11,6 +11,7 @@ import scala.swing.Dimension
 import scala.swing._
 import scala.swing.event.ButtonClicked
 
+import javax.swing.text.DefaultCaret
 import javax.swing.text.Element
 import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
@@ -19,7 +20,7 @@ import org.fs.utility.Imports._
 
 class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   val Lock             = new Object
-  val MsgBatchLoadSize = 10
+  val MsgBatchLoadSize = 100
 
   var documentsCache:  Map[Chat, MessageDocument] = Map.empty
   var loadStatusCache: Map[Chat, LoadStatus]      = Map.empty
@@ -29,9 +30,8 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
 
   // TODO:
   // word-wrap and narrower width
-  // dynamic loading
   // search
-  // stickers
+  // content (stickers, voices)
   // emoji and fonts
 
   override def top = new MainFrame {
@@ -81,8 +81,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
 
     val sp = new ScrollPane(ta)
     sp.verticalScrollBar.peer.addAdjustmentListener((e: AdjustmentEvent) => {
-      if (e.getValue < 100) {
-        println(s"Adj: ${e.getValue}, ${e.getValueIsAdjusting}")
+      if (e.getValue < 500 && !e.getValueIsAdjusting) {
         tryLoadPreviousMessages()
       }
     })
@@ -97,6 +96,12 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
     val md = createStubDoc
     md.insert("<div><h1>Please wait...</h1></div>", MessageInsertPosition.Leading)
     md.doc
+  }
+
+  /** Allows disabling message caret updates while messages are loading to avoid scrolling */
+  def changeMessagesCaretUpdatesEnabled(enabled: Boolean): Unit = {
+    val caret = messagesArea.peer.getCaret.asInstanceOf[DefaultCaret]
+    caret.setUpdatePolicy(if (enabled) DefaultCaret.UPDATE_WHEN_ON_EDT else DefaultCaret.NEVER_UPDATE)
   }
 
   def changeChatsClickable(enabled: Boolean): Unit = {
@@ -146,10 +151,8 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
         currentChatOption = Some(c)
         val doc = documentsCache(c).doc
         messagesArea.peer.setStyledDocument(doc)
-        // messagesArea.validate()
         // Scroll to the end
-        messagesArea.caret.position = documentsCache(c).doc.getLength
-        // messagesScrollPane.peer.getViewport.setViewPosition(new Point(0, messagesArea.preferredSize.height))
+        messagesScrollPane.peer.getViewport.setViewPosition(new Point(0, messagesArea.preferredSize.height))
         changeChatsClickable(true)
       })
     }
@@ -161,6 +164,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
       case None                            => // NOOP
       case Some(c) =>
         Lock.synchronized {
+          changeMessagesCaretUpdatesEnabled(false)
           val loadStatus = loadStatusCache(c)
           if (!loadStatus.beginReached) {
             changeChatsClickable(false)
@@ -168,6 +172,8 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
             val md = documentsCache(c)
             val f = Future {
               Lock.synchronized {
+                val viewport                        = messagesScrollPane.peer.getViewport
+                val (viewPosBefore, viewSizeBefore) = (viewport.getViewPosition, viewport.getViewSize)
                 md.insert("<div id=\"loading\"><hr><p> Loading... </p><hr></div>", MessageInsertPosition.Leading)
                 val addedMessages = dao.messagesBefore(c, loadStatus.firstId, MsgBatchLoadSize)
                 loadStatusCache = loadStatusCache.updated(
@@ -179,11 +185,19 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
                 )
                 // We're still holding the lock
                 Swing.onEDTWait {
-                  // TODO: Restore view
+                  // TODO: Prevent flickering
+                  // TODO: Preserve selection
                   md.removeFirst()
                   for (m <- addedMessages.reverse) {
                     renderMessage(md, c, m, MessageInsertPosition.Leading)
                   }
+                  messagesScrollPane.validate()
+                  val heightDiff = viewport.getViewSize.height - viewSizeBefore.height
+                  viewport.setViewPosition({
+                    val p = new Point(viewPosBefore)
+                    p.translate(0, heightDiff)
+                    p
+                  })
                 }
               }
             }
@@ -191,10 +205,12 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
               Swing.onEDTWait(Lock.synchronized {
                 loadMessagesInProgress set false
                 changeChatsClickable(true)
+                changeMessagesCaretUpdatesEnabled(true)
               }))
           }
         }
     }
+
   //
   // Renderers and helpers
   //
@@ -232,7 +248,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
                           |   <div class="message-title">${msgTitleHtmlString}</div>
                           |   <div class="message-body">${msgHtmlString}</div>
                           |</div>
-                          |<p />
+                          |<p>
     """.stripMargin
     md.insert(htmlToInsert, pos)
   }
