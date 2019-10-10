@@ -8,8 +8,8 @@ import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao._
 import org.fs.utility.Imports._
 
-class MessagesHelper(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
-  import org.fs.chm.ui.swing.MessagesHelper._
+class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
+  import org.fs.chm.ui.swing.MessagesService._
 
   def createStubDoc: MessageDocument = {
     val doc = htmlKit.createDefaultDocument().asInstanceOf[HTMLDocument]
@@ -18,7 +18,12 @@ class MessagesHelper(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
         |<html>
         | <head>
         |   <style type="text/css">
-        |     .message-title-name { font-weight: bold; }
+        |     .title-name { font-weight: bold; }
+        |     blockquote {
+        |        border-left: 1px solid #ccc;
+        |        margin: 5px 10px;
+        |        padding: 5px 10px;
+        |     }
         |   </style>
         | </head>
         | <body>
@@ -41,16 +46,27 @@ class MessagesHelper(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
   // Renderers and helpers
   //
 
-  def renderMessage(md: MessageDocument, c: Chat, m: Message, pos: MessageInsertPosition): Unit = {
+  def renderMessageHtml(c: Chat, m: Message, isQuote: Boolean = false): String = {
     val msgHtmlString: String = m match {
       case m: Message.Regular =>
         val textHtmlOption = m.textOption map { rt =>
-          s"""<div class="message-text">${RichTextRenderer.renderHtml(rt)}</div>"""
+          s"""<div class="text">${RichTextRenderer.renderHtml(rt)}</div>"""
         }
         val contentHtmlOption = m.contentOption map { ct =>
-          s"""<div class="message-content">${ContentRenderer.renderHtml(ct)}</div>"""
+          s"""<div class="content">${ContentRenderer.renderHtml(ct)}</div>"""
         }
-        Seq(textHtmlOption, contentHtmlOption).yieldDefined.mkString
+        val fromHtmlOption =
+          (if (isQuote)
+             None
+           else
+             m.replyToMessageIdOption map { m2id =>
+               val m2Option = dao.messageOption(c, m2id)
+               m2Option match {
+                 case None     => "[Deleted message]"
+                 case Some(m2) => renderMessageHtml(c, m2, true)
+               }
+             }) map (html => s"""<blockquote>$html</blockquote> """)
+        Seq(fromHtmlOption, textHtmlOption, contentHtmlOption).yieldDefined.mkString
       case _ => s"[Unsupported - ${m.getClass.getSimpleName}]" // NOOP, FIXME later on
     }
     val titleStyleCss = {
@@ -64,16 +80,15 @@ class MessagesHelper(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
       s"color: $color;"
     }
     val titleHtmlString =
-      s"""<span class="message-title-name" style="$titleStyleCss">${m.fromName}</span> """ +
+      s"""<span class="title-name" style="$titleStyleCss">${m.fromName}</span> """ +
         s"(${m.date.toString("yyyy-MM-dd HH:mm")})"
-    val htmlToInsert = s"""
-                          |<div class="message" message_id="${m.id}">
-                          |   <div class="message-title">${titleHtmlString}</div>
-                          |   <div class="message-body">${msgHtmlString}</div>
-                          |</div>
-                          |<p>
+    s"""
+       |<div class="message" message_id="${m.id}">
+       |   <div class="title">${titleHtmlString}</div>
+       |   <div class="body">${msgHtmlString}</div>
+       |</div>
+       |${if (!isQuote) "<p>" else ""}
     """.stripMargin
-    md.insert(htmlToInsert, pos)
   }
 
   object RichTextRenderer {
@@ -133,7 +148,7 @@ class MessagesHelper(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
   )
 }
 
-object MessagesHelper {
+object MessagesService {
   case class MessageDocument(
       doc: HTMLDocument,
       contentParent: Element

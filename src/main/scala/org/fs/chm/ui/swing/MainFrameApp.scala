@@ -15,7 +15,7 @@ import com.github.nscala_time.time.Imports._
 import javax.swing.event.HyperlinkEvent
 import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao._
-import org.fs.chm.ui.swing.MessagesHelper._
+import org.fs.chm.ui.swing.MessagesService._
 import org.fs.utility.Imports._
 
 class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
@@ -28,13 +28,12 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   var currentChatOption:      Option[Chat]  = None
   var loadMessagesInProgress: AtomicBoolean = new AtomicBoolean(false)
 
-  val htmlKit   = new HTMLEditorKit
-  val msgHelper = new MessagesHelper(dao, htmlKit)
+  val htmlKit    = new HTMLEditorKit
+  val msgService = new MessagesService(dao, htmlKit)
 
   // TODO:
   // forward-from
-  // reply-to
-  // clickable links
+  // reply-to (make clickable)
   // word-wrap and narrower width
   // search
   // content (stickers, voices)
@@ -115,16 +114,16 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   def chatSelected(c: Chat): Unit = {
     Lock.synchronized {
       currentChatOption = None
-      msgAreaContainer.document = msgHelper.pleaseWaitDoc
+      msgAreaContainer.document = msgService.pleaseWaitDoc
       changeChatsClickable(false)
     }
     val f = Future {
       // If the chat has been already rendered, restore previous document as-is
       if (!documentsCache.contains(c)) {
-        val md       = msgHelper.createStubDoc
+        val md       = msgService.createStubDoc
         val messages = dao.lastMessages(c, MsgBatchLoadSize)
         for (m <- messages) {
-          msgHelper.renderMessage(md, c, m, MessageInsertPosition.Trailing)
+          md.insert(msgService.renderMessageHtml(c, m), MessageInsertPosition.Trailing)
         }
         val loadStatus = LoadStatus(
           firstId = messages.headOption map (_.id) getOrElse (-1),
@@ -179,7 +178,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
                   // TODO: Preserve selection
                   md.removeFirst()
                   for (m <- addedMessages.reverse) {
-                    msgHelper.renderMessage(md, c, m, MessageInsertPosition.Leading)
+                    md.insert(msgService.renderMessageHtml(c, m), MessageInsertPosition.Leading)
                   }
                   val (_, viewSize2) = msgAreaContainer.view.posAndSize
                   val heightDiff     = viewSize2.height - viewSize1.height
