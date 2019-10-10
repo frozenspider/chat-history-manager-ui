@@ -19,6 +19,7 @@ class TelegramDataLoader extends DataLoader {
     val resultJsonFile: File = new File(path, "result.json")
     if (!resultJsonFile.exists()) throw new FileNotFoundException("result.json not found in " + path.getAbsolutePath)
     val parsed = JsonMethods.parse(resultJsonFile)
+    val myself = parseMyself(getRawField(parsed, "personal_information", true))
     val contacts = for {
       contact <- getCheckedField[Seq[JValue]](parsed, "contacts", "list")
     } yield parseContact(contact)
@@ -36,12 +37,27 @@ class TelegramDataLoader extends DataLoader {
     }
     val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
 
-    new EagerChatHistoryDao(contacts = contacts, chatsWithMessages = chatsWithMessagesLM)
+    new EagerChatHistoryDao(myself = myself, contactsRaw = contacts, chatsWithMessages = chatsWithMessagesLM)
   }
 
   //
   // Parsers
   //
+
+  private def parseMyself(jv: JValue): Contact = {
+    implicit val tracker = new FieldUsageTracker
+    tracker.markUsed("bio") // Ignoring bio
+    tracker.ensuringUsage(jv) {
+      Contact(
+        id                 = getCheckedField[Long](jv, "user_id"),
+        firstNameOption    = getStringOpt(jv, "first_name", true),
+        lastNameOption     = getStringOpt(jv, "last_name", true),
+        usernameOption     = getStringOpt(jv, "username", true),
+        phoneNumberOption  = getStringOpt(jv, "phone_number", true),
+        lastSeenDateOption = None
+      )
+    }
+  }
 
   private def parseContact(jv: JValue): Contact = {
     implicit val tracker = new FieldUsageTracker
@@ -50,6 +66,7 @@ class TelegramDataLoader extends DataLoader {
         id                 = getCheckedField[Long](jv, "user_id"),
         firstNameOption    = getStringOpt(jv, "first_name", true),
         lastNameOption     = getStringOpt(jv, "last_name", true),
+        usernameOption     = None,
         phoneNumberOption  = getStringOpt(jv, "phone_number", true),
         lastSeenDateOption = stringToDateTimeOpt(getCheckedField[String](jv, "date"))
       )
@@ -373,7 +390,7 @@ class TelegramDataLoader extends DataLoader {
     }
   }
 
-  private def parseChat(jv: JValue, msgNum: Int): Chat = {
+  private def parseChat(jv: JValue, msgCount: Int): Chat = {
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("messages")
     tracker.ensuringUsage(jv) {
@@ -385,7 +402,7 @@ class TelegramDataLoader extends DataLoader {
           case "private_group" => ChatType.PrivateGroup
           case s               => throw new IllegalArgumentException("Illegal format, unknown chat type '$s'")
         },
-        msgNum = msgNum
+        msgCount = msgCount
       )
     }
   }

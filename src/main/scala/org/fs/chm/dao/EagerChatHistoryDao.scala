@@ -4,7 +4,8 @@ import scala.collection.immutable.ListMap
 import scala.collection.immutable.TreeMap
 
 class EagerChatHistoryDao(
-    override val contacts: Seq[Contact],
+    override val myself: Contact,
+    contactsRaw: Seq[Contact],
     chatsWithMessages: ListMap[Chat, IndexedSeq[Message]]
 ) extends ChatHistoryDao {
 
@@ -13,7 +14,52 @@ class EagerChatHistoryDao(
     case (c, ms) => (c, TreeMap(ms.map(m => (m.id, m)): _*))
   }
 
+  override val contacts: Seq[Contact] = {
+    val allContactsFromIdName =
+      chatsWithMessages.values.flatten.toSet.map((m: Message) => (m.fromId, m.fromName))
+    allContactsFromIdName.toSeq
+      .map({
+        case (fromId, _) if fromId == myself.id =>
+          myself
+        case (fromId, fromName) =>
+          contactsRaw
+            .find(_.id == fromId)
+            .orElse(contactsRaw.find(_.prettyName == fromName))
+            .getOrElse(
+              Contact(
+                id                 = fromId,
+                firstNameOption    = Some(fromName),
+                lastNameOption     = None,
+                usernameOption     = None,
+                phoneNumberOption  = None,
+                lastSeenDateOption = None
+              ))
+            .copy(id = fromId)
+      })
+      .sortBy(c => (c.id, c.prettyName))
+  }
+
+  val interlocutorsMap: Map[Chat, Seq[Contact]] = chatsWithMessages map {
+    case (c, ms) =>
+      val cs: Seq[Contact] =
+        ms.toSet
+          .map((m: Message) => (m.fromId, m.fromName))
+          .toSeq
+          .map {
+            case (fromId, _) if fromId == myself.id =>
+              myself
+            case (fromId, fromName) =>
+              contacts
+                .find(_.id == fromId)
+                .orElse(contacts.find(_.prettyName == fromName))
+                .get
+          }
+      (c, cs.sortBy(c => if (c == myself) (Long.MinValue, "") else (c.id, c.prettyName)))
+  }
+
   override def chats = chatsWithMessages.keys.toSeq
+
+  override def interlocutors(chat: Chat): Seq[Contact] = interlocutorsMap(chat)
 
   override def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
     val messages = chatsWithMessages(chat)
@@ -33,6 +79,8 @@ class EagerChatHistoryDao(
   override def toString: String = {
     Seq(
       "EagerChatHistoryDao(",
+      "  myself:",
+      "    " + myself.toString + "\n",
       "  contacts:",
       contacts.mkString("    ", "\n    ", "\n"),
       "  chats:",

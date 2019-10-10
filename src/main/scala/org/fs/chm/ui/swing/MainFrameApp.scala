@@ -219,7 +219,11 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
     val doc     = htmlKit.createDefaultDocument().asInstanceOf[HTMLDocument]
     val content = """
                     |<html>
-                    | <head></head>
+                    | <head>
+                    |   <style type="text/css">
+                    |     .message-title-name { font-weight: bold; }
+                    |   </style>
+                    | </head>
                     | <body>
                     |   <div id="messages"></div>
                     | </body>
@@ -242,10 +246,22 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
         Seq(textHtmlOption, contentHtmlOption).yieldDefined.mkString
       case _ => s"[Unsupported - ${m.getClass.getSimpleName}]" // NOOP, FIXME later on
     }
-    val msgTitleHtmlString = s"${m.fromName} (${m.date.toString("yyyy-MM-dd HH:mm")})"
-    val htmlToInsert       = s"""
+    val titleStyleCss = {
+      val idx = {
+        val intl = dao.interlocutors(c)
+        val idx1 = intl indexWhere (_.id == m.fromId)
+        val idx2 = intl indexWhere (_.prettyName == m.fromName)
+        if (idx1 != -1) idx1 else idx2
+      }
+      val color = if (idx >= 0 && idx < NameColors.length) NameColors(idx) else "#000000"
+      s"color: $color;"
+    }
+    val titleHtmlString =
+      s"""<span class="message-title-name" style="$titleStyleCss">${m.fromName}</span> """ +
+        s"(${m.date.toString("yyyy-MM-dd HH:mm")})"
+    val htmlToInsert = s"""
                           |<div class="message" message_id="${m.id}">
-                          |   <div class="message-title">${msgTitleHtmlString}</div>
+                          |   <div class="message-title">${titleHtmlString}</div>
                           |   <div class="message-body">${msgHtmlString}</div>
                           |</div>
                           |<p>
@@ -315,6 +331,23 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
       doc.remove(0, doc.getLength)
     }
   }
+
+  val NameColors = Seq(
+    // User
+    "#6495ED", // CornflowerBlue
+    // First interlocutor
+    "#B22222", // FireBrick
+    "#008000", // Green
+    "#DAA520", // GoldenRod
+    "#BA55D3", // MediumOrchid
+    "#FF69B4", // HotPink
+    "#808000", // Olive
+    "#008080", // Teal
+    "#9ACD32", // YellowGreen
+    "#FF8C00", // DarkOrange
+    "#00D0D0", // Cyan-ish
+    "#BDB76B" // DarkKhaki
+  )
 
   sealed trait MessageInsertPosition
   object MessageInsertPosition {

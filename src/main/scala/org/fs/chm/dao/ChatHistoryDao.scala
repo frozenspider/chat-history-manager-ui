@@ -2,10 +2,19 @@ package org.fs.chm.dao
 
 import com.github.nscala_time.time.Imports._
 
+/**
+ * Everything except for messages should be pre-cached and readily available.
+ */
 trait ChatHistoryDao {
+  def myself: Contact
+
+  /** Contains myself as well */
   def contacts: Seq[Contact]
 
   def chats: Seq[Chat]
+
+  /** First returned element MUST be myself, the rest should be in some fixed order. */
+  def interlocutors(chat: Chat): Seq[Contact]
 
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
@@ -15,10 +24,11 @@ trait ChatHistoryDao {
 }
 
 case class Contact(
-    /** Not guaranteed to be unique -- or even meaningful */
+    /** Might be 0, otherwise - is presumed to be unique */
     id: Long,
     firstNameOption: Option[String],
     lastNameOption: Option[String],
+    usernameOption: Option[String],
     phoneNumberOption: Option[String],
     lastSeenDateOption: Option[DateTime]
 ) {
@@ -37,7 +47,7 @@ case class Chat(
     id: Long,
     nameOption: Option[String],
     tpe: ChatType,
-    msgNum: Long
+    msgCount: Long
 )
 
 //
