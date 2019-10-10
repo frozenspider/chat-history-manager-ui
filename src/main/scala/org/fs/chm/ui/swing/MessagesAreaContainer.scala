@@ -8,7 +8,7 @@ import javax.swing.text.html.HTMLEditorKit
 
 class MessagesAreaContainer(htmlKit: HTMLEditorKit) {
 
-  private val textPane: TextPane = {
+  val textPane: TextPane = {
     val ta = new TextPane()
     ta.peer.setEditorKit(htmlKit)
     ta.peer.setEditable(false)

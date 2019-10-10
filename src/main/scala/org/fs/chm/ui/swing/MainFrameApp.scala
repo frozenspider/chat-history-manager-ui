@@ -1,5 +1,6 @@
 package org.fs.chm.ui.swing
 
+import java.awt.Desktop
 import java.awt.event.AdjustmentEvent
 import java.awt.{ Container => AwtContainer }
 import java.util.concurrent.atomic.AtomicBoolean
@@ -11,6 +12,7 @@ import scala.swing._
 import scala.swing.event.ButtonClicked
 
 import com.github.nscala_time.time.Imports._
+import javax.swing.event.HyperlinkEvent
 import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao._
 import org.fs.chm.ui.swing.MessagesHelper._
@@ -76,11 +78,21 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
 
   lazy val msgAreaContainer: MessagesAreaContainer = {
     val m = new MessagesAreaContainer(htmlKit)
+
+    // Load older messages when sroll is near the top
     m.scrollPane.verticalScrollBar.peer.addAdjustmentListener((e: AdjustmentEvent) => {
       if (e.getValue < 500 && !e.getValueIsAdjusting) {
         tryLoadPreviousMessages()
       }
     })
+
+    // Open clicked hyperlinks in browser
+    m.textPane.peer.addHyperlinkListener((e: HyperlinkEvent) => {
+      if (e.getEventType == HyperlinkEvent.EventType.ACTIVATED) {
+        if (Desktop.isDesktopSupported) Desktop.getDesktop.browse(e.getURL.toURI)
+      }
+    })
+
     m
   }
 
