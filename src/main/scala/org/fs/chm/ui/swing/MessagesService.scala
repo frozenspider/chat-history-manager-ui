@@ -18,7 +18,19 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
         |<html>
         | <head>
         |   <style type="text/css">
-        |     .title-name { font-weight: bold; }
+        |     .title {
+        |       padding-left: 5px;
+        |       padding-bottom: 5px;
+        |       font-size: 105%;
+        |     }
+        |     .forwarded-from {
+        |       padding-left: 5px;
+        |       padding-bottom: 5px;
+        |       font-size: 105%;
+        |     }
+        |     .title-name {
+        |       font-weight: bold;
+        |     }
         |     blockquote {
         |        border-left: 1px solid #ccc;
         |        margin: 5px 10px;
@@ -47,6 +59,18 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
   //
 
   def renderMessageHtml(c: Chat, m: Message, isQuote: Boolean = false): String = {
+    val intl = dao.interlocutors(c)
+
+    def nameCss(fromIdOption: Option[Long], fromName: String) = {
+      val idx = {
+        val idx1 = fromIdOption map (fromId => intl indexWhere (_.id == fromId)) getOrElse -1
+        val idx2 = intl indexWhere (_.prettyName == fromName)
+        if (idx1 != -1) idx1 else idx2
+      }
+      val color = if (idx >= 0) NameColors(idx % NameColors.length) else "#000000"
+      s"color: $color;"
+    }
+
     val msgHtmlString: String = m match {
       case m: Message.Regular =>
         val textHtmlOption = m.textOption map { rt =>
@@ -55,32 +79,14 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
         val contentHtmlOption = m.contentOption map { ct =>
           s"""<div class="content">${ContentRenderer.renderHtml(ct)}</div>"""
         }
-        val fromHtmlOption =
-          (if (isQuote)
-             None
-           else
-             m.replyToMessageIdOption map { m2id =>
-               val m2Option = dao.messageOption(c, m2id)
-               m2Option match {
-                 case None     => "[Deleted message]"
-                 case Some(m2) => renderMessageHtml(c, m2, true)
-               }
-             }) map (html => s"""<blockquote>$html</blockquote> """)
-        Seq(fromHtmlOption, textHtmlOption, contentHtmlOption).yieldDefined.mkString
+        val fwdFromHtmlOption  = m.forwardFromNameOption map (_ => renderFwdFromHtml(nameCss, m))
+        val replySrcHtmlOption = if (isQuote) None else renderReplySourceHtmlOption(c, m)
+        Seq(fwdFromHtmlOption, replySrcHtmlOption, textHtmlOption, contentHtmlOption).yieldDefined.mkString
       case _ => s"[Unsupported - ${m.getClass.getSimpleName}]" // NOOP, FIXME later on
     }
-    val titleStyleCss = {
-      val idx = {
-        val intl = dao.interlocutors(c)
-        val idx1 = intl indexWhere (_.id == m.fromId)
-        val idx2 = intl indexWhere (_.prettyName == m.fromName)
-        if (idx1 != -1) idx1 else idx2
-      }
-      val color = if (idx >= 0 && idx < NameColors.length) NameColors(idx) else "#000000"
-      s"color: $color;"
-    }
+    val titleNameCss = nameCss(Some(m.fromId), m.fromName)
     val titleHtmlString =
-      s"""<span class="title-name" style="$titleStyleCss">${m.fromName}</span> """ +
+      s"""<span class="title-name" style="$titleNameCss">${m.fromName}</span> """ +
         s"(${m.date.toString("yyyy-MM-dd HH:mm")})"
     s"""
        |<div class="message" message_id="${m.id}">
@@ -89,6 +95,24 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
        |</div>
        |${if (!isQuote) "<p>" else ""}
     """.stripMargin
+  }
+
+  private def renderFwdFromHtml(nameCss: (Option[Long], String) => String, m: Message.Regular): String = {
+    val Some(fwdName) = m.forwardFromNameOption
+    val css           = nameCss(None, fwdName)
+    s"""<div class="forwarded-from">Forwarded from
+       |  <span class="title-name" style="${css}">$fwdName</span>
+       |</div>""".stripMargin
+  }
+
+  private def renderReplySourceHtmlOption(c: Chat, m: Message.Regular): Option[String] = {
+    m.replyToMessageIdOption map { m2id =>
+      val m2Option = dao.messageOption(c, m2id)
+      m2Option match {
+        case None     => "[Deleted message]"
+        case Some(m2) => renderMessageHtml(c, m2, true)
+      }
+    } map (html => s"""<blockquote>$html</blockquote> """)
   }
 
   object RichTextRenderer {

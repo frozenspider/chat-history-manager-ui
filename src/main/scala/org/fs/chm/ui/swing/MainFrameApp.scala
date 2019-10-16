@@ -32,7 +32,6 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   val msgService = new MessagesService(dao, htmlKit)
 
   // TODO:
-  // forward-from
   // reply-to (make clickable)
   // word-wrap and narrower width
   // search
