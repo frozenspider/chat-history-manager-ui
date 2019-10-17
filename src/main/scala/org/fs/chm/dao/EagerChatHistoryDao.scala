@@ -1,9 +1,12 @@
 package org.fs.chm.dao
 
+import java.io.File
+
 import scala.collection.immutable.ListMap
 import scala.collection.immutable.TreeMap
 
 class EagerChatHistoryDao(
+    override val dataPath: File,
     override val myself: Contact,
     contactsRaw: Seq[Contact],
     chatsWithMessages: ListMap[Chat, IndexedSeq[Message]]

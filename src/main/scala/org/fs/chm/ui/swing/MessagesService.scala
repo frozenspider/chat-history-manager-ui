@@ -1,5 +1,6 @@
 package org.fs.chm.ui.swing
 
+import java.io.File
 import java.io.StringReader
 
 import javax.swing.text.Element
@@ -18,6 +19,9 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
         |<html>
         | <head>
         |   <style type="text/css">
+        |     body {
+        |       font-family: arial,sans-serif;
+        |     }
         |     .title {
         |       padding-left: 5px;
         |       padding-bottom: 5px;
@@ -27,6 +31,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
         |       padding-left: 5px;
         |       padding-bottom: 5px;
         |       font-size: 105%;
+        |       color: #909090;
         |     }
         |     .title-name {
         |       font-weight: bold;
@@ -47,6 +52,23 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     val msgEl = doc.getElement("messages")
     MessageDocument(doc, msgEl)
   }
+
+  val NameColors = Seq(
+    // User
+    "#6495ED", // CornflowerBlue
+    // First interlocutor
+    "#B22222", // FireBrick
+    "#008000", // Green
+    "#DAA520", // GoldenRod
+    "#BA55D3", // MediumOrchid
+    "#FF69B4", // HotPink
+    "#808000", // Olive
+    "#008080", // Teal
+    "#9ACD32", // YellowGreen
+    "#FF8C00", // DarkOrange
+    "#00D0D0", // Cyan-ish
+    "#BDB76B" // DarkKhaki
+  )
 
   lazy val pleaseWaitDoc: HTMLDocument = {
     val md = createStubDoc
@@ -74,10 +96,10 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     val msgHtmlString: String = m match {
       case m: Message.Regular =>
         val textHtmlOption = m.textOption map { rt =>
-          s"""<div class="text">${RichTextRenderer.renderHtml(rt)}</div>"""
+          s"""<div class="text">${RichTextHtmlRenderer.render(rt)}</div>"""
         }
         val contentHtmlOption = m.contentOption map { ct =>
-          s"""<div class="content">${ContentRenderer.renderHtml(ct)}</div>"""
+          s"""<div class="content">${ContentHtmlRenderer.render(ct)}</div>"""
         }
         val fwdFromHtmlOption  = m.forwardFromNameOption map (_ => renderFwdFromHtml(nameCss, m))
         val replySrcHtmlOption = if (isQuote) None else renderReplySourceHtmlOption(c, m)
@@ -115,8 +137,8 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     } map (html => s"""<blockquote>$html</blockquote> """)
   }
 
-  object RichTextRenderer {
-    def renderHtml(rt: RichText): String = {
+  object RichTextHtmlRenderer {
+    def render(rt: RichText): String = {
       val components = for (rtel <- rt.components) yield {
         renderComponent(rtel)
       }
@@ -148,28 +170,29 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     }
   }
 
-  object ContentRenderer {
-    def renderHtml(ct: Content): String = {
-      s"[Unsupported content - ${ct.getClass.getSimpleName}]" // TODO
+  object ContentHtmlRenderer {
+    def render(ct: Content): String = {
+      ct match {
+        case ct: Content.Sticker => renderSticker(ct)
+        case _                   => s"[Unsupported content - ${ct.getClass.getSimpleName}]" // TODO
+      }
+    }
+
+    def renderSticker(st: Content.Sticker): String = {
+      val pathOption = st.pathOption orElse st.thumbnailPathOption
+      pathOption match {
+        case Some(path) =>
+          val fullPath   = "file:///" + new File(dao.dataPath, path).getCanonicalPath.replace("\\", "/")
+          val srcAttr    = Some(s"""src="${fullPath}"""")
+          val widthAttr  = st.widthOption map (w => s"""width="${w / 2}"""")
+          val heightAttr = st.heightOption map (h => s"""height="${h / 2}"""")
+          val altAttr    = st.emojiOption map (e => s"""alt="$e"""")
+          "<img " + Seq(srcAttr, widthAttr, heightAttr, altAttr).yieldDefined.mkString(" ") + "/>"
+        case None =>
+          "[Sticker not downloaded]"
+      }
     }
   }
-
-  val NameColors = Seq(
-    // User
-    "#6495ED", // CornflowerBlue
-    // First interlocutor
-    "#B22222", // FireBrick
-    "#008000", // Green
-    "#DAA520", // GoldenRod
-    "#BA55D3", // MediumOrchid
-    "#FF69B4", // HotPink
-    "#808000", // Olive
-    "#008080", // Teal
-    "#9ACD32", // YellowGreen
-    "#FF8C00", // DarkOrange
-    "#00D0D0", // Cyan-ish
-    "#BDB76B" // DarkKhaki
-  )
 }
 
 object MessagesService {

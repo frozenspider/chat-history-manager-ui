@@ -13,9 +13,9 @@ import scala.swing.event.ButtonClicked
 
 import com.github.nscala_time.time.Imports._
 import javax.swing.event.HyperlinkEvent
-import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao._
 import org.fs.chm.ui.swing.MessagesService._
+import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.utility.Imports._
 
 class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
@@ -28,7 +28,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   var currentChatOption:      Option[Chat]  = None
   var loadMessagesInProgress: AtomicBoolean = new AtomicBoolean(false)
 
-  val htmlKit    = new HTMLEditorKit
+  val htmlKit    = new ExtendedHtmlEditorKit
   val msgService = new MessagesService(dao, htmlKit)
 
   // TODO:

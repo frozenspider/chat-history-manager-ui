@@ -1,11 +1,16 @@
 package org.fs.chm.dao
 
+import java.io.File
+
 import com.github.nscala_time.time.Imports._
 
 /**
  * Everything except for messages should be pre-cached and readily available.
  */
 trait ChatHistoryDao {
+  /** Base of relative paths specified in messages */
+  def dataPath: File
+
   def myself: Contact
 
   /** Contains myself as well */
