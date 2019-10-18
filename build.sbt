@@ -47,6 +47,8 @@ libraryDependencies ++= Seq(
   "com.googlecode.soundlibs"      %  "vorbisspi"                % "1.0.3.3",
   "com.googlecode.soundlibs"      %  "mp3spi"                   % "1.9.5.4",
   "com.github.lostromb.concentus" %  "Concentus"                % "fdf276ed6b",
+  // WebP codec
+  "org.scijava"                   %  "native-lib-loader"        % "2.3.4",
   // Other
   "com.github.frozenspider"       %% "fs-common-utils"          % "0.1.3",
   "commons-codec"                 %  "commons-codec"            % "1.11",

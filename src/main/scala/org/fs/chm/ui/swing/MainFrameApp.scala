@@ -15,6 +15,7 @@ import javax.swing.event.HyperlinkEvent
 import org.fs.chm.dao._
 import org.fs.chm.ui.swing.MessagesService._
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
+import org.fs.chm.ui.swing.webp.Webp
 import org.fs.utility.Imports._
 
 class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
@@ -35,9 +36,12 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   // reply-to (make clickable)
   // word-wrap and narrower width
   // search
-  // content (stickers)
-  // webp rendering
+  // better pictures rendering
   // emoji and fonts
+
+  Future {
+    Webp.eagerInit()
+  }
 
   override def top = new MainFrame {
     import org.fs.chm.BuildInfo._
