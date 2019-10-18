@@ -179,15 +179,17 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     }
 
     def renderSticker(st: Content.Sticker): String = {
-      val pathOption = st.pathOption orElse st.thumbnailPathOption
-      pathOption match {
-        case Some(path) =>
-          val fullPath   = "file:///" + new File(dao.dataPath, path).getCanonicalPath.replace("\\", "/")
+      val fileOption = st.pathOption orElse st.thumbnailPathOption map (new File(dao.dataPath, _))
+      fileOption match {
+        case Some(file) if file.exists =>
+          val fullPath   = "file:///" + file.getCanonicalPath.replace("\\", "/")
           val srcAttr    = Some(s"""src="${fullPath}"""")
           val widthAttr  = st.widthOption map (w => s"""width="${w / 2}"""")
           val heightAttr = st.heightOption map (h => s"""height="${h / 2}"""")
           val altAttr    = st.emojiOption map (e => s"""alt="$e"""")
           "<img " + Seq(srcAttr, widthAttr, heightAttr, altAttr).yieldDefined.mkString(" ") + "/>"
+        case Some(file) =>
+          "[Sticker not found]"
         case None =>
           "[Sticker not downloaded]"
       }
