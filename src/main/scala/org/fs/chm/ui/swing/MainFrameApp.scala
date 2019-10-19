@@ -7,7 +7,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-import scala.swing.Dimension
 import scala.swing._
 import scala.swing.event.ButtonClicked
 
@@ -36,6 +35,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   // word-wrap and narrower width
   // search
   // content (stickers, voices)
+  // webp rendering
   // emoji and fonts
 
   override def top = new MainFrame {

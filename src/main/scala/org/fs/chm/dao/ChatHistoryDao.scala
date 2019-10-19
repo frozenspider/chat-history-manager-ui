@@ -3,6 +3,7 @@ package org.fs.chm.dao
 import java.io.File
 
 import com.github.nscala_time.time.Imports._
+import org.fs.utility.Imports._
 
 /**
  * Everything except for messages should be pre-cached and readily available.
@@ -31,6 +32,17 @@ trait ChatHistoryDao {
   def messageOption(chat: Chat, id: Long): Option[Message]
 }
 
+sealed trait PersonInfo {
+  val firstNameOption: Option[String]
+  val lastNameOption: Option[String]
+  val phoneNumberOption: Option[String]
+
+  lazy val prettyName: String = {
+    val parts = Seq(firstNameOption, lastNameOption).yieldDefined
+    if (parts.isEmpty) "[nameless]" else parts.mkString(" ").trim
+  }
+}
+
 case class Contact(
     /** Might be 0, otherwise - is presumed to be unique */
     id: Long,
@@ -39,11 +51,7 @@ case class Contact(
     usernameOption: Option[String],
     phoneNumberOption: Option[String],
     lastSeenDateOption: Option[DateTime]
-) {
-  lazy val prettyName: String = {
-    Seq(firstNameOption getOrElse "", lastNameOption getOrElse "").mkString(" ").trim
-  }
-}
+) extends PersonInfo
 
 sealed trait ChatType
 object ChatType {
@@ -313,4 +321,5 @@ object Content {
       phoneNumberOption: Option[String],
       vcardPathOption: Option[String]
   ) extends Content
+      with PersonInfo
 }

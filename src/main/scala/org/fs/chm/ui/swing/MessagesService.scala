@@ -91,7 +91,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
       case m: Message.Regular =>
         val textHtmlOption = renderTextOption(m.textOption)
         val contentHtmlOption = m.contentOption map { ct =>
-          s"""<div class="content">${ContentHtmlRenderer.render(ct)}</div>"""
+          s"""<div class="content">${ContentHtmlRenderer.render(c, ct)}</div>"""
         }
         val fwdFromHtmlOption  = m.forwardFromNameOption map (n => renderFwdFrom(c, n))
         val replySrcHtmlOption = if (isQuote) None else m.replyToMessageIdOption map (id => renderSourceMessage(c, id))
@@ -238,18 +238,60 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
   object ContentHtmlRenderer {
     def render(ct: Content): String = {
       ct match {
-        case ct: Content.Sticker => renderSticker(ct)
-        case _                   => s"[Unsupported content - ${ct.getClass.getSimpleName}]" // TODO
+        case ct: Content.Sticker       => renderSticker(ct)
+        case ct: Content.Photo         => renderPhoto(ct)
+        case ct: Content.VoiceMsg      => renderVoiceMsg(ct)
+        case ct: Content.VideoMsg      => renderVideoMsg(ct)
+        case ct: Content.Animation     => renderAnimation(ct)
+        case ct: Content.File          => renderFile(ct)
+        case ct: Content.Location      => renderLocation(ct)
+        case ct: Content.Poll          => renderPoll(ct)
+        case ct: Content.SharedContact => renderSharedContact(c, ct)
       }
     }
 
+    private def renderVoiceMsg(ct: Content.VoiceMsg) = {
+      // TODO
+      "[Voice messages not supported yet]"
+    }
+
+    private def renderVideoMsg(ct: Content.VideoMsg): String = {
+      // TODO
+      "[Video messages not supported yet]"
+    }
+
+    private def renderAnimation(ct: Content.Animation): String = {
+      // TODO
+      "[Animations not supported yet]"
+    }
+
+    private def renderFile(ct: Content.File): String = {
+      // TODO
+      "[Files not supported yet]"
+    }
+
     def renderSticker(st: Content.Sticker): String = {
-      renderImage(
-        st.pathOption orElse st.thumbnailPathOption,
-        st.widthOption,
-        st.heightOption,
-        st.emojiOption,
-        "Sticker")
+      val pathOption = st.pathOption orElse st.thumbnailPathOption
+      renderImage(pathOption, st.widthOption, st.heightOption, st.emojiOption, "Sticker")
+    }
+
+    def renderPhoto(ct: Content.Photo): String = {
+      renderImage(ct.pathOption, Some(ct.width), Some(ct.height), None, "Photo")
+    }
+
+    def renderLocation(ct: Content.Location): String = {
+      val liveString = ct.liveDurationSecOption map (s => s"(live for $s s)") getOrElse ""
+      s"""<blockquote><i>Location:</i> <b>${ct.lat}, ${ct.lon}</b> $liveString<br></blockquote>"""
+    }
+
+    def renderPoll(ct: Content.Poll): String = {
+      s"""<blockquote><i>Poll:</i> ${ct.question}</blockquote>"""
+    }
+
+    def renderSharedContact(c: Chat, ct: Content.SharedContact): String = {
+      val name  = renderTitleName(c, None, ct.prettyName)
+      val phone = ct.phoneNumberOption map (pn => s"(phone: $pn)") getOrElse "(no phone number)"
+      s"""<blockquote><i>Shared contact:</i> $name $phone</blockquote>"""
     }
   }
 }
