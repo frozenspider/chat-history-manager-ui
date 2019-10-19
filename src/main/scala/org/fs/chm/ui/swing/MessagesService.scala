@@ -6,6 +6,7 @@ import java.io.StringReader
 import javax.swing.text.Element
 import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
+import org.fs.chm.dao.Message.Service
 import org.fs.chm.dao._
 import org.fs.utility.Imports._
 
@@ -38,6 +39,11 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
         |     }
         |     blockquote {
         |        border-left: 1px solid #ccc;
+        |        margin: 5px 10px;
+        |        padding: 5px 10px;
+        |     }
+        |     .system-message {
+        |        border: 1px solid #A0A0A0;
         |        margin: 5px 10px;
         |        padding: 5px 10px;
         |     }
@@ -81,60 +87,118 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
   //
 
   def renderMessageHtml(c: Chat, m: Message, isQuote: Boolean = false): String = {
-    val intl = dao.interlocutors(c)
-
-    def nameCss(fromIdOption: Option[Long], fromName: String) = {
-      val idx = {
-        val idx1 = fromIdOption map (fromId => intl indexWhere (_.id == fromId)) getOrElse -1
-        val idx2 = intl indexWhere (_.prettyName == fromName)
-        if (idx1 != -1) idx1 else idx2
-      }
-      val color = if (idx >= 0) NameColors(idx % NameColors.length) else "#000000"
-      s"color: $color;"
-    }
-
-    val msgHtmlString: String = m match {
+    val msgHtml: String = m match {
       case m: Message.Regular =>
-        val textHtmlOption = m.textOption map { rt =>
-          s"""<div class="text">${RichTextHtmlRenderer.render(rt)}</div>"""
-        }
+        val textHtmlOption = renderTextOption(m.textOption)
         val contentHtmlOption = m.contentOption map { ct =>
           s"""<div class="content">${ContentHtmlRenderer.render(ct)}</div>"""
         }
-        val fwdFromHtmlOption  = m.forwardFromNameOption map (_ => renderFwdFromHtml(nameCss, m))
-        val replySrcHtmlOption = if (isQuote) None else renderReplySourceHtmlOption(c, m)
+        val fwdFromHtmlOption  = m.forwardFromNameOption map (n => renderFwdFrom(c, n))
+        val replySrcHtmlOption = if (isQuote) None else m.replyToMessageIdOption map (id => renderSourceMessage(c, id))
         Seq(fwdFromHtmlOption, replySrcHtmlOption, textHtmlOption, contentHtmlOption).yieldDefined.mkString
-      case _ => s"[Unsupported - ${m.getClass.getSimpleName}]" // NOOP, FIXME later on
+      case sm: Message.Service =>
+        ServiceMessageHtmlRenderer.render(c, sm)
     }
-    val titleNameCss = nameCss(Some(m.fromId), m.fromName)
-    val titleHtmlString =
-      s"""<span class="title-name" style="$titleNameCss">${m.fromName}</span> """ +
-        s"(${m.date.toString("yyyy-MM-dd HH:mm")})"
+    val titleNameHtml = renderTitleName(c, Some(m.fromId), m.fromName)
+    val titleHtml =
+      s"""$titleNameHtml (${m.date.toString("yyyy-MM-dd HH:mm")})"""
     s"""
        |<div class="message" message_id="${m.id}">
-       |   <div class="title">${titleHtmlString}</div>
-       |   <div class="body">${msgHtmlString}</div>
+       |   <div class="title">${titleHtml}</div>
+       |   <div class="body">${msgHtml}</div>
        |</div>
        |${if (!isQuote) "<p>" else ""}
     """.stripMargin
   }
 
-  private def renderFwdFromHtml(nameCss: (Option[Long], String) => String, m: Message.Regular): String = {
-    val Some(fwdName) = m.forwardFromNameOption
-    val css           = nameCss(None, fwdName)
-    s"""<div class="forwarded-from">Forwarded from
-       |  <span class="title-name" style="${css}">$fwdName</span>
-       |</div>""".stripMargin
+  private def renderTitleName(c: Chat, idOption: Option[Long], name: String): String = {
+    val intl = dao.interlocutors(c)
+    val idx = {
+      val idx1 = idOption map (id => intl indexWhere (_.id == id)) getOrElse -1
+      val idx2 = intl indexWhere (_.prettyName == name)
+      if (idx1 != -1) idx1 else idx2
+    }
+    val color = if (idx >= 0) NameColors(idx % NameColors.length) else "#000000"
+    s"""<span class="title-name" style="color: $color;">$name</span>"""
   }
 
-  private def renderReplySourceHtmlOption(c: Chat, m: Message.Regular): Option[String] = {
-    m.replyToMessageIdOption map { m2id =>
-      val m2Option = dao.messageOption(c, m2id)
-      m2Option match {
-        case None     => "[Deleted message]"
-        case Some(m2) => renderMessageHtml(c, m2, true)
+  private def renderTextOption(textOption: Option[RichText]): Option[String] =
+    textOption map { rt =>
+      s"""<div class="text">${RichTextHtmlRenderer.render(rt)}</div>"""
+    }
+
+  private def renderFwdFrom(c: Chat, fromName: String): String = {
+    val titleNameHtml = renderTitleName(c, None, fromName)
+    s"""<div class="forwarded-from">Forwarded from $titleNameHtml</div>"""
+  }
+
+  private def renderSourceMessage(c: Chat, srcId: Long): String = {
+    val m2Option = dao.messageOption(c, srcId)
+    val html = m2Option match {
+      case None     => "[Deleted message]"
+      case Some(m2) => renderMessageHtml(c, m2, true)
+    }
+    s"""<blockquote>$html</blockquote> """
+  }
+
+  private def renderImage(pathOption: Option[String],
+                          widthOption: Option[Int],
+                          heightOption: Option[Int],
+                          altTextOption: Option[String],
+                          imagePrettyType: String): String = {
+    val fileOption = pathOption map (new File(dao.dataPath, _))
+    fileOption match {
+      case Some(file) if file.exists =>
+        val fullPath   = "file:///" + file.getCanonicalPath.replace("\\", "/")
+        val srcAttr    = Some(s"""src="${fullPath}"""")
+        val widthAttr  = widthOption map (w => s"""width="${w / 2}"""")
+        val heightAttr = heightOption map (h => s"""height="${h / 2}"""")
+        val altAttr    = altTextOption map (e => s"""alt="$e"""")
+        "<img " + Seq(srcAttr, widthAttr, heightAttr, altAttr).yieldDefined.mkString(" ") + "/>"
+      case Some(file) =>
+        s"[$imagePrettyType not found]"
+      case None =>
+        s"[$imagePrettyType not downloaded]"
+    }
+  }
+
+  object ServiceMessageHtmlRenderer {
+    def render(c: Chat, sm: Message.Service): String = {
+      val textHtmlOption = renderTextOption(sm.textOption)
+      val content = sm match {
+        case sm: Message.Service.PhoneCall        => renderPhoneCall(sm)
+        case sm: Message.Service.PinMessage       => "Pinned message" + renderSourceMessage(c, sm.messageId)
+        case sm: Message.Service.MembershipChange => renderMembershipChangeMessage(c, sm)
+        case sm: Message.Service.EditGroupPhoto   => renderEditGroupPhotoMessage(sm)
+        case sm: Message.Service.ClearHistory     => s"History cleared"
       }
-    } map (html => s"""<blockquote>$html</blockquote> """)
+      Seq(Some(s"""<div class="system-message">$content</div>"""), textHtmlOption).yieldDefined.mkString
+    }
+
+    private def renderPhoneCall(sm: Service.PhoneCall) = {
+      Seq(
+        Some("Phone call"),
+        sm.durationSecOption map (d => s"($d sec)"),
+        sm.discardReasonOption map (r => s"($r)")
+      ).yieldDefined.mkString(" ")
+    }
+
+    private def renderEditGroupPhotoMessage(sm: Service.EditGroupPhoto) = {
+      val image = renderImage(sm.pathOption, sm.widthOption, sm.heightOption, None, "Photo")
+      s"Changed group photo<br>$image"
+    }
+
+    private def renderMembershipChangeMessage(c: Chat, sm: Service.MembershipChange) = {
+      val members = sm.members
+        .map(name => renderTitleName(c, None, name))
+        .mkString("<ul><li>", "</li><li>", "</li></ul>")
+      val content = sm match {
+        case sm: Service.CreateGroup        => s"Created group <b>${sm.title}</b>"
+        case sm: Service.InviteGroupMembers => s"Invited"
+        case sm: Service.RemoveGroupMembers => s"Removed"
+      }
+      s"$content$members"
+    }
   }
 
   object RichTextHtmlRenderer {
@@ -149,23 +213,24 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
       components.mkString + link
     }
 
-    def renderComponent(rtel: RichText.Element): String = {
+    private def renderComponent(rtel: RichText.Element): String = {
       rtel match {
-        case rtel: RichText.Plain =>
-          rtel.text replace ("\n", "<br>")
-        case rtel: RichText.Bold =>
-          s"<b>${rtel.text replace ("\n", "<br>")}</b>"
-        case rtel: RichText.Italic =>
-          s"<i>${rtel.text replace ("\n", "<br>")}</i>"
-        case rtel: RichText.Link if rtel.hidden =>
-          rtel.plainSearchableString
-        case rtel: RichText.Link =>
-          val text = rtel.textOption getOrElse rtel.href
-          s"""<a href="${rtel.href}">${text}</a> """ // Space in the end is needed if link is followed by text
-        case rtel: RichText.PrefmtBlock =>
-          s"""<pre>${rtel.text}</pre>"""
-        case rtel: RichText.PrefmtInline =>
-          s"""<code>${rtel.text}</code>"""
+        case rtel: RichText.Plain        => rtel.text replace ("\n", "<br>")
+        case rtel: RichText.Bold         => s"<b>${rtel.text replace ("\n", "<br>")}</b>"
+        case rtel: RichText.Italic       => s"<i>${rtel.text replace ("\n", "<br>")}</i>"
+        case rtel: RichText.Link         => renderLink(rtel)
+        case rtel: RichText.PrefmtBlock  => s"""<pre>${rtel.text}</pre>"""
+        case rtel: RichText.PrefmtInline => s"""<code>${rtel.text}</code>"""
+      }
+    }
+
+    private def renderLink(rtel: RichText.Link) = {
+      if (rtel.hidden) {
+        rtel.plainSearchableString
+      } else {
+        // Space in the end is needed if link is followed by text
+        val text = rtel.textOption getOrElse rtel.href
+        s"""<a href="${rtel.href}">${text}</a> """
       }
     }
   }
@@ -179,20 +244,12 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     }
 
     def renderSticker(st: Content.Sticker): String = {
-      val fileOption = st.pathOption orElse st.thumbnailPathOption map (new File(dao.dataPath, _))
-      fileOption match {
-        case Some(file) if file.exists =>
-          val fullPath   = "file:///" + file.getCanonicalPath.replace("\\", "/")
-          val srcAttr    = Some(s"""src="${fullPath}"""")
-          val widthAttr  = st.widthOption map (w => s"""width="${w / 2}"""")
-          val heightAttr = st.heightOption map (h => s"""height="${h / 2}"""")
-          val altAttr    = st.emojiOption map (e => s"""alt="$e"""")
-          "<img " + Seq(srcAttr, widthAttr, heightAttr, altAttr).yieldDefined.mkString(" ") + "/>"
-        case Some(file) =>
-          "[Sticker not found]"
-        case None =>
-          "[Sticker not downloaded]"
-      }
+      renderImage(
+        st.pathOption orElse st.thumbnailPathOption,
+        st.widthOption,
+        st.heightOption,
+        st.emojiOption,
+        "Sticker")
     }
   }
 }

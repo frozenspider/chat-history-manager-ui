@@ -111,7 +111,7 @@ class TelegramDataLoader extends DataLoader {
       tracker.markUsed("edited") // Service messages can't be edited
       getCheckedField[String](jv, "action") match {
         case "phone_call" =>
-          Message.PhoneCall(
+          Message.Service.PhoneCall(
             id                  = getCheckedField[Long](jv, "id"),
             date                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName            = getCheckedField[String](jv, "actor"),
@@ -121,7 +121,7 @@ class TelegramDataLoader extends DataLoader {
             textOption          = RichTextParser.parseRichTextOption(jv)
           )
         case "pin_message" =>
-          Message.PinMessage(
+          Message.Service.PinMessage(
             id         = getCheckedField[Long](jv, "id"),
             date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
@@ -130,7 +130,7 @@ class TelegramDataLoader extends DataLoader {
             textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "create_group" =>
-          Message.CreateGroup(
+          Message.Service.CreateGroup(
             id         = getCheckedField[Long](jv, "id"),
             date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
@@ -140,7 +140,7 @@ class TelegramDataLoader extends DataLoader {
             textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "invite_members" =>
-          Message.InviteGroupMembers(
+          Message.Service.InviteGroupMembers(
             id         = getCheckedField[Long](jv, "id"),
             date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
@@ -149,7 +149,7 @@ class TelegramDataLoader extends DataLoader {
             textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "remove_members" =>
-          Message.RemoveGroupMembers(
+          Message.Service.RemoveGroupMembers(
             id         = getCheckedField[Long](jv, "id"),
             date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
@@ -158,7 +158,7 @@ class TelegramDataLoader extends DataLoader {
             textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "clear_history" =>
-          Message.ClearHistory(
+          Message.Service.ClearHistory(
             id         = getCheckedField[Long](jv, "id"),
             date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
@@ -166,7 +166,7 @@ class TelegramDataLoader extends DataLoader {
             textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "edit_group_photo" =>
-          Message.EditGroupPhoto(
+          Message.Service.EditGroupPhoto(
             id           = getCheckedField[Long](jv, "id"),
             date         = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName     = getCheckedField[String](jv, "actor"),

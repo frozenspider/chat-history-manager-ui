@@ -18,7 +18,10 @@ trait ChatHistoryDao {
 
   def chats: Seq[Chat]
 
-  /** First returned element MUST be myself, the rest should be in some fixed order. */
+  /**
+   * First returned element MUST be myself, the rest should be in some fixed order.
+   * This method should be fast.
+   */
   def interlocutors(chat: Chat): Seq[Contact]
 
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
@@ -55,14 +58,18 @@ case class Chat(
     msgCount: Long
 )
 
+trait Searchable {
+  def plainSearchableString: String
+}
+
 //
 // Rich Text
 //
 
 case class RichText(
     components: Seq[RichText.Element]
-) {
-  val plainSearchableString: String = {
+) extends Searchable {
+  override val plainSearchableString: String = {
     val joined = (components map (_.plainSearchableString) mkString " ")
       .replaceAll("[\\s\\p{Cf}\n]+", " ")
       .trim
@@ -72,9 +79,7 @@ case class RichText(
   }
 }
 object RichText {
-  sealed trait Element {
-    def plainSearchableString: String
-  }
+  sealed trait Element extends Searchable
 
   case class Plain(
       text: String
@@ -123,12 +128,20 @@ object RichText {
 // Message
 //
 
-sealed trait Message {
+sealed trait Message extends Searchable {
   val id: Long
   val date: DateTime
   val fromName: String
   val fromId: Long
+  val textOption: Option[RichText]
+
+  /** We can't use "super" on vals/lazy vals, so... */
+  protected val plainSearchableMsgString =
+    textOption map (_.plainSearchableString) getOrElse ""
+
+  override val plainSearchableString = plainSearchableMsgString
 }
+
 object Message {
   case class Regular(
       id: Long,
@@ -144,72 +157,87 @@ object Message {
 
   sealed trait Service extends Message
 
-  case class PhoneCall(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      durationSecOption: Option[Int],
-      discardReasonOption: Option[String],
-      textOption: Option[RichText]
-  ) extends Service
+  object Service {
+    sealed trait MembershipChange extends Service {
+      val members: Seq[String]
+    }
 
-  case class PinMessage(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      messageId: Long,
-      textOption: Option[RichText]
-  ) extends Service
+    case class PhoneCall(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        durationSecOption: Option[Int],
+        discardReasonOption: Option[String]
+    ) extends Service
 
-  case class CreateGroup(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      title: String,
-      members: Seq[String],
-      textOption: Option[RichText]
-  ) extends Service
+    case class PinMessage(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        messageId: Long
+    ) extends Service
 
-  case class InviteGroupMembers(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      members: Seq[String],
-      textOption: Option[RichText]
-  ) extends Service
+    case class CreateGroup(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        title: String,
+        members: Seq[String]
+    ) extends MembershipChange {
+      override val plainSearchableString =
+        (plainSearchableMsgString +: title +: members).mkString(" ").trim
+    }
 
-  case class RemoveGroupMembers(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      members: Seq[String],
-      textOption: Option[RichText]
-  ) extends Service
+    case class InviteGroupMembers(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        members: Seq[String]
+    ) extends MembershipChange {
+      override val plainSearchableString =
+        (plainSearchableMsgString +: members).mkString(" ").trim
+    }
 
-  case class EditGroupPhoto(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      pathOption: Option[String],
-      widthOption: Option[Int],
-      heightOption: Option[Int],
-      textOption: Option[RichText]
-  ) extends Service
+    case class RemoveGroupMembers(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        members: Seq[String]
+    ) extends MembershipChange {
+      override val plainSearchableString =
+        (plainSearchableMsgString +: members).mkString(" ").trim
+    }
 
-  /** Note: for Telegram, from is not always meaningful */
-  case class ClearHistory(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      textOption: Option[RichText]
-  ) extends Service
+    case class EditGroupPhoto(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        pathOption: Option[String],
+        widthOption: Option[Int],
+        heightOption: Option[Int]
+    ) extends Service
+
+    /** Note: for Telegram, from is not always meaningful */
+    case class ClearHistory(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText]
+    ) extends Service
+  }
 }
 
 //
