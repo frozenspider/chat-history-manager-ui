@@ -108,7 +108,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
        |   <div class="body">${msgHtml}</div>
        |</div>
        |${if (!isQuote) "<p>" else ""}
-    """.stripMargin
+    """.stripMargin // TODO: Remove <p>
   }
 
   private def renderTitleName(c: Chat, idOption: Option[Long], name: String): String = {
@@ -141,25 +141,34 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     s"""<blockquote>$html</blockquote> """
   }
 
+  private def renderPossiblyMissingContent(
+      pathOption: Option[String],
+      kindPrettyName: String
+  )(renderContentFromFile: File => String): String = {
+    val fileOption = pathOption map (new File(dao.dataPath, _))
+    fileOption match {
+      case Some(file) if file.exists => renderContentFromFile(file)
+      case Some(file)                => s"[$kindPrettyName not found]"
+      case None                      => s"[$kindPrettyName not downloaded]"
+    }
+  }
+
   private def renderImage(pathOption: Option[String],
                           widthOption: Option[Int],
                           heightOption: Option[Int],
                           altTextOption: Option[String],
                           imagePrettyType: String): String = {
-    val fileOption = pathOption map (new File(dao.dataPath, _))
-    fileOption match {
-      case Some(file) if file.exists =>
-        val fullPath   = "file:///" + file.getCanonicalPath.replace("\\", "/")
-        val srcAttr    = Some(s"""src="${fullPath}"""")
-        val widthAttr  = widthOption map (w => s"""width="${w / 2}"""")
-        val heightAttr = heightOption map (h => s"""height="${h / 2}"""")
-        val altAttr    = altTextOption map (e => s"""alt="$e"""")
-        "<img " + Seq(srcAttr, widthAttr, heightAttr, altAttr).yieldDefined.mkString(" ") + "/>"
-      case Some(file) =>
-        s"[$imagePrettyType not found]"
-      case None =>
-        s"[$imagePrettyType not downloaded]"
-    }
+    renderPossiblyMissingContent(pathOption, imagePrettyType)(file => {
+      val srcAttr    = Some(s"""src="${fileToLocalUriString(file)}"""")
+      val widthAttr  = widthOption map (w => s"""width="${w / 2}"""")
+      val heightAttr = heightOption map (h => s"""height="${h / 2}"""")
+      val altAttr    = altTextOption map (e => s"""alt="$e"""")
+      "<img " + Seq(srcAttr, widthAttr, heightAttr, altAttr).yieldDefined.mkString(" ") + "/>"
+    })
+  }
+
+  private def fileToLocalUriString(file: File): String = {
+    "file:///" + file.getCanonicalPath.replace("\\", "/")
   }
 
   object ServiceMessageHtmlRenderer {
@@ -236,7 +245,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
   }
 
   object ContentHtmlRenderer {
-    def render(ct: Content): String = {
+    def render(c: Chat, ct: Content): String = {
       ct match {
         case ct: Content.Sticker       => renderSticker(ct)
         case ct: Content.Photo         => renderPhoto(ct)
@@ -251,8 +260,14 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     }
 
     private def renderVoiceMsg(ct: Content.VoiceMsg) = {
-      // TODO
-      "[Voice messages not supported yet]"
+      renderPossiblyMissingContent(ct.pathOption, "Voice message")(file => {
+        val mimeTypeOption = ct.mimeTypeOption map (mt => s"""type="$mt"""")
+        val durationOption = ct.durationSecOption map (d => s"""duration="$d"""")
+        // <audio> tag is not impemented by default AWT toolkit, we're plugging custom view
+        s"""<audio ${durationOption getOrElse ""} controls>
+           |  <source src=${fileToLocalUriString(file)}" ${mimeTypeOption getOrElse ""}>
+           |</audio>""".stripMargin
+      })
     }
 
     private def renderVideoMsg(ct: Content.VideoMsg): String = {

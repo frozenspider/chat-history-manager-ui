@@ -9,6 +9,6 @@ libraryDependencies += ("net.sf.launch4j" % "launch4j" % "3.12")
 
 // Launch4j dependency - required for com.springsource.org.apache.batik
 resolvers ++= Seq(
-  "SpringSource" at "http://repository.springsource.com/maven/bundles/external",
-  "Simulation @ TU Delft" at "http://simulation.tudelft.nl/maven/"
+  "SpringSource" at "https://repository.springsource.com/maven/bundles/external",
+  "Simulation @ TU Delft" at "https://simulation.tudelft.nl/maven/"
 )

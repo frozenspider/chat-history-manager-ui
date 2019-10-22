@@ -27,22 +27,23 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   var currentChatOption:      Option[Chat]  = None
   var loadMessagesInProgress: AtomicBoolean = new AtomicBoolean(false)
 
-  val htmlKit    = new ExtendedHtmlEditorKit
-  val msgService = new MessagesService(dao, htmlKit)
+  val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
+  val htmlKit       = new ExtendedHtmlEditorKit(desktopOption)
+  val msgService    = new MessagesService(dao, htmlKit)
 
   // TODO:
   // reply-to (make clickable)
   // word-wrap and narrower width
   // search
-  // content (stickers, voices)
+  // content (stickers)
   // webp rendering
   // emoji and fonts
 
   override def top = new MainFrame {
     import org.fs.chm.BuildInfo._
-    title = s"$name v${version} b${new DateTime(builtAtMillis).toString("yyyyMMdd-HHmmss")}"
+    title    = s"$name v${version} b${new DateTime(builtAtMillis).toString("yyyyMMdd-HHmmss")}"
     contents = ui
-    size = new Dimension(1000, 700)
+    size     = new Dimension(1000, 700)
     peer.setLocationRelativeTo(null)
   }
 
@@ -51,7 +52,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
 
 //    val browseBtn = new Button("Browse")
 //    listenTo(startBtn, browseBtn)
-    layout(chatsPane) = West
+    layout(chatsPane)              = West
     layout(msgAreaContainer.panel) = Center
 //    reactions += {
 //      case ButtonClicked(`startBtn`)  => eventStartClick
@@ -87,7 +88,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
     // Open clicked hyperlinks in browser
     m.textPane.peer.addHyperlinkListener((e: HyperlinkEvent) => {
       if (e.getEventType == HyperlinkEvent.EventType.ACTIVATED) {
-        if (Desktop.isDesktopSupported) Desktop.getDesktop.browse(e.getURL.toURI)
+        desktopOption map (_.browse(e.getURL.toURI))
       }
     })
 
@@ -112,7 +113,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
 
   def chatSelected(c: Chat): Unit = {
     Lock.synchronized {
-      currentChatOption = None
+      currentChatOption         = None
       msgAreaContainer.document = msgService.pleaseWaitDoc
       changeChatsClickable(false)
     }
@@ -125,14 +126,14 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
           md.insert(msgService.renderMessageHtml(c, m), MessageInsertPosition.Trailing)
         }
         val loadStatus = LoadStatus(
-          firstId = messages.headOption map (_.id) getOrElse (-1),
-          lastId = messages.lastOption map (_.id) getOrElse (-1),
+          firstId      = messages.headOption map (_.id) getOrElse (-1),
+          lastId       = messages.lastOption map (_.id) getOrElse (-1),
           beginReached = messages.size < MsgBatchLoadSize,
-          endReached = true
+          endReached   = true
         )
         Lock.synchronized {
           loadStatusCache = loadStatusCache + ((c, loadStatus))
-          documentsCache = documentsCache + ((c, md))
+          documentsCache  = documentsCache + ((c, md))
         }
       }
     }
@@ -167,7 +168,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
                 loadStatusCache = loadStatusCache.updated(
                   c,
                   loadStatusCache(c).copy(
-                    firstId = addedMessages.headOption map (_.id) getOrElse (-1),
+                    firstId      = addedMessages.headOption map (_.id) getOrElse (-1),
                     beginReached = addedMessages.size < MsgBatchLoadSize
                   )
                 )
