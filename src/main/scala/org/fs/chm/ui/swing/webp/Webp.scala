@@ -1,7 +1,14 @@
 package org.fs.chm.ui.swing.webp
 
+import java.awt.Point
+import java.awt.Transparency
+import java.awt.color.ColorSpace
 import java.awt.image.BufferedImage
-import java.awt.image.WritableRaster
+import java.awt.image.ColorModel
+import java.awt.image.ComponentColorModel
+import java.awt.image.DataBuffer
+import java.awt.image.DataBufferByte
+import java.awt.image.Raster
 
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
@@ -29,41 +36,32 @@ object Webp extends Logging {
     (bytes.slice(8, 12) sameElements "WEBP".getBytes)
   }
 
-  def decode(bytes: Array[Byte]): BufferedImage = {
+  private val colorModel: ColorModel = new ComponentColorModel(
+    ColorSpace.getInstance(ColorSpace.CS_sRGB),
+    Array(8, 8, 8, 8),
+    true /* hasAlpha */,
+    false /*isAlphaPremultiplied */,
+    Transparency.TRANSLUCENT,
+    DataBuffer.TYPE_BYTE
+  )
+
+  def decode(bytes: Array[Byte]): BufferedImage =
     StopWatch.measureAndCall {
-      val width  = new Array[Int](1)
-      val height = new Array[Int](1)
-      val raw    = WebpNative.decodeBGRA(bytes, bytes.length, width, height)
+      val width   = new Array[Int](1)
+      val height  = new Array[Int](1)
+      val rawBGRA = WebpNative.decodeBGRA(bytes, bytes.length, width, height)
       require(width(0) > 0, "Failed to decode WebP image, returned width " + width(0))
 
-      val image  = new BufferedImage(width(0), height(0), BufferedImage.TYPE_4BYTE_ABGR)
-      val stride = width(0) * 4
-      fillImageRaster(
-        image.getRaster,
-        ((x: Int, y: Int, pixel: Array[Int]) => {
-          pixel(2) = raw(stride * y + x * 4 + 0).toInt
-          pixel(1) = raw(stride * y + x * 4 + 1).toInt
-          pixel(0) = raw(stride * y + x * 4 + 2).toInt
-          pixel(3) = raw(stride * y + x * 4 + 3).toInt
-          pixel
-        })
+      val dataBuffer = new DataBufferByte(rawBGRA, rawBGRA.length)
+      val raster = Raster.createInterleavedRaster(
+        dataBuffer,
+        width(0),
+        height(0),
+        width(0) * 4 /* scanlineStride */,
+        4 /*pixelStride */,
+        Array(2, 1, 0, 3) /* bandOffsets, mapping from BGRA to RGBA */,
+        new Point(0, 0)
       )
-      image
-    }((_, t) => log.debug(s"Image created in $t ms"))
-  }
-
-  private def fillImageRaster(raster: WritableRaster, visitor: IPixelVisitor): Unit = {
-    val pixel = new Array[Int](4)
-    for {
-      x <- 0 until raster.getWidth
-      y <- 0 until raster.getHeight
-    } {
-      val res = visitor.visit(x, y, pixel)
-      raster.setPixel(x, y, res)
-    }
-  }
-
-  private trait IPixelVisitor {
-    def visit(x: Int, y: Int, pixel: Array[Int]): Array[Int]
-  }
+      new BufferedImage(colorModel, raster, false, null)
+    }((_, t) => log.debug(s"WebP image created in $t ms"))
 }
