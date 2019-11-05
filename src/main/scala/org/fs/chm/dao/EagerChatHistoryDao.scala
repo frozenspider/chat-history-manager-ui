@@ -5,6 +5,8 @@ import java.io.File
 import scala.collection.immutable.ListMap
 import scala.collection.immutable.TreeMap
 
+import org.apache.commons.lang3.StringUtils
+
 class EagerChatHistoryDao(
     override val dataPath: File,
     override val myself: Contact,
@@ -64,12 +66,24 @@ class EagerChatHistoryDao(
 
   override def interlocutors(chat: Chat): Seq[Contact] = interlocutorsMap(chat)
 
+  //
+  // Direct messages fetch
+  //
+
   override def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
     val messages = chatsWithMessages(chat)
     val idx      = messages.indexWhere(_.id == msgId)
     require(idx > -1, "Message not found, that's unexpected")
-    val upperLimit = (idx - limit) max 0
-    messages.slice(upperLimit, idx)
+    val upperBound = (idx - limit) max 0
+    messages.slice(upperBound, idx)
+  }
+
+  override def messagesAround(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
+    val messages = chatsWithMessages(chat)
+    val idx      = messages.indexWhere(_.id == msgId)
+    require(idx > -1, "Message not found, that's unexpected")
+    val upperBound = (idx - (limit / 2)) max 0
+    messages.slice(upperBound, upperBound + limit)
   }
 
   override def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message] = {
@@ -78,6 +92,32 @@ class EagerChatHistoryDao(
 
   override def messageOption(chat: Chat, id: Long): Option[Message] =
     messagesMap.get(chat) flatMap (_ get id)
+
+  //
+  // Search
+  //
+
+  override def search(chat: Chat, text: String, exact: Boolean): IndexedSeq[Message] = {
+    require(exact, "Non-exact search not supported yet")
+    val messages = chatsWithMessages(chat)
+    messages.filter(m => StringUtils.containsIgnoreCase(m.plainSearchableString, text))
+  }
+
+  //
+  // Other
+  //
+
+  override def distance(chat: Chat, msgId1: Long, msgId2: Long): Int = {
+    val messages = chatsWithMessages(chat)
+    // TODO: Make efficient!
+    val idx1 = messages.indexWhere(_.id == msgId1)
+    val idx2 = messages.indexWhere(_.id == msgId1)
+    if (idx1 == -1 || idx2 == -1) {
+      -1
+    } else {
+      math.abs(idx1 - idx2)
+    }
+  }
 
   override def toString: String = {
     Seq(

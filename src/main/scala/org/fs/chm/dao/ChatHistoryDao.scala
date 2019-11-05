@@ -9,6 +9,7 @@ import org.fs.utility.Imports._
  * Everything except for messages should be pre-cached and readily available.
  */
 trait ChatHistoryDao {
+
   /** Base of relative paths specified in messages */
   def dataPath: File
 
@@ -25,11 +26,34 @@ trait ChatHistoryDao {
    */
   def interlocutors(chat: Chat): Seq[Contact]
 
+  //
+  // Direct messages fetch
+  //
+
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
   def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
 
+  def messagesAround(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
+
   def messageOption(chat: Chat, id: Long): Option[Message]
+
+  //
+  // Search
+  //
+
+  /**
+   * Find all messages containing text, either as exact string or as a pattern.
+   * Messages should be historically ordered.
+   */
+  def search(chat: Chat, text: String, exact: Boolean): IndexedSeq[Message]
+
+  //
+  // Other
+  //
+
+  /** How many messages are there between the given two? If one isn't found, return -1 */
+  def distance(chat: Chat, msgId1: Long, msgId2: Long): Int
 }
 
 sealed trait PersonInfo {
@@ -44,7 +68,7 @@ sealed trait PersonInfo {
 }
 
 case class Contact(
-    /** Might be 0, otherwise - is presumed to be unique */
+    /** Might be 0, otherwise - is presumed to be unique within a chat */
     id: Long,
     firstNameOption: Option[String],
     lastNameOption: Option[String],

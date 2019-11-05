@@ -2,15 +2,22 @@ package org.fs.chm.ui.swing
 
 import java.awt.Desktop
 import java.awt.event.AdjustmentEvent
+import java.awt.event.InputEvent
+import java.awt.event.KeyEvent
 import java.awt.{ Container => AwtContainer }
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
+import scala.swing.BorderPanel.Position._
 import scala.swing._
 import scala.swing.event.ButtonClicked
 
 import com.github.nscala_time.time.Imports._
+import javax.swing.JComponent
+import javax.swing.JPanel
+import javax.swing.KeyStroke
+import javax.swing.border.EmptyBorder
 import javax.swing.event.HyperlinkEvent
 import org.fs.chm.dao._
 import org.fs.chm.ui.swing.MessagesService._
@@ -19,25 +26,32 @@ import org.fs.chm.ui.swing.webp.Webp
 import org.fs.utility.Imports._
 
 class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
-  val Lock             = new Object
+
   val MsgBatchLoadSize = 100
+
+  /** Lock that should be taken to perform operations on any of the variables below */
+  val Lock = new Object
 
   var documentsCache:  Map[Chat, MessageDocument] = Map.empty
   var loadStatusCache: Map[Chat, LoadStatus]      = Map.empty
 
-  var currentChatOption:      Option[Chat]  = None
-  var loadMessagesInProgress: AtomicBoolean = new AtomicBoolean(false)
+  var currentContextOption:   Option[Context] = None
+  var loadMessagesInProgress: AtomicBoolean   = new AtomicBoolean(false)
 
   val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
   val htmlKit       = new ExtendedHtmlEditorKit(desktopOption)
   val msgService    = new MessagesService(dao, htmlKit)
 
+  val searchTextField = new TextField
+
   // TODO:
   // reply-to (make clickable)
   // word-wrap and narrower width
   // search
+  // jump to date
   // better pictures rendering
   // emoji and fonts
+  // better chat switching
 
   Future {
     Webp.eagerInit()
@@ -52,19 +66,16 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   }
 
   val ui = new BorderPanel {
-    import scala.swing.BorderPanel.Position._
+    layout(chatsPanel) = West
+    layout(new BorderPanel {
+      layout(msgAreaContainer.panel) = Center
+      layout(searchPanel) = South
+    }) = Center
 
-//    val browseBtn = new Button("Browse")
-//    listenTo(startBtn, browseBtn)
-    layout(chatsPane)              = West
-    layout(msgAreaContainer.panel) = Center
-//    reactions += {
-//      case ButtonClicked(`startBtn`)  => eventStartClick
-//      case ButtonClicked(`browseBtn`) => eventBrowseClick
-//    }
+    addHotkey(peer, "search", InputEvent.CTRL_MASK, KeyEvent.VK_F, searchOpened())
   }
 
-  lazy val chatsPane = new BorderPanel {
+  lazy val chatsPanel = new BorderPanel {
     import scala.swing.BorderPanel.Position._
 
     layout(new ScrollPane(new BoxPanel(Orientation.Vertical) {
@@ -99,8 +110,33 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
     m
   }
 
-  def changeChatsClickable(enabled: Boolean): Unit = {
-    chatsPane.enabled = enabled
+  lazy val searchPanel = new BorderPanel {
+    visible = false;
+
+    val prevBtn  = new Button("Previous")
+    val nextBtn  = new Button("Next")
+    val closeBtn = new Button("Close")
+
+    layout(new BorderPanel {
+      layout(searchTextField) = Center
+      border = new EmptyBorder(5, 5, 5, 5)
+    }) = Center
+    layout(new FlowPanel(prevBtn, nextBtn, closeBtn)) = East
+
+    def closeClicked(): Unit = {
+      visible = false;
+    }
+    listenTo(prevBtn, nextBtn, closeBtn)
+    reactions += {
+      case ButtonClicked(`prevBtn`)  => searchClicked(false)
+      case ButtonClicked(`nextBtn`)  => searchClicked(true)
+      case ButtonClicked(`closeBtn`) => closeClicked()
+    }
+    addHotkey(peer, "searchPrev", 0 /* mod */, KeyEvent.VK_ENTER, searchClicked(false))
+    addHotkey(peer, "searchClose", 0 /* mod */, KeyEvent.VK_ESCAPE, closeClicked())
+  }
+
+  def changeUiClickable(enabled: Boolean): Unit = {
     def changeClickableRecursive(c: AwtContainer): Unit = {
       c.setEnabled(enabled)
       c.getComponents foreach {
@@ -108,7 +144,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
         case _               => //NOOP
       }
     }
-    changeClickableRecursive(chatsPane.peer)
+    changeClickableRecursive(ui.peer)
   }
 
   //
@@ -117,9 +153,9 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
 
   def chatSelected(c: Chat): Unit = {
     Lock.synchronized {
-      currentChatOption         = None
+      currentContextOption = None
       msgAreaContainer.document = msgService.pleaseWaitDoc
-      changeChatsClickable(false)
+      changeUiClickable(false)
     }
     val f = Future {
       // If the chat has been already rendered, restore previous document as-is
@@ -130,49 +166,114 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
           md.insert(msgService.renderMessageHtml(c, m), MessageInsertPosition.Trailing)
         }
         val loadStatus = LoadStatus(
-          firstId      = messages.headOption map (_.id) getOrElse (-1),
-          lastId       = messages.lastOption map (_.id) getOrElse (-1),
+          firstId = messages.headOption map (_.id) getOrElse (-1),
+          lastId = messages.lastOption map (_.id) getOrElse (-1),
           beginReached = messages.size < MsgBatchLoadSize,
-          endReached   = true
+          endReached = true
         )
         Lock.synchronized {
           loadStatusCache = loadStatusCache + ((c, loadStatus))
-          documentsCache  = documentsCache + ((c, md))
+          documentsCache = documentsCache + ((c, md))
         }
       }
     }
     f foreach { _ =>
       Swing.onEDTWait(Lock.synchronized {
-        currentChatOption = Some(c)
+        currentContextOption = Some(Context(c))
         val doc = documentsCache(c).doc
         msgAreaContainer.document = doc
         msgAreaContainer.scroll.toEnd()
-        changeChatsClickable(true)
+        changeUiClickable(true)
       })
     }
   }
 
+  def searchOpened(): Unit = currentContextOption foreach { c =>
+    searchPanel.visible = true
+    searchTextField.requestFocus()
+  }
+
+  def searchClicked(forward: Boolean): Unit =
+    // Everything is done with a lock since we're constantly altering vars.
+    // This can possibly be optimized though.
+    Lock.synchronized {
+      import scala.collection.Searching._
+      val ctx = currentContextOption.get
+
+      try {
+        val text = searchTextField.text.trim
+
+        if (text.nonEmpty) {
+          // If search isn't performed yet, or if the text changed - reset the search
+          ctx.searchStateOption match {
+            case Some(s) if s.text == text => // NOOP
+            case _                         => ctx.searchStateOption = Some(SearchState(text))
+          }
+
+          val searchState = ctx.searchStateOption.get
+          if (searchState.resultsOption.isEmpty) {
+            searchState.resultsOption = Some(dao.search(ctx.chat, text, true))
+          }
+
+          val msgsFound = searchState.resultsOption.get
+          println(msgsFound.size)
+          if (msgsFound.isEmpty) {
+            // NOOP
+            println("Empty!")
+          } else {
+            val msgToShow = searchState.lastHighlightedMessageOption match {
+              case Some(msg) =>
+                val Found(idx) = msgsFound.search(msg)(MessagesOrdering)
+                val newIdx     = ((if (forward) idx + 1 else idx - 1) + msgsFound.length) % msgsFound.length
+                msgsFound(newIdx)
+              case _ =>
+                msgsFound.last
+            }
+            val loadStatus = loadStatusCache(ctx.chat)
+            val distance1  = dao.distance(ctx.chat, msgToShow.id, loadStatus.firstId)
+            val distance2  = dao.distance(ctx.chat, msgToShow.id, loadStatus.lastId)
+            //    if ((distance1 min distance2) < MsgBatchLoadSize) {
+            //      // TODO
+            //    }
+            val messages = dao.messagesAround(ctx.chat, msgToShow.id, MsgBatchLoadSize)
+            println(messages.size)
+            // TODO: Render
+            ???
+            searchState.lastHighlightedMessageOption = Some(msgToShow)
+          }
+        }
+      } catch {
+        case ex: Exception =>
+          ctx.searchStateOption = None
+          throw ex
+      }
+    }
+
+  //
+  // Additional logic
+  //
+
   def tryLoadPreviousMessages(): Unit =
-    currentChatOption match {
+    currentContextOption match {
       case _ if loadMessagesInProgress.get => // NOOP
       case None                            => // NOOP
-      case Some(c) =>
+      case Some(ctx) =>
         Lock.synchronized {
           msgAreaContainer.caretUpdatesEnabled = false
-          val loadStatus = loadStatusCache(c)
+          val loadStatus = loadStatusCache(ctx.chat)
           if (!loadStatus.beginReached) {
-            changeChatsClickable(false)
+            changeUiClickable(false)
             loadMessagesInProgress set true
-            val md = documentsCache(c)
+            val md = documentsCache(ctx.chat)
             val f = Future {
               Lock.synchronized {
                 val (viewPos1, viewSize1) = msgAreaContainer.view.posAndSize
                 md.insert("<div id=\"loading\"><hr><p> Loading... </p><hr></div>", MessageInsertPosition.Leading)
-                val addedMessages = dao.messagesBefore(c, loadStatus.firstId, MsgBatchLoadSize)
+                val addedMessages = dao.messagesBefore(ctx.chat, loadStatus.firstId, MsgBatchLoadSize)
                 loadStatusCache = loadStatusCache.updated(
-                  c,
-                  loadStatusCache(c).copy(
-                    firstId      = addedMessages.headOption map (_.id) getOrElse (-1),
+                  ctx.chat,
+                  loadStatusCache(ctx.chat).copy(
+                    firstId = addedMessages.headOption map (_.id) getOrElse (-1),
                     beginReached = addedMessages.size < MsgBatchLoadSize
                   )
                 )
@@ -182,7 +283,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
                   // TODO: Preserve selection
                   md.removeFirst()
                   for (m <- addedMessages.reverse) {
-                    md.insert(msgService.renderMessageHtml(c, m), MessageInsertPosition.Leading)
+                    md.insert(msgService.renderMessageHtml(ctx.chat, m), MessageInsertPosition.Leading)
                   }
                   val (_, viewSize2) = msgAreaContainer.view.posAndSize
                   val heightDiff     = viewSize2.height - viewSize1.height
@@ -193,12 +294,30 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
             f.onComplete(_ =>
               Swing.onEDTWait(Lock.synchronized {
                 loadMessagesInProgress set false
-                changeChatsClickable(true)
+                changeUiClickable(true)
                 msgAreaContainer.caretUpdatesEnabled = true
               }))
           }
         }
     }
+
+  def addHotkey(peer: JComponent, key: String, mod: Int, event: Int, f: => Unit): Unit = {
+    peer
+      .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+      .put(KeyStroke.getKeyStroke(event, mod), key)
+    peer.getActionMap.put(key, new javax.swing.AbstractAction {
+      def actionPerformed(arg: java.awt.event.ActionEvent): Unit = f
+    })
+  }
+
+  case class Context(chat: Chat) {
+    var searchStateOption: Option[SearchState] = None
+  }
+
+  case class SearchState(text: String) {
+    var resultsOption:                Option[IndexedSeq[Message]] = None
+    var lastHighlightedMessageOption: Option[Message]             = None
+  }
 
   case class LoadStatus(
       firstId: Long,
@@ -206,4 +325,13 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
       beginReached: Boolean,
       endReached: Boolean
   )
+
+  object MessagesOrdering extends Ordering[Message] {
+    override def compare(x: Message, y: Message): Int = {
+      x.date compare y.date match {
+        case 0       => x.id compare y.id
+        case nonZero => nonZero
+      }
+    }
+  }
 }
