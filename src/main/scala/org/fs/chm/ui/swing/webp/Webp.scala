@@ -17,9 +17,19 @@ import webp.WebpNative
 /** WebP decoder - JMI wrapper delegating actual logic to native Google library */
 object Webp extends Logging {
 
+  lazy val webNativeOption: Option[WebpNative] = {
+    try {
+      Some(new WebpNative)
+    } catch {
+      case ex: Exception =>
+        log.warn("WebP library loading failed!", ex)
+        None
+    }
+  }
+
   /** Initializes JNI library to speed up subsequent calls */
   def eagerInit(): Unit = {
-    WebpNative.getDecoderVersion
+    webNativeOption map (_.getDecoderVersion)
   }
 
   /** Check whether given raw bytes start with a WEBP image header */
@@ -49,7 +59,13 @@ object Webp extends Logging {
     StopWatch.measureAndCall {
       val width   = new Array[Int](1)
       val height  = new Array[Int](1)
-      val rawBGRA = WebpNative.decodeBGRA(bytes, bytes.length, width, height)
+      val rawBGRA = webNativeOption map { webNative =>
+        webNative.decodeBGRA(bytes, bytes.length, width, height)
+      } getOrElse {
+        width(0) = 1
+        height(0) = 1
+        Array.fill[Byte](4)(0)
+      }
       require(width(0) > 0, "Failed to decode WebP image, returned width " + width(0))
 
       val dataBuffer = new DataBufferByte(rawBGRA, rawBGRA.length)

@@ -6,7 +6,7 @@ import org.scijava.nativelib.NativeLoader
 /**
  * JNI interface for Google WebP library (which has been amended with those functions)
  */
-object WebpNative {
+class WebpNative {
   NativeLoader.loadLibrary("libwebp")
 
   @native def getDecoderVersion: Int
