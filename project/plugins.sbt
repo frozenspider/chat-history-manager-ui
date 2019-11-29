@@ -1,14 +1,14 @@
-addSbtPlugin("com.eed3si9n"  % "sbt-assembly"  % "0.14.6")
-addSbtPlugin("com.eed3si9n"  % "sbt-buildinfo" % "0.7.0")
-addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.5.1")
+addSbtPlugin("com.eed3si9n"  % "sbt-assembly"  % "0.14.10")
+addSbtPlugin("com.eed3si9n"  % "sbt-buildinfo" % "0.9.0")
+addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.6.0")
 
 // Launch4j
-libraryDependencies += ("net.sf.launch4j" % "launch4j" % "3.11")
+libraryDependencies += ("net.sf.launch4j" % "launch4j" % "3.12")
   .exclude("com.ibm.icu", "icu4j")
   .exclude("abeille", "net.java.abeille")
 
 // Launch4j dependency - required for com.springsource.org.apache.batik
 resolvers ++= Seq(
-  "SpringSource" at "http://repository.springsource.com/maven/bundles/external",
-  "Simulation @ TU Delft" at "http://simulation.tudelft.nl/maven/"
+  "SpringSource" at "https://repository.springsource.com/maven/bundles/external",
+  "Simulation @ TU Delft" at "https://simulation.tudelft.nl/maven/"
 )

@@ -19,6 +19,7 @@ class TelegramDataLoader extends DataLoader {
     val resultJsonFile: File = new File(path, "result.json")
     if (!resultJsonFile.exists()) throw new FileNotFoundException("result.json not found in " + path.getAbsolutePath)
     val parsed = JsonMethods.parse(resultJsonFile)
+    val myself = parseMyself(getRawField(parsed, "personal_information", true))
     val contacts = for {
       contact <- getCheckedField[Seq[JValue]](parsed, "contacts", "list")
     } yield parseContact(contact)
@@ -36,12 +37,32 @@ class TelegramDataLoader extends DataLoader {
     }
     val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
 
-    new EagerChatHistoryDao(contacts = contacts, chatsWithMessages = chatsWithMessagesLM)
+    new EagerChatHistoryDao(
+      dataPath = path,
+      myself = myself,
+      contactsRaw = contacts,
+      chatsWithMessages = chatsWithMessagesLM
+    )
   }
 
   //
   // Parsers
   //
+
+  private def parseMyself(jv: JValue): Contact = {
+    implicit val tracker = new FieldUsageTracker
+    tracker.markUsed("bio") // Ignoring bio
+    tracker.ensuringUsage(jv) {
+      Contact(
+        id                 = getCheckedField[Long](jv, "user_id"),
+        firstNameOption    = getStringOpt(jv, "first_name", true),
+        lastNameOption     = getStringOpt(jv, "last_name", true),
+        usernameOption     = getStringOpt(jv, "username", true),
+        phoneNumberOption  = getStringOpt(jv, "phone_number", true),
+        lastSeenDateOption = None
+      )
+    }
+  }
 
   private def parseContact(jv: JValue): Contact = {
     implicit val tracker = new FieldUsageTracker
@@ -50,6 +71,7 @@ class TelegramDataLoader extends DataLoader {
         id                 = getCheckedField[Long](jv, "user_id"),
         firstNameOption    = getStringOpt(jv, "first_name", true),
         lastNameOption     = getStringOpt(jv, "last_name", true),
+        usernameOption     = None,
         phoneNumberOption  = getStringOpt(jv, "phone_number", true),
         lastSeenDateOption = stringToDateTimeOpt(getCheckedField[String](jv, "date"))
       )
@@ -89,7 +111,7 @@ class TelegramDataLoader extends DataLoader {
       tracker.markUsed("edited") // Service messages can't be edited
       getCheckedField[String](jv, "action") match {
         case "phone_call" =>
-          Message.PhoneCall(
+          Message.Service.PhoneCall(
             id                  = getCheckedField[Long](jv, "id"),
             date                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName            = getCheckedField[String](jv, "actor"),
@@ -99,7 +121,7 @@ class TelegramDataLoader extends DataLoader {
             textOption          = RichTextParser.parseRichTextOption(jv)
           )
         case "pin_message" =>
-          Message.PinMessage(
+          Message.Service.PinMessage(
             id         = getCheckedField[Long](jv, "id"),
             date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
@@ -108,7 +130,7 @@ class TelegramDataLoader extends DataLoader {
             textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "create_group" =>
-          Message.CreateGroup(
+          Message.Service.CreateGroup(
             id         = getCheckedField[Long](jv, "id"),
             date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
@@ -118,7 +140,7 @@ class TelegramDataLoader extends DataLoader {
             textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "invite_members" =>
-          Message.InviteGroupMembers(
+          Message.Service.InviteGroupMembers(
             id         = getCheckedField[Long](jv, "id"),
             date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
@@ -127,7 +149,7 @@ class TelegramDataLoader extends DataLoader {
             textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "remove_members" =>
-          Message.RemoveGroupMembers(
+          Message.Service.RemoveGroupMembers(
             id         = getCheckedField[Long](jv, "id"),
             date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
@@ -136,7 +158,7 @@ class TelegramDataLoader extends DataLoader {
             textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "clear_history" =>
-          Message.ClearHistory(
+          Message.Service.ClearHistory(
             id         = getCheckedField[Long](jv, "id"),
             date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
@@ -144,7 +166,7 @@ class TelegramDataLoader extends DataLoader {
             textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "edit_group_photo" =>
-          Message.EditGroupPhoto(
+          Message.Service.EditGroupPhoto(
             id           = getCheckedField[Long](jv, "id"),
             date         = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName     = getCheckedField[String](jv, "actor"),
@@ -167,11 +189,20 @@ class TelegramDataLoader extends DataLoader {
       jText match {
         case arr: JArray =>
           val elements = arr.extract[Seq[JValue]] map parseElement
+          // Make sure there no more than one hidden link
+          val links = elements collect {
+            case l: RichText.Link => l
+          }
+          if (links.size > 1) {
+            require(links.tail forall (!_.hidden), s"Only the first link can be hidden! ${jv}")
+          }
           Some(RichText(elements))
         case JString("") =>
           None
         case s: JString =>
           Some(RichText(Seq(parsePlain(s))))
+        case other =>
+          throw new IllegalArgumentException(s"Don't know how to parse RichText container '$jv'")
       }
     }
 
@@ -199,20 +230,23 @@ class TelegramDataLoader extends DataLoader {
           require(values.keys == Set("type", "text", "language"), s"Unexpected pre format: $jo")
           RichText.PrefmtBlock(
             text           = values("text").asInstanceOf[String],
-            languageOption = stringToOpt(values("language").asInstanceOf[String])
+            languageOption = stringToOption(values("language").asInstanceOf[String])
           )
         case "text_link" =>
           require(values.keys == Set("type", "text", "href"), s"Unexpected text_link format: $jo")
+          val textOption = stringToOption(values("text").asInstanceOf[String])
           RichText.Link(
-            textOption = stringToOpt(values("text").asInstanceOf[String]),
-            href       = values("href").asInstanceOf[String]
+            textOption = textOption,
+            href       = values("href").asInstanceOf[String],
+            hidden     = textOption forall isWhitespaceOrInvisible
           )
         case "link" =>
           // Link format is hyperlink alone
           require(values.keys == Set("type", "text"), s"Unexpected link format: $jo")
           RichText.Link(
-            textOption = None,
-            href       = values("text").asInstanceOf[String]
+            textOption = Some(values("text").asInstanceOf[String]),
+            href       = values("text").asInstanceOf[String],
+            hidden     = false
           )
         case "email" =>
           // No special treatment for email
@@ -361,7 +395,7 @@ class TelegramDataLoader extends DataLoader {
     }
   }
 
-  private def parseChat(jv: JValue, msgNum: Int): Chat = {
+  private def parseChat(jv: JValue, msgCount: Int): Chat = {
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("messages")
     tracker.ensuringUsage(jv) {
@@ -373,7 +407,7 @@ class TelegramDataLoader extends DataLoader {
           case "private_group" => ChatType.PrivateGroup
           case s               => throw new IllegalArgumentException("Illegal format, unknown chat type '$s'")
         },
-        msgNum = msgNum
+        msgCount = msgCount
       )
     }
   }
@@ -382,12 +416,17 @@ class TelegramDataLoader extends DataLoader {
   // Utility
   //
 
-  private def stringToOpt(s: String): Option[String] = {
+  private def stringToOption(s: String): Option[String] = {
     s match {
       case ""                                                                 => None
       case "(File not included. Change data exporting settings to download.)" => None
       case other                                                              => Some(other)
     }
+  }
+
+  private def isWhitespaceOrInvisible(s: String): Boolean = {
+    // Accounts for invisible formatting indicator, e.g. zero-width space \u200B
+    s matches "[\\s\\p{Cf}]*"
   }
 
   /** Dates in TG history is exported in local timezone, so we'll try to import in current one as well */
@@ -419,7 +458,7 @@ class TelegramDataLoader extends DataLoader {
     val res = jv \ fieldName
     tracker.markUsed(fieldName)
     if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in $jv")
-    res.extractOpt[String] flatMap stringToOpt
+    res.extractOpt[String] flatMap stringToOption
   }
 
   private def getCheckedField[A](jv: JValue, fieldName: String)(implicit formats: Formats,

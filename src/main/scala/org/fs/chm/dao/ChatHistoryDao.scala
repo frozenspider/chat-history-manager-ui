@@ -1,27 +1,57 @@
 package org.fs.chm.dao
 
-import com.github.nscala_time.time.Imports._
+import java.io.File
 
+import com.github.nscala_time.time.Imports._
+import org.fs.utility.Imports._
+
+/**
+ * Everything except for messages should be pre-cached and readily available.
+ */
 trait ChatHistoryDao {
+  /** Base of relative paths specified in messages */
+  def dataPath: File
+
+  def myself: Contact
+
+  /** Contains myself as well */
   def contacts: Seq[Contact]
 
   def chats: Seq[Chat]
 
-  def messages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message]
+  /**
+   * First returned element MUST be myself, the rest should be in some fixed order.
+   * This method should be fast.
+   */
+  def interlocutors(chat: Chat): Seq[Contact]
+
+  def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
+
+  def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
+
+  def messageOption(chat: Chat, id: Long): Option[Message]
+}
+
+sealed trait PersonInfo {
+  val firstNameOption: Option[String]
+  val lastNameOption: Option[String]
+  val phoneNumberOption: Option[String]
+
+  lazy val prettyName: String = {
+    val parts = Seq(firstNameOption, lastNameOption).yieldDefined
+    if (parts.isEmpty) "[nameless]" else parts.mkString(" ").trim
+  }
 }
 
 case class Contact(
-    /** Not guaranteed to be unique -- or even meaningful */
+    /** Might be 0, otherwise - is presumed to be unique */
     id: Long,
     firstNameOption: Option[String],
     lastNameOption: Option[String],
+    usernameOption: Option[String],
     phoneNumberOption: Option[String],
     lastSeenDateOption: Option[DateTime]
-) {
-  lazy val prettyName: String = {
-    Seq(firstNameOption getOrElse "", lastNameOption getOrElse "").mkString(" ").trim
-  }
-}
+) extends PersonInfo
 
 sealed trait ChatType
 object ChatType {
@@ -33,43 +63,72 @@ case class Chat(
     id: Long,
     nameOption: Option[String],
     tpe: ChatType,
-    msgNum: Long
+    msgCount: Long
 )
+
+trait Searchable {
+  def plainSearchableString: String
+}
 
 //
 // Rich Text
 //
+
 case class RichText(
     components: Seq[RichText.Element]
-)
+) extends Searchable {
+  override val plainSearchableString: String = {
+    val joined = (components map (_.plainSearchableString) mkString " ")
+      .replaceAll("[\\s\\p{Cf}\n]+", " ")
+      .trim
+    // Adding all links to the end to enable search over hrefs/hidden links too
+    val links = components.collect({ case l: RichText.Link => l.href }).mkString(" ")
+    joined + links
+  }
+}
 object RichText {
-  sealed trait Element
+  sealed trait Element extends Searchable
 
   case class Plain(
       text: String
-  ) extends Element
+  ) extends Element {
+    override val plainSearchableString = text.replaceAll("[\\s\\p{Cf}\n]+", " ")
+  }
 
   case class Bold(
       text: String
-  ) extends Element
+  ) extends Element {
+    override val plainSearchableString = text.trim
+  }
 
   case class Italic(
       text: String
-  ) extends Element
+  ) extends Element {
+    override val plainSearchableString = text.trim
+  }
 
   case class Link(
+      /** Empty text would mean that this link is hidden - but it can still be hidden even if it's not */
       textOption: Option[String],
-      href: String
-  ) extends Element
+      href: String,
+      /** Some TG chats use text_links with empty/invisible text to be shown as preview but not appear in text */
+      hidden: Boolean
+  ) extends Element {
+    override val plainSearchableString = (textOption getOrElse href).replaceAll("[\\s\\p{Cf}\n]+", " ")
+  }
 
   case class PrefmtInline(
       text: String
-  ) extends Element
+  ) extends Element {
+    override val plainSearchableString = text.trim
+  }
 
   case class PrefmtBlock(
       text: String,
       languageOption: Option[String]
-  ) extends Element
+  ) extends Element {
+    override val plainSearchableString = text.replaceAll("[\\s\\p{Cf}\n]+", " ")
+  }
 
 }
 
@@ -77,12 +136,20 @@ object RichText {
 // Message
 //
 
-sealed trait Message {
+sealed trait Message extends Searchable {
   val id: Long
   val date: DateTime
   val fromName: String
   val fromId: Long
+  val textOption: Option[RichText]
+
+  /** We can't use "super" on vals/lazy vals, so... */
+  protected val plainSearchableMsgString =
+    textOption map (_.plainSearchableString) getOrElse ""
+
+  override val plainSearchableString = plainSearchableMsgString
 }
+
 object Message {
   case class Regular(
       id: Long,
@@ -98,72 +165,87 @@ object Message {
 
   sealed trait Service extends Message
 
-  case class PhoneCall(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      durationSecOption: Option[Int],
-      discardReasonOption: Option[String],
-      textOption: Option[RichText]
-  ) extends Service
+  object Service {
+    sealed trait MembershipChange extends Service {
+      val members: Seq[String]
+    }
 
-  case class PinMessage(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      messageId: Long,
-      textOption: Option[RichText]
-  ) extends Service
+    case class PhoneCall(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        durationSecOption: Option[Int],
+        discardReasonOption: Option[String]
+    ) extends Service
 
-  case class CreateGroup(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      title: String,
-      members: Seq[String],
-      textOption: Option[RichText]
-  ) extends Service
+    case class PinMessage(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        messageId: Long
+    ) extends Service
 
-  case class InviteGroupMembers(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      members: Seq[String],
-      textOption: Option[RichText]
-  ) extends Service
+    case class CreateGroup(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        title: String,
+        members: Seq[String]
+    ) extends MembershipChange {
+      override val plainSearchableString =
+        (plainSearchableMsgString +: title +: members).mkString(" ").trim
+    }
 
-  case class RemoveGroupMembers(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      members: Seq[String],
-      textOption: Option[RichText]
-  ) extends Service
+    case class InviteGroupMembers(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        members: Seq[String]
+    ) extends MembershipChange {
+      override val plainSearchableString =
+        (plainSearchableMsgString +: members).mkString(" ").trim
+    }
 
-  case class EditGroupPhoto(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      pathOption: Option[String],
-      widthOption: Option[Int],
-      heightOption: Option[Int],
-      textOption: Option[RichText]
-  ) extends Service
+    case class RemoveGroupMembers(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        members: Seq[String]
+    ) extends MembershipChange {
+      override val plainSearchableString =
+        (plainSearchableMsgString +: members).mkString(" ").trim
+    }
 
-  /** Note: for Telegram, from is not always meaningful */
-  case class ClearHistory(
-      id: Long,
-      date: DateTime,
-      fromName: String,
-      fromId: Long,
-      textOption: Option[RichText]
-  ) extends Service
+    case class EditGroupPhoto(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText],
+        pathOption: Option[String],
+        widthOption: Option[Int],
+        heightOption: Option[Int]
+    ) extends Service
+
+    /** Note: for Telegram, from is not always meaningful */
+    case class ClearHistory(
+        id: Long,
+        date: DateTime,
+        fromName: String,
+        fromId: Long,
+        textOption: Option[RichText]
+    ) extends Service
+  }
 }
 
 //
@@ -239,4 +321,5 @@ object Content {
       phoneNumberOption: Option[String],
       vcardPathOption: Option[String]
   ) extends Content
+      with PersonInfo
 }
