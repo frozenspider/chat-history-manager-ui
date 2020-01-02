@@ -17,11 +17,16 @@ import webp.WebpNative
 /** WebP decoder - JMI wrapper delegating actual logic to native Google library */
 object Webp extends Logging {
 
-  lazy val webNativeOption: Option[WebpNative] = {
+  lazy val webNativeOption: Option[WebpNative.type] = {
     try {
-      Some(new WebpNative)
+      val result = Some(WebpNative)
+      result map (_.getDecoderVersion)
+      result
     } catch {
       case ex: Exception =>
+        log.warn("WebP library loading failed!", ex)
+        None
+      case ex: UnsatisfiedLinkError =>
         log.warn("WebP library loading failed!", ex)
         None
     }
@@ -29,7 +34,7 @@ object Webp extends Logging {
 
   /** Initializes JNI library to speed up subsequent calls */
   def eagerInit(): Unit = {
-    webNativeOption map (_.getDecoderVersion)
+    webNativeOption
   }
 
   /** Check whether given raw bytes start with a WEBP image header */

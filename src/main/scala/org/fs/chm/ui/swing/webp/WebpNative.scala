@@ -4,9 +4,11 @@ package webp
 import org.scijava.nativelib.NativeLoader
 
 /**
- * JNI interface for Google WebP library (which has been amended with those functions)
+ * JNI interface for Google WebP library (which has been amended with those functions).
+ *
+ * Should be used through [[org.fs.chm.ui.swing.webp.Webp]].
  */
-class WebpNative {
+object WebpNative {
   NativeLoader.loadLibrary("libwebp")
 
   @native def getDecoderVersion: Int
