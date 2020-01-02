@@ -2,7 +2,6 @@ package org.fs.chm.ui.swing
 
 import java.awt.Desktop
 import java.awt.event.AdjustmentEvent
-import java.awt.{ Container => AwtContainer }
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -100,14 +99,11 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
 
   def changeChatsClickable(enabled: Boolean): Unit = {
     chatsPane.enabled = enabled
-    def changeClickableRecursive(c: AwtContainer): Unit = {
-      c.setEnabled(enabled)
-      c.getComponents foreach {
-        case c: AwtContainer => changeClickableRecursive(c)
-        case _               => //NOOP
-      }
+    def changeClickableRecursive(c: Component): Unit = c match {
+      case i: ChatListItem => i.enabled = enabled
+      case c: Container    => c.contents foreach changeClickableRecursive
     }
-    changeClickableRecursive(chatsPane.peer)
+    changeClickableRecursive(chatsPane)
   }
 
   //
@@ -145,7 +141,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
         currentChatOption = Some(c)
         val doc = documentsCache(c).doc
         msgAreaContainer.document = doc
-        msgAreaContainer.scroll.toEnd()
+        msgAreaContainer.scroll.toEnd() // FIXME: Doesn't always work!
         changeChatsClickable(true)
       })
     }

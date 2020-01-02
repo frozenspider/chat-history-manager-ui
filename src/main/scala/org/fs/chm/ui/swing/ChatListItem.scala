@@ -1,6 +1,7 @@
 package org.fs.chm.ui.swing
 
 import java.awt.Color
+import java.awt.{ Container => AwtContainer }
 
 import scala.swing.BorderPanel.Position._
 import scala.swing._
@@ -66,7 +67,7 @@ class ChatListItem(
     // Reactions
     listenTo(this, this.mouse.clicks)
     reactions += {
-      case e @ MouseReleased(_, _, _, _, _) if SwingUtilities.isLeftMouseButton(e.peer) =>
+      case e @ MouseReleased(_, _, _, _, _) if SwingUtilities.isLeftMouseButton(e.peer) && enabled =>
         select()
     }
 
@@ -81,6 +82,18 @@ class ChatListItem(
       markSelected()
     }
     selectionCallback(c)
+  }
+
+  override def enabled_=(b: Boolean): Unit = {
+    super.enabled_=(b)
+    def changeClickableRecursive(c: AwtContainer): Unit = {
+      c.setEnabled(enabled)
+      c.getComponents foreach {
+        case c: AwtContainer => changeClickableRecursive(c)
+        case _               => //NOOP
+      }
+    }
+    changeClickableRecursive(peer)
   }
 
   private def simpleRenderMsg(msg: Message): String = {
