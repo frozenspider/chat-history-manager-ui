@@ -400,14 +400,15 @@ class TelegramDataLoader extends DataLoader {
     tracker.markUsed("messages")
     tracker.ensuringUsage(jv) {
       Chat(
-        id         = getCheckedField[Long](jv, "id"),
-        nameOption = getCheckedField[Option[String]](jv, "name"),
+        id            = getCheckedField[Long](jv, "id"),
+        nameOption    = getCheckedField[Option[String]](jv, "name"),
         tpe = getCheckedField[String](jv, "type") match {
           case "personal_chat" => ChatType.Personal
           case "private_group" => ChatType.PrivateGroup
           case s               => throw new IllegalArgumentException("Illegal format, unknown chat type '$s'")
         },
-        msgCount = msgCount
+        imgPathOption = None,
+        msgCount      = msgCount
       )
     }
   }

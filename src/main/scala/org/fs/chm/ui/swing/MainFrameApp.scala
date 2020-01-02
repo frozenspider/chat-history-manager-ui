@@ -69,14 +69,13 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
 
     layout(new ScrollPane(new BoxPanel(Orientation.Vertical) {
       for (c <- dao.chats) {
-        val el = new Button(c.nameOption getOrElse "<Unnamed>")
-        contents += el
-        listenTo(el)
-        reactions += {
-          case ButtonClicked(`el`) => chatSelected(c)
-        }
+        contents += new ChatListItem(c, chatSelected, dao)
       }
-    })) = Center
+    }) {
+      verticalScrollBar.unitIncrement = 10
+      verticalScrollBarPolicy   = ScrollPane.BarPolicy.Always
+      horizontalScrollBarPolicy = ScrollPane.BarPolicy.Never
+    }) = Center
   }
 
   lazy val msgAreaContainer: MessagesAreaContainer = {

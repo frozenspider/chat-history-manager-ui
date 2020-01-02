@@ -63,6 +63,7 @@ case class Chat(
     id: Long,
     nameOption: Option[String],
     tpe: ChatType,
+    imgPathOption: Option[String],
     msgCount: Long
 )
 
