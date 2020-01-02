@@ -44,20 +44,20 @@ class EagerChatHistoryDao(
 
   val interlocutorsMap: Map[Chat, Seq[Contact]] = chatsWithMessages map {
     case (c, ms) =>
-      val cs: Seq[Contact] =
+      val contactsWithoutMe: Seq[Contact] =
         ms.toSet
           .map((m: Message) => (m.fromId, m.fromName))
           .toSeq
+          .filter(_._1 != myself.id)
           .map {
-            case (fromId, _) if fromId == myself.id =>
-              myself
             case (fromId, fromName) =>
               contacts
                 .find(_.id == fromId)
                 .orElse(contacts.find(_.prettyName == fromName))
                 .get
           }
-      (c, cs.sortBy(c => if (c == myself) (Long.MinValue, "") else (c.id, c.prettyName)))
+
+      (c, myself +: contactsWithoutMe.sortBy(c => (c.id, c.prettyName)))
   }
 
   override def chats = chatsWithMessages.keys.toSeq
