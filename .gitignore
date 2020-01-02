@@ -19,6 +19,7 @@ project/target/
 
 # Development
 /_build
+/_data
 
 # Application
 /log
