@@ -35,7 +35,7 @@ class EagerChatHistoryDao(
                 lastNameOption     = None,
                 usernameOption     = None,
                 phoneNumberOption  = None,
-                lastSeenDateOption = None
+                lastSeenTimeOption = None
               ))
             .copy(id = fromId)
       })
@@ -64,12 +64,15 @@ class EagerChatHistoryDao(
 
   override def interlocutors(chat: Chat): Seq[Contact] = interlocutorsMap(chat)
 
-  override def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
+  override def messagesBefore(chat: Chat, msgId: Long, limit: Int): Option[IndexedSeq[Message]] = {
     val messages = chatsWithMessages(chat)
-    val idx      = messages.indexWhere(_.id == msgId)
-    require(idx > -1, "Message not found, that's unexpected")
-    val upperLimit = (idx - limit) max 0
-    messages.slice(upperLimit, idx)
+    val idx = messages.indexWhere(_.id == msgId)
+    if (idx < 0) {
+      None
+    } else {
+      val upperLimit = (idx - limit) max 0
+      Some(messages.slice(upperLimit, idx))
+    }
   }
 
   override def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message] = {

@@ -101,7 +101,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     }
     val titleNameHtml = renderTitleName(c, Some(m.fromId), m.fromName)
     val titleHtml =
-      s"""$titleNameHtml (${m.date.toString("yyyy-MM-dd HH:mm")})"""
+      s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})"""
     s"""
        |<div class="message" message_id="${m.id}">
        |   <div class="title">${titleHtml}</div>

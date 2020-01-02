@@ -27,7 +27,8 @@ trait ChatHistoryDao {
 
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
-  def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
+  /** Return N messages before the given one (exclusive). Returns None if message isn't found */
+  def messagesBefore(chat: Chat, msgId: Long, limit: Int): Option[IndexedSeq[Message]]
 
   def messageOption(chat: Chat, id: Long): Option[Message]
 }
@@ -50,7 +51,7 @@ case class Contact(
     lastNameOption: Option[String],
     usernameOption: Option[String],
     phoneNumberOption: Option[String],
-    lastSeenDateOption: Option[DateTime]
+    lastSeenTimeOption: Option[DateTime]
 ) extends PersonInfo
 
 sealed trait ChatType
@@ -139,7 +140,7 @@ object RichText {
 
 sealed trait Message extends Searchable {
   val id: Long
-  val date: DateTime
+  val time: DateTime
   val fromName: String
   val fromId: Long
   val textOption: Option[RichText]
@@ -154,8 +155,8 @@ sealed trait Message extends Searchable {
 object Message {
   case class Regular(
       id: Long,
-      date: DateTime,
-      editDateOption: Option[DateTime],
+      time: DateTime,
+      editTimeOption: Option[DateTime],
       fromName: String,
       fromId: Long,
       forwardFromNameOption: Option[String],
@@ -173,7 +174,7 @@ object Message {
 
     case class PhoneCall(
         id: Long,
-        date: DateTime,
+        time: DateTime,
         fromName: String,
         fromId: Long,
         textOption: Option[RichText],
@@ -183,7 +184,7 @@ object Message {
 
     case class PinMessage(
         id: Long,
-        date: DateTime,
+        time: DateTime,
         fromName: String,
         fromId: Long,
         textOption: Option[RichText],
@@ -192,7 +193,7 @@ object Message {
 
     case class CreateGroup(
         id: Long,
-        date: DateTime,
+        time: DateTime,
         fromName: String,
         fromId: Long,
         textOption: Option[RichText],
@@ -205,7 +206,7 @@ object Message {
 
     case class InviteGroupMembers(
         id: Long,
-        date: DateTime,
+        time: DateTime,
         fromName: String,
         fromId: Long,
         textOption: Option[RichText],
@@ -217,7 +218,7 @@ object Message {
 
     case class RemoveGroupMembers(
         id: Long,
-        date: DateTime,
+        time: DateTime,
         fromName: String,
         fromId: Long,
         textOption: Option[RichText],
@@ -229,7 +230,7 @@ object Message {
 
     case class EditGroupPhoto(
         id: Long,
-        date: DateTime,
+        time: DateTime,
         fromName: String,
         fromId: Long,
         textOption: Option[RichText],
@@ -241,7 +242,7 @@ object Message {
     /** Note: for Telegram, from is not always meaningful */
     case class ClearHistory(
         id: Long,
-        date: DateTime,
+        time: DateTime,
         fromName: String,
         fromId: Long,
         textOption: Option[RichText]

@@ -163,7 +163,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
               Lock.synchronized {
                 val (viewPos1, viewSize1) = msgAreaContainer.view.posAndSize
                 md.insert("<div id=\"loading\"><hr><p> Loading... </p><hr></div>", MessageInsertPosition.Leading)
-                val addedMessages = dao.messagesBefore(c, loadStatus.firstId, MsgBatchLoadSize)
+                val addedMessages = dao.messagesBefore(c, loadStatus.firstId, MsgBatchLoadSize).get
                 loadStatusCache = loadStatusCache.updated(
                   c,
                   loadStatusCache(c).copy(

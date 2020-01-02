@@ -59,7 +59,7 @@ class TelegramDataLoader extends DataLoader {
         lastNameOption     = getStringOpt(jv, "last_name", true),
         usernameOption     = getStringOpt(jv, "username", true),
         phoneNumberOption  = getStringOpt(jv, "phone_number", true),
-        lastSeenDateOption = None
+        lastSeenTimeOption = None
       )
     }
   }
@@ -73,7 +73,7 @@ class TelegramDataLoader extends DataLoader {
         lastNameOption     = getStringOpt(jv, "last_name", true),
         usernameOption     = None,
         phoneNumberOption  = getStringOpt(jv, "phone_number", true),
-        lastSeenDateOption = stringToDateTimeOpt(getCheckedField[String](jv, "date"))
+        lastSeenTimeOption = stringToDateTimeOpt(getCheckedField[String](jv, "date"))
       )
     }
   }
@@ -96,8 +96,8 @@ class TelegramDataLoader extends DataLoader {
     private def parseRegular(jv: JValue)(implicit tracker: FieldUsageTracker): Message.Regular = {
       Message.Regular(
         id                     = getCheckedField[Long](jv, "id"),
-        date                   = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-        editDateOption         = stringToDateTimeOpt(getCheckedField[String](jv, "edited")),
+        time                   = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+        editTimeOption         = stringToDateTimeOpt(getCheckedField[String](jv, "edited")),
         fromName               = getCheckedField[String](jv, "from"),
         fromId                 = getCheckedField[Long](jv, "from_id"),
         forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
@@ -113,7 +113,7 @@ class TelegramDataLoader extends DataLoader {
         case "phone_call" =>
           Message.Service.PhoneCall(
             id                  = getCheckedField[Long](jv, "id"),
-            date                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            time                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName            = getCheckedField[String](jv, "actor"),
             fromId              = getCheckedField[Long](jv, "actor_id"),
             durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
@@ -123,7 +123,7 @@ class TelegramDataLoader extends DataLoader {
         case "pin_message" =>
           Message.Service.PinMessage(
             id         = getCheckedField[Long](jv, "id"),
-            date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
             fromId     = getCheckedField[Long](jv, "actor_id"),
             messageId  = getCheckedField[Long](jv, "message_id"),
@@ -132,7 +132,7 @@ class TelegramDataLoader extends DataLoader {
         case "create_group" =>
           Message.Service.CreateGroup(
             id         = getCheckedField[Long](jv, "id"),
-            date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
             fromId     = getCheckedField[Long](jv, "actor_id"),
             title      = getCheckedField[String](jv, "title"),
@@ -142,7 +142,7 @@ class TelegramDataLoader extends DataLoader {
         case "invite_members" =>
           Message.Service.InviteGroupMembers(
             id         = getCheckedField[Long](jv, "id"),
-            date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
             fromId     = getCheckedField[Long](jv, "actor_id"),
             members    = getCheckedField[Seq[String]](jv, "members"),
@@ -151,7 +151,7 @@ class TelegramDataLoader extends DataLoader {
         case "remove_members" =>
           Message.Service.RemoveGroupMembers(
             id         = getCheckedField[Long](jv, "id"),
-            date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
             fromId     = getCheckedField[Long](jv, "actor_id"),
             members    = getCheckedField[Seq[String]](jv, "members"),
@@ -160,7 +160,7 @@ class TelegramDataLoader extends DataLoader {
         case "clear_history" =>
           Message.Service.ClearHistory(
             id         = getCheckedField[Long](jv, "id"),
-            date       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName   = getCheckedField[String](jv, "actor"),
             fromId     = getCheckedField[Long](jv, "actor_id"),
             textOption = RichTextParser.parseRichTextOption(jv)
@@ -168,7 +168,7 @@ class TelegramDataLoader extends DataLoader {
         case "edit_group_photo" =>
           Message.Service.EditGroupPhoto(
             id           = getCheckedField[Long](jv, "id"),
-            date         = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            time         = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName     = getCheckedField[String](jv, "actor"),
             fromId       = getCheckedField[Long](jv, "actor_id"),
             pathOption   = getStringOpt(jv, "photo", true),
