@@ -1,6 +1,7 @@
 package org.fs.chm.dao
 
 import java.io.File
+import java.util.UUID
 
 import com.github.nscala_time.time.Imports._
 import org.fs.utility.Imports._
@@ -8,22 +9,26 @@ import org.fs.utility.Imports._
 /**
  * Everything except for messages should be pre-cached and readily available.
  */
-trait ChatHistoryDao {
-  /** Base of relative paths specified in messages */
-  def dataPath: File
+trait ChatHistoryDao extends AutoCloseable {
+  sys.addShutdownHook(close())
 
-  def myself: Contact
+  /** Base of relative paths specified in messages */
+  def dataPathRoot: File
+
+  def datasets: Seq[Dataset]
+
+  def myself(dsUuid: UUID): User
 
   /** Contains myself as well */
-  def contacts: Seq[Contact]
+  def users(dsUuid: UUID): Seq[User]
 
-  def chats: Seq[Chat]
+  def chats(dsUuid: UUID): Seq[Chat]
 
   /**
    * First returned element MUST be myself, the rest should be in some fixed order.
    * This method should be fast.
    */
-  def interlocutors(chat: Chat): Seq[Contact]
+  def interlocutors(chat: Chat): Seq[User]
 
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
@@ -31,7 +36,15 @@ trait ChatHistoryDao {
   def messagesBefore(chat: Chat, msgId: Long, limit: Int): Option[IndexedSeq[Message]]
 
   def messageOption(chat: Chat, id: Long): Option[Message]
+
+  override def close(): Unit = {}
 }
+
+case class Dataset(
+    uuid: UUID,
+    alias: String,
+    sourceType: String,
+)
 
 sealed trait PersonInfo {
   val firstNameOption: Option[String]
@@ -44,9 +57,11 @@ sealed trait PersonInfo {
   }
 }
 
-case class Contact(
+case class User(
+    dsUuid: UUID,
     /** Might be 0, otherwise - is presumed to be unique */
     id: Long,
+    /** If there's no first/last name separation, everything will be in first name */
     firstNameOption: Option[String],
     lastNameOption: Option[String],
     usernameOption: Option[String],
@@ -54,18 +69,19 @@ case class Contact(
     lastSeenTimeOption: Option[DateTime]
 ) extends PersonInfo
 
-sealed trait ChatType
+sealed abstract class ChatType(val name: String)
 object ChatType {
-  case object Personal     extends ChatType
-  case object PrivateGroup extends ChatType
+  case object Personal     extends ChatType("personal")
+  case object PrivateGroup extends ChatType("private_group")
 }
 
 case class Chat(
+    dsUuid: UUID,
     id: Long,
     nameOption: Option[String],
     tpe: ChatType,
     imgPathOption: Option[String],
-    msgCount: Long
+    msgCount: Int
 )
 
 trait Searchable {
@@ -137,6 +153,13 @@ object RichText {
 //
 // Message
 //
+
+/*
+ * Design goal for this section - try to reuse as many fields as possible to comfortably store
+ * the whole Message hierarchy in one table.
+ *
+ * Same applies to Content.
+ */
 
 sealed trait Message extends Searchable {
   val id: Long

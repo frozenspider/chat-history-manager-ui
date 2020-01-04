@@ -145,7 +145,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
       pathOption: Option[String],
       kindPrettyName: String
   )(renderContentFromFile: File => String): String = {
-    val fileOption = pathOption map (new File(dao.dataPath, _))
+    val fileOption = pathOption map (new File(dao.dataPathRoot, _))
     fileOption match {
       case Some(file) if file.exists => renderContentFromFile(file)
       case Some(file)                => s"[$kindPrettyName not found]"

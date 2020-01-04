@@ -67,7 +67,11 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
     import scala.swing.BorderPanel.Position._
 
     layout(new ScrollPane(new BoxPanel(Orientation.Vertical) {
-      for (c <- dao.chats) {
+      // TODO: Support separate datasets
+      for {
+        ds <- dao.datasets
+        c <- dao.chats(ds.uuid)
+      } {
         contents += new ChatListItem(c, chatSelected, dao)
       }
     }) {

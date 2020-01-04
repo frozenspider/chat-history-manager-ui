@@ -2,6 +2,7 @@ package org.fs.chm.loader
 
 import java.io.File
 import java.io.FileNotFoundException
+import java.util.UUID
 
 import scala.collection.immutable.ListMap
 
@@ -14,15 +15,23 @@ import org.json4s.jackson.JsonMethods
 class TelegramDataLoader extends DataLoader {
   implicit private val formats: Formats = DefaultFormats.withLong.withBigDecimal
 
-  override def loadDataInner(path: File): ChatHistoryDao = {
+  /** Path should point to the folder with `result.json` and other stuff */
+  override protected def loadDataInner(path: File): ChatHistoryDao = {
     implicit val dummyTracker = new FieldUsageTracker
     val resultJsonFile: File = new File(path, "result.json")
     if (!resultJsonFile.exists()) throw new FileNotFoundException("result.json not found in " + path.getAbsolutePath)
+
+    val dataset = Dataset(
+      uuid       = UUID.randomUUID(),
+      alias      = "Telegram data @ " + DateTime.now().toString("yyyy-MM-dd"),
+      sourceType = "telegram"
+    )
+
     val parsed = JsonMethods.parse(resultJsonFile)
-    val myself = parseMyself(getRawField(parsed, "personal_information", true))
-    val contacts = for {
+    val myself = parseMyself(getRawField(parsed, "personal_information", true), dataset.uuid)
+    val users = for {
       contact <- getCheckedField[Seq[JValue]](parsed, "contacts", "list")
-    } yield parseContact(contact)
+    } yield parseUser(contact, dataset.uuid)
 
     val chatsWithMessages = for {
       chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
@@ -32,15 +41,16 @@ class TelegramDataLoader extends DataLoader {
         message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
       } yield MessageParser.parseMessageOption(message)).yieldDefined
 
-      val chatRes = parseChat(chat, messagesRes.size)
+      val chatRes = parseChat(chat, dataset.uuid, messagesRes.size)
       (chatRes, messagesRes)
     }
     val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
 
     new EagerChatHistoryDao(
-      dataPath = path,
-      myself = myself,
-      contactsRaw = contacts,
+      dataPathRoot      = path,
+      dataset           = dataset,
+      myself1           = myself,
+      rawUsers          = users,
       chatsWithMessages = chatsWithMessagesLM
     )
   }
@@ -49,11 +59,12 @@ class TelegramDataLoader extends DataLoader {
   // Parsers
   //
 
-  private def parseMyself(jv: JValue): Contact = {
+  private def parseMyself(jv: JValue, dsUuid: UUID): User = {
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("bio") // Ignoring bio
     tracker.ensuringUsage(jv) {
-      Contact(
+      User(
+        dsUuid             = dsUuid,
         id                 = getCheckedField[Long](jv, "user_id"),
         firstNameOption    = getStringOpt(jv, "first_name", true),
         lastNameOption     = getStringOpt(jv, "last_name", true),
@@ -64,10 +75,11 @@ class TelegramDataLoader extends DataLoader {
     }
   }
 
-  private def parseContact(jv: JValue): Contact = {
+  private def parseUser(jv: JValue, dsUuid: UUID): User = {
     implicit val tracker = new FieldUsageTracker
     tracker.ensuringUsage(jv) {
-      Contact(
+      User(
+        dsUuid             = dsUuid,
         id                 = getCheckedField[Long](jv, "user_id"),
         firstNameOption    = getStringOpt(jv, "first_name", true),
         lastNameOption     = getStringOpt(jv, "last_name", true),
@@ -395,11 +407,12 @@ class TelegramDataLoader extends DataLoader {
     }
   }
 
-  private def parseChat(jv: JValue, msgCount: Int): Chat = {
+  private def parseChat(jv: JValue, dsUuid: UUID, msgCount: Int): Chat = {
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("messages")
     tracker.ensuringUsage(jv) {
       Chat(
+        dsUuid        = dsUuid,
         id            = getCheckedField[Long](jv, "id"),
         nameOption    = getCheckedField[Option[String]](jv, "name"),
         tpe = getCheckedField[String](jv, "type") match {
