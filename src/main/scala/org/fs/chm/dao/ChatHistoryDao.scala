@@ -105,7 +105,9 @@ case class RichText(
   }
 }
 object RichText {
-  sealed trait Element extends Searchable
+  sealed trait Element extends Searchable {
+    def text: String
+  }
 
   case class Plain(
       text: String
@@ -127,12 +129,12 @@ object RichText {
 
   case class Link(
       /** Empty text would mean that this link is hidden - but it can still be hidden even if it's not */
-      textOption: Option[String],
+      text: String,
       href: String,
       /** Some TG chats use text_links with empty/invisible text to be shown as preview but not appear in text */
       hidden: Boolean
   ) extends Element {
-    override val plainSearchableString = (textOption getOrElse href).replaceAll("[\\s\\p{Cf}\n]+", " ")
+    override val plainSearchableString = (text + " " + href).replaceAll("[\\s\\p{Cf}\n]+", " ").trim
   }
 
   case class PrefmtInline(
@@ -214,44 +216,16 @@ object Message {
         messageId: Long
     ) extends Service
 
-    case class CreateGroup(
+    /** Note: for Telegram, from is not always meaningful */
+    case class ClearHistory(
         id: Long,
         time: DateTime,
         fromName: String,
         fromId: Long,
-        textOption: Option[RichText],
-        title: String,
-        members: Seq[String]
-    ) extends MembershipChange {
-      override val plainSearchableString =
-        (plainSearchableMsgString +: title +: members).mkString(" ").trim
-    }
+        textOption: Option[RichText]
+    ) extends Service
 
-    case class InviteGroupMembers(
-        id: Long,
-        time: DateTime,
-        fromName: String,
-        fromId: Long,
-        textOption: Option[RichText],
-        members: Seq[String]
-    ) extends MembershipChange {
-      override val plainSearchableString =
-        (plainSearchableMsgString +: members).mkString(" ").trim
-    }
-
-    case class RemoveGroupMembers(
-        id: Long,
-        time: DateTime,
-        fromName: String,
-        fromId: Long,
-        textOption: Option[RichText],
-        members: Seq[String]
-    ) extends MembershipChange {
-      override val plainSearchableString =
-        (plainSearchableMsgString +: members).mkString(" ").trim
-    }
-
-    case class EditGroupPhoto(
+    case class EditPhoto(
         id: Long,
         time: DateTime,
         fromName: String,
@@ -262,14 +236,44 @@ object Message {
         heightOption: Option[Int]
     ) extends Service
 
-    /** Note: for Telegram, from is not always meaningful */
-    case class ClearHistory(
-        id: Long,
-        time: DateTime,
-        fromName: String,
-        fromId: Long,
-        textOption: Option[RichText]
-    ) extends Service
+    object Group {
+      case class Create(
+          id: Long,
+          time: DateTime,
+          fromName: String,
+          fromId: Long,
+          textOption: Option[RichText],
+          title: String,
+          members: Seq[String]
+      ) extends MembershipChange {
+        override val plainSearchableString =
+          (plainSearchableMsgString +: title +: members).mkString(" ").trim
+      }
+
+      case class InviteMembers(
+          id: Long,
+          time: DateTime,
+          fromName: String,
+          fromId: Long,
+          textOption: Option[RichText],
+          members: Seq[String]
+      ) extends MembershipChange {
+        override val plainSearchableString =
+          (plainSearchableMsgString +: members).mkString(" ").trim
+      }
+
+      case class RemoveMembers(
+          id: Long,
+          time: DateTime,
+          fromName: String,
+          fromId: Long,
+          textOption: Option[RichText],
+          members: Seq[String]
+      ) extends MembershipChange {
+        override val plainSearchableString =
+          (plainSearchableMsgString +: members).mkString(" ").trim
+      }
+    }
   }
 }
 

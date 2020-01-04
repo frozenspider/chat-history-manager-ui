@@ -114,13 +114,13 @@ class ChatListItem(
           case (Some(_), _)                           => msg.plainSearchableString
           case (None, None)                           => "(???)" // We don't really expect this
         }
-      case _: Message.Service.PhoneCall          => "(phone call)"
-      case _: Message.Service.PinMessage         => "(message pinned)"
-      case _: Message.Service.CreateGroup        => "(group created)"
-      case _: Message.Service.InviteGroupMembers => "(invited members)"
-      case _: Message.Service.RemoveGroupMembers => "(removed members)"
-      case _: Message.Service.EditGroupPhoto     => "(photo changed)"
-      case _: Message.Service.ClearHistory       => "(history cleared)"
+      case _: Message.Service.PhoneCall           => "(phone call)"
+      case _: Message.Service.PinMessage          => "(message pinned)"
+      case _: Message.Service.ClearHistory        => "(history cleared)"
+      case _: Message.Service.EditPhoto           => "(photo changed)"
+      case _: Message.Service.Group.Create        => "(group created)"
+      case _: Message.Service.Group.InviteMembers => "(invited members)"
+      case _: Message.Service.Group.RemoveMembers => "(removed members)"
     }
     prefix + text.take(50)
   }

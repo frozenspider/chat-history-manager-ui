@@ -136,8 +136,8 @@ class H2ChatHistoryDao(
       sql"""
         CREATE TABLE IF NOT EXISTS messages (
           ds_uuid             UUID NOT NULL,
-          id                  BIGINT NOT NULL,
           chat_id             BIGINT NOT NULL,
+          id                  BIGINT NOT NULL,
           message_type        VARCHAR(255) NOT NULL,
           time                TIMESTAMP NOT NULL,
           edit_time           TIMESTAMP,
@@ -153,9 +153,36 @@ class H2ChatHistoryDao(
           path                VARCHAR(4095),
           width               INT,
           height              INT,
-          PRIMARY KEY (ds_uuid, id),
+          PRIMARY KEY (ds_uuid, chat_id, id),
+          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
           FOREIGN KEY (chat_id) REFERENCES chats (id),
           FOREIGN KEY (from_id) REFERENCES users (id)
+        );
+      """,
+      sql"""
+        CREATE TABLE IF NOT EXISTS messages_text (
+          id                  IDENTITY NOT NULL,
+          ds_uuid             UUID NOT NULL,
+          chat_id             BIGINT NOT NULL,
+          message_id          BIGINT NOT NULL,
+          plaintext           VARCHAR NOT NULL,
+          PRIMARY KEY (id),
+          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
+          FOREIGN KEY (chat_id) REFERENCES chats (id),
+          FOREIGN KEY (message_id) REFERENCES messages (id)
+        );
+      """,
+      sql"""
+        CREATE TABLE IF NOT EXISTS messages_text_element (
+          id                  IDENTITY NOT NULL,
+          text_id             BIGINT NOT NULL,
+          element_type        VARCHAR(255) NOT NULL,
+          text                VARCHAR,
+          href                VARCHAR(4095),
+          hidden              BOOLEAN,
+          language            VARCHAR(4095),
+          PRIMARY KEY (id),
+          FOREIGN KEY (text_id) REFERENCES messages_text (id)
         );
       """
     ) map (_.update.run)
@@ -164,7 +191,7 @@ class H2ChatHistoryDao(
 
   def insertAll(loader: ChatHistoryDao): Unit = {
     for (ds <- loader.datasets) {
-      var query = queries.datasets.insert(ds)
+      var query: ConnectionIO[_] = queries.datasets.insert(ds)
 
       val myself = loader.myself(ds.uuid)
       for (u <- loader.users(ds.uuid)) {
@@ -175,9 +202,19 @@ class H2ChatHistoryDao(
         query = query flatMap (_ => queries.chats.insert(c))
 
         // TODO: Iterate over smaller subset?
-        for (m <- loader.lastMessages(c, c.msgCount + 1) if m.isInstanceOf[Message.Regular]) {
-          val (rm, rcOption, rrtOption, rrtEls) = Raws.fromMessage(ds.uuid, c.id, m)
-          //
+        for (m <- loader.lastMessages(c, c.msgCount + 1)) {
+          val (rm, rcOption, rrtOption) = Raws.fromMessage(ds.uuid, c.id, m)
+          query = query flatMap (_ => queries.rawMessages.insert(rm))
+
+          for ((rrt, rrtEls) <- rrtOption) {
+            val rrtQuery = for {
+              rrtId <- queries.rawRichText.insert(rrt, ds.uuid, c.id, m.id)
+              combined <- (for (rrtEl <- rrtEls) yield {
+                queries.rawRichTextElements.insert(rrtEl, rrtId)
+              }) reduce ((a, b) => a flatMap (_ => b))
+            } yield combined
+            query = query flatMap (_ => rrtQuery)
+          }
         }
       }
 
@@ -235,26 +272,54 @@ class H2ChatHistoryDao(
     }
 
     object rawMessages {
-      private val colsFr = Fragment.const(s"""|ds_uuid, id, chat_id, message_type, time, edit_time, from_name,
+      private val colsFr = Fragment.const(s"""|ds_uuid, chat_id, id, message_type, time, edit_time, from_name,
                                               |from_id, forward_from_name, reply_to_message_id, members, duration_sec,
-                                              |discard_reason, inned_message_id, group_title,
+                                              |discard_reason, pinned_message_id, group_title,
                                               |path, width, height""".stripMargin)
       private val selectAllFr = fr"SELECT" ++ colsFr ++ fr"FROM messages"
 
-      private def selectAllByChatFr(chatId: Long) = selectAllFr ++ fr"WHERE chat_id = $chatId"
+      private def selectAllByChatFr(dsUuid: UUID, chatId: Long) =
+        selectAllFr ++ fr"WHERE ds_uuid = $dsUuid AND chat_id = $chatId"
 
       private def orderByTimeDescLimit(limit: Int) = fr"ORDER BY time DESC LIMIT ${limit}"
 
       def selectOption(chat: Chat, id: Long) =
-        (selectAllByChatFr(chat.id) ++ fr"AND id = ${id}").query[RawMessage].option
+        (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND id = ${id}").query[RawMessage].option
 
       def selectLastInversed(chat: Chat, limit: Int) =
-        (selectAllByChatFr(chat.id) ++ orderByTimeDescLimit(limit)).query[RawMessage].to[IndexedSeq]
+        (selectAllByChatFr(chat.dsUuid, chat.id) ++ orderByTimeDescLimit(limit)).query[RawMessage].to[IndexedSeq]
 
       def selectBeforeInversed(chat: Chat, m: Message, limit: Int) =
-        (selectAllByChatFr(chat.id)
+        (selectAllByChatFr(chat.dsUuid, chat.id)
           ++ fr"AND time < ${m.time} AND id < ${m.id}"
           ++ orderByTimeDescLimit(limit)).query[RawMessage].to[IndexedSeq]
+
+      def insert(m: RawMessage) =
+        (fr"INSERT INTO messages (" ++ colsFr ++ fr") VALUES ("
+          ++ fr"${m.dsUuid}, ${m.chatId}, ${m.id}, ${m.messageType}, ${m.time}, ${m.editTimeOption}, ${m.fromName},"
+          ++ fr"${m.fromId}, ${m.forwardFromNameOption}, ${m.replyToMessageIdOption}, ${m.members},"
+          ++ fr"${m.durationSecOption}, ${m.discardReasonOption}, ${m.pinnedMessageIdOption}, ${m.groupTitleOption},"
+          ++ fr"${m.pathOption}, ${m.widthOption}, ${m.heightOption}"
+          ++ fr")").update.run
+    }
+
+    object rawRichText {
+      def insert(rrt: RawRichText, dsUuid: UUID, chatId: Long, messageId: Long) =
+        (fr"INSERT INTO messages_text(ds_uuid, chat_id, message_id, plaintext) VALUES ("
+          ++ fr"${dsUuid}, ${chatId}, ${messageId}, ${rrt.plaintext}"
+          ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
+    }
+
+    object rawRichTextElements {
+      private val colsNoIdentityFr = fr"element_type, text, href, hidden, language"
+
+      // TODO: Select ordered by ID
+
+      def insert(rrte: RawRichTextElement, textId: Long) =
+        (fr"INSERT INTO messages_text_element(text_id," ++ colsNoIdentityFr ++ fr") VALUES ("
+          ++ fr"${textId}, ${rrte.elementType}, ${rrte.text},"
+          ++ fr"${rrte.hrefOption}, ${rrte.hiddenOption}, ${rrte.languageOption}"
+          ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
     }
   }
 
@@ -281,13 +346,41 @@ class H2ChatHistoryDao(
         dsUuid: UUID,
         chatId: Long,
         m: Message
-    ): (RawMessage, Option[RawContent], Option[RawRichText], Seq[RawRichTextElement]) = {
-      val rawRichTextOption:   Option[RawRichText] = None // FIXME
-      val rawRichTextElements: Seq[RawRichTextElement] = Seq.empty // FIXME
+    ): (RawMessage, Option[RawContent], Option[(RawRichText, Seq[RawRichTextElement])]) = {
+      val rawRichTextOption: Option[(RawRichText, Seq[RawRichTextElement])] =
+        m.textOption map { t =>
+          val elements: Seq[RawRichTextElement] = t.components.map { c =>
+            val template = RawRichTextElement(
+              elementType    = "",
+              text           = c.text,
+              hrefOption     = None,
+              hiddenOption   = None,
+              languageOption = None
+            )
+            c match {
+              case c: RichText.Plain  => template.copy(elementType = "plain")
+              case c: RichText.Bold   => template.copy(elementType = "bold")
+              case c: RichText.Italic => template.copy(elementType = "italic")
+              case c: RichText.Link =>
+                template.copy(
+                  elementType  = "link",
+                  hrefOption   = Some(c.href),
+                  hiddenOption = Some(c.hidden)
+                )
+              case c: RichText.PrefmtInline => template.copy(elementType = "prefmt_inline")
+              case c: RichText.PrefmtBlock =>
+                template.copy(
+                  elementType    = "prefmt_block",
+                  languageOption = c.languageOption
+                )
+            }
+          }
+          (RawRichText(t.plainSearchableString), elements)
+        }
       val template = RawMessage(
         dsUuid                 = dsUuid,
-        id                     = m.id,
         chatId                 = chatId,
+        id                     = m.id,
         messageType            = "",
         time                   = m.time,
         editTimeOption         = None,
@@ -313,21 +406,45 @@ class H2ChatHistoryDao(
             editTimeOption = m.editTimeOption
           ) -> rawContentOption
         case m: Message.Service.PhoneCall =>
-          ???
+          template.copy(
+            messageType         = "service_phone_call",
+            durationSecOption   = m.durationSecOption,
+            discardReasonOption = m.discardReasonOption
+          ) -> None
         case m: Message.Service.PinMessage =>
-          ???
-        case m: Message.Service.CreateGroup =>
-          ???
-        case m: Message.Service.InviteGroupMembers =>
-          ???
-        case m: Message.Service.RemoveGroupMembers =>
-          ???
-        case m: Message.Service.EditGroupPhoto =>
-          ???
+          template.copy(
+            messageType           = "service_pin_message",
+            pinnedMessageIdOption = Some(m.messageId),
+          ) -> None
         case m: Message.Service.ClearHistory =>
-          ???
+          template.copy(
+            messageType = "service_clear_history",
+          ) -> None
+        case m: Message.Service.EditPhoto =>
+          template.copy(
+            messageType  = "service_edit_photo",
+            pathOption   = m.pathOption,
+            widthOption  = m.widthOption,
+            heightOption = m.heightOption
+          ) -> None
+        case m: Message.Service.Group.Create =>
+          template.copy(
+            messageType      = "service_group_create",
+            groupTitleOption = Some(m.title),
+            members          = m.members
+          ) -> None
+        case m: Message.Service.Group.InviteMembers =>
+          template.copy(
+            messageType = "service_invite_group_members",
+            members     = m.members
+          ) -> None
+        case m: Message.Service.Group.RemoveMembers =>
+          template.copy(
+            messageType = "service_group_remove_members",
+            members     = m.members
+          ) -> None
       }
-      (rawMessage, rawContentOption, rawRichTextOption, rawRichTextElements)
+      (rawMessage, rawContentOption, rawRichTextOption)
     }
   }
 }
@@ -340,8 +457,8 @@ object H2ChatHistoryDao {
   /** [[Message]] class with all the inlined fields, whose type is determined by `messageType` */
   case class RawMessage(
       dsUuid: UUID,
-      id: Long,
       chatId: Long,
+      id: Long,
       messageType: String,
       time: DateTime,
       editTimeOption: Option[DateTime],
@@ -364,7 +481,8 @@ object H2ChatHistoryDao {
   )
 
   case class RawRichTextElement(
-      textOption: Option[String],
+      elementType: String,
+      text: String,
       hrefOption: Option[String],
       hiddenOption: Option[Boolean],
       languageOption: Option[String]

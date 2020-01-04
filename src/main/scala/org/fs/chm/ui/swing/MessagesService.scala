@@ -178,8 +178,8 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
         case sm: Message.Service.PhoneCall        => renderPhoneCall(sm)
         case sm: Message.Service.PinMessage       => "Pinned message" + renderSourceMessage(c, sm.messageId)
         case sm: Message.Service.MembershipChange => renderMembershipChangeMessage(c, sm)
-        case sm: Message.Service.EditGroupPhoto   => renderEditGroupPhotoMessage(sm)
         case sm: Message.Service.ClearHistory     => s"History cleared"
+        case sm: Message.Service.EditPhoto        => renderEditPhotoMessage(sm)
       }
       Seq(Some(s"""<div class="system-message">$content</div>"""), textHtmlOption).yieldDefined.mkString
     }
@@ -192,7 +192,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
       ).yieldDefined.mkString(" ")
     }
 
-    private def renderEditGroupPhotoMessage(sm: Service.EditGroupPhoto) = {
+    private def renderEditPhotoMessage(sm: Service.EditPhoto) = {
       val image = renderImage(sm.pathOption, sm.widthOption, sm.heightOption, None, "Photo")
       s"Changed group photo<br>$image"
     }
@@ -202,9 +202,9 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
         .map(name => renderTitleName(c, None, name))
         .mkString("<ul><li>", "</li><li>", "</li></ul>")
       val content = sm match {
-        case sm: Service.CreateGroup        => s"Created group <b>${sm.title}</b>"
-        case sm: Service.InviteGroupMembers => s"Invited"
-        case sm: Service.RemoveGroupMembers => s"Removed"
+        case sm: Service.Group.Create        => s"Created group <b>${sm.title}</b>"
+        case sm: Service.Group.InviteMembers => s"Invited"
+        case sm: Service.Group.RemoveMembers => s"Removed"
       }
       s"$content$members"
     }
@@ -217,7 +217,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
       }
       val hiddenLinkOption = rt.components collectFirst { case l: RichText.Link if l.hidden => l }
       val link = hiddenLinkOption map { l =>
-        "<p> &gt; Link: " + renderComponent(l.copy(textOption = Some(l.href), hidden = false))
+        "<p> &gt; Link: " + renderComponent(l.copy(text = l.href, hidden = false))
       } getOrElse ""
       components.mkString + link
     }
@@ -238,7 +238,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
         rtel.plainSearchableString
       } else {
         // Space in the end is needed if link is followed by text
-        val text = rtel.textOption getOrElse rtel.href
+        val text = if (rtel.text.nonEmpty) rtel.text else rtel.href
         s"""<a href="${rtel.href}">${text}</a> """
       }
     }

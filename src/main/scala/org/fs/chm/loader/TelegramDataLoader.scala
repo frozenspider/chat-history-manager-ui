@@ -141,34 +141,6 @@ class TelegramDataLoader extends DataLoader {
             messageId  = getCheckedField[Long](jv, "message_id"),
             textOption = RichTextParser.parseRichTextOption(jv)
           )
-        case "create_group" =>
-          Message.Service.CreateGroup(
-            id         = getCheckedField[Long](jv, "id"),
-            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromName   = getCheckedField[String](jv, "actor"),
-            fromId     = getCheckedField[Long](jv, "actor_id"),
-            title      = getCheckedField[String](jv, "title"),
-            members    = getCheckedField[Seq[String]](jv, "members"),
-            textOption = RichTextParser.parseRichTextOption(jv)
-          )
-        case "invite_members" =>
-          Message.Service.InviteGroupMembers(
-            id         = getCheckedField[Long](jv, "id"),
-            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromName   = getCheckedField[String](jv, "actor"),
-            fromId     = getCheckedField[Long](jv, "actor_id"),
-            members    = getCheckedField[Seq[String]](jv, "members"),
-            textOption = RichTextParser.parseRichTextOption(jv)
-          )
-        case "remove_members" =>
-          Message.Service.RemoveGroupMembers(
-            id         = getCheckedField[Long](jv, "id"),
-            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromName   = getCheckedField[String](jv, "actor"),
-            fromId     = getCheckedField[Long](jv, "actor_id"),
-            members    = getCheckedField[Seq[String]](jv, "members"),
-            textOption = RichTextParser.parseRichTextOption(jv)
-          )
         case "clear_history" =>
           Message.Service.ClearHistory(
             id         = getCheckedField[Long](jv, "id"),
@@ -178,7 +150,7 @@ class TelegramDataLoader extends DataLoader {
             textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "edit_group_photo" =>
-          Message.Service.EditGroupPhoto(
+          Message.Service.EditPhoto(
             id           = getCheckedField[Long](jv, "id"),
             time         = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromName     = getCheckedField[String](jv, "actor"),
@@ -187,6 +159,34 @@ class TelegramDataLoader extends DataLoader {
             widthOption  = getFieldOpt[Int](jv, "width", false),
             heightOption = getFieldOpt[Int](jv, "height", false),
             textOption   = RichTextParser.parseRichTextOption(jv)
+          )
+        case "create_group" =>
+          Message.Service.Group.Create(
+            id         = getCheckedField[Long](jv, "id"),
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromName   = getCheckedField[String](jv, "actor"),
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            title      = getCheckedField[String](jv, "title"),
+            members    = getCheckedField[Seq[String]](jv, "members"),
+            textOption = RichTextParser.parseRichTextOption(jv)
+          )
+        case "invite_members" =>
+          Message.Service.Group.InviteMembers(
+            id         = getCheckedField[Long](jv, "id"),
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromName   = getCheckedField[String](jv, "actor"),
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            members    = getCheckedField[Seq[String]](jv, "members"),
+            textOption = RichTextParser.parseRichTextOption(jv)
+          )
+        case "remove_members" =>
+          Message.Service.Group.RemoveMembers(
+            id         = getCheckedField[Long](jv, "id"),
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromName   = getCheckedField[String](jv, "actor"),
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            members    = getCheckedField[Seq[String]](jv, "members"),
+            textOption = RichTextParser.parseRichTextOption(jv)
           )
         case other =>
           throw new IllegalArgumentException(
@@ -246,19 +246,19 @@ class TelegramDataLoader extends DataLoader {
           )
         case "text_link" =>
           require(values.keys == Set("type", "text", "href"), s"Unexpected text_link format: $jo")
-          val textOption = stringToOption(values("text").asInstanceOf[String])
+          val text = stringToOption(values("text").asInstanceOf[String]).getOrElse("")
           RichText.Link(
-            textOption = textOption,
-            href       = values("href").asInstanceOf[String],
-            hidden     = textOption forall isWhitespaceOrInvisible
+            text   = text,
+            href   = values("href").asInstanceOf[String],
+            hidden = isWhitespaceOrInvisible(text)
           )
         case "link" =>
           // Link format is hyperlink alone
           require(values.keys == Set("type", "text"), s"Unexpected link format: $jo")
           RichText.Link(
-            textOption = Some(values("text").asInstanceOf[String]),
-            href       = values("text").asInstanceOf[String],
-            hidden     = false
+            text   = values("text").asInstanceOf[String],
+            href   = values("text").asInstanceOf[String],
+            hidden = false
           )
         case "email" =>
           // No special treatment for email
