@@ -10,15 +10,15 @@ import doobie.util.transactor.Transactor
 import org.fs.chm.dao._
 
 class H2DataManager extends DataLoader {
-  private implicit val cs  = IO.contextShift(ExecutionContext.global)
-  private val defaultExt   = ".mv.db"
+  private implicit val cs = IO.contextShift(ExecutionContext.global)
+
+  private val defaultExt = ".mv.db"
   private val dataFileName = "data" + defaultExt
 
   def create(path: File): H2ChatHistoryDao = {
     val dataDbFile: File = new File(path, dataFileName)
     if (dataDbFile.exists()) throw new FileNotFoundException(s"$dataFileName already exists in " + path.getAbsolutePath)
-    val txctr = transactorFromFile(dataDbFile)
-    val dao = new H2ChatHistoryDao(dataPathRoot = path, txctr = txctr)
+    val dao = daoFromInnerPath(fileToInnerPath(dataDbFile), dataDbFile)
     dao.createTables()
     dao
   }
@@ -27,18 +27,20 @@ class H2DataManager extends DataLoader {
   override protected def loadDataInner(path: File): H2ChatHistoryDao = {
     val dataDbFile: File = new File(path, dataFileName)
     if (!dataDbFile.exists()) throw new FileNotFoundException(s"$dataFileName not found in " + path.getAbsolutePath)
-    val txctr = transactorFromFile(dataDbFile)
-    new H2ChatHistoryDao(dataPathRoot = path, txctr = txctr)
+    daoFromInnerPath(fileToInnerPath(dataDbFile), dataDbFile)
   }
 
-  private def transactorFromFile(f: File): Transactor.Aux[IO, Unit] = {
-    val path = f.getAbsolutePath.replaceAll(defaultExt.replace(".", "\\.") + "$", "").replace("\\", "/")
-    println(path)
-    Transactor.fromDriverManager[IO](
+  private def fileToInnerPath(f: File): String = {
+    f.getAbsolutePath.replaceAll(defaultExt.replace(".", "\\.") + "$", "").replace("\\", "/")
+  }
+
+  private def daoFromInnerPath(innerPath: String, dataPath: File): H2ChatHistoryDao = {
+    val txctr = Transactor.fromDriverManager[IO](
       "org.h2.Driver",
-      "jdbc:h2:" + path + ";DATABASE_TO_UPPER=false",
+      "jdbc:h2:" + innerPath + ";DATABASE_TO_UPPER=false",
       "sa",
       ""
     )
+    new H2ChatHistoryDao(dataPathRoot = dataPath, txctr = txctr)
   }
 }

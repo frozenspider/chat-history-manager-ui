@@ -336,7 +336,7 @@ object Content {
   case class Location(
       lat: BigDecimal,
       lon: BigDecimal,
-      liveDurationSecOption: Option[Int],
+      durationSecOption: Option[Int],
   ) extends Content
 
   /** We don't really care about poll result */

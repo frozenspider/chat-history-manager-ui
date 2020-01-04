@@ -295,7 +295,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     }
 
     def renderLocation(ct: Content.Location): String = {
-      val liveString = ct.liveDurationSecOption map (s => s"(live for $s s)") getOrElse ""
+      val liveString = ct.durationSecOption map (s => s"(live for $s s)") getOrElse ""
       s"""<blockquote><i>Location:</i> <b>${ct.lat}, ${ct.lon}</b> $liveString<br></blockquote>"""
     }
 

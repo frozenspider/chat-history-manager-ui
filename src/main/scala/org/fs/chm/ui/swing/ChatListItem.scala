@@ -25,8 +25,9 @@ class ChatListItem(
   val labelPreferredWidth = 200
   val labelBorderWidth    = 3
 
+  val interlocutors = dao.interlocutors(c)
+
   {
-    val interlocutors = dao.interlocutors(c)
     val emptyBorder   = new EmptyBorder(labelBorderWidth, labelBorderWidth, labelBorderWidth, labelBorderWidth)
 
     layout(new BorderPanel {
@@ -57,7 +58,7 @@ class ChatListItem(
     // Type
     val tpeString = c.tpe match {
       case Personal     => ""
-      case PrivateGroup => "(" + dao.interlocutors(c).size + ")"
+      case PrivateGroup => "(" + interlocutors.size + ")"
     }
     val tpeLabel = new Label(tpeString)
     tpeLabel.preferredSize = new Dimension(30, tpeLabel.preferredSize.height)
@@ -97,8 +98,7 @@ class ChatListItem(
   }
 
   private def simpleRenderMsg(msg: Message): String = {
-    val interlocutors = dao.interlocutors(c)
-    val prefix        = if (interlocutors.size == 2 && msg.fromId == interlocutors(1).id) "" else (msg.fromName + ": ")
+    val prefix = if (interlocutors.size == 2 && msg.fromId == interlocutors(1).id) "" else (msg.fromName + ": ")
     val text = msg match {
       case msg: Message.Regular =>
         (msg.textOption, msg.contentOption) match {

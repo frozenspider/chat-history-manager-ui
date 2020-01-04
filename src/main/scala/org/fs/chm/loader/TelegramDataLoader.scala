@@ -384,9 +384,9 @@ class TelegramDataLoader extends DataLoader {
 
     private def parseLocation(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Location = {
       Content.Location(
-        lat                   = getCheckedField[BigDecimal](jv, "location_information", "latitude"),
-        lon                   = getCheckedField[BigDecimal](jv, "location_information", "longitude"),
-        liveDurationSecOption = getFieldOpt[Int](jv, "live_location_period_seconds", false)
+        lat               = getCheckedField[BigDecimal](jv, "location_information", "latitude"),
+        lon               = getCheckedField[BigDecimal](jv, "location_information", "longitude"),
+        durationSecOption = getFieldOpt[Int](jv, "live_location_period_seconds", false)
       )
     }
 
