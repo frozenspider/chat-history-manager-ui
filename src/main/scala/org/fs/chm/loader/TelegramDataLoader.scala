@@ -16,7 +16,7 @@ class TelegramDataLoader extends DataLoader {
   implicit private val formats: Formats = DefaultFormats.withLong.withBigDecimal
 
   /** Path should point to the folder with `result.json` and other stuff */
-  override protected def loadDataInner(path: File): ChatHistoryDao = {
+  override protected def loadDataInner(path: File): EagerChatHistoryDao = {
     implicit val dummyTracker = new FieldUsageTracker
     val resultJsonFile: File = new File(path, "result.json")
     if (!resultJsonFile.exists()) throw new FileNotFoundException("result.json not found in " + path.getAbsolutePath)

@@ -7,7 +7,7 @@ import scala.collection.immutable.ListMap
 import scala.collection.immutable.TreeMap
 
 class EagerChatHistoryDao(
-    override val dataPathRoot: File,
+    dataPathRoot: File,
     dataset: Dataset,
     myself1: User,
     rawUsers: Seq[User],
@@ -15,6 +15,8 @@ class EagerChatHistoryDao(
 ) extends ChatHistoryDao {
 
   override def datasets: Seq[Dataset] = Seq(dataset)
+
+  override def dataPath(dsUuid: UUID): File = dataPathRoot
 
   override def myself(dsUuid: UUID): User = myself1
 

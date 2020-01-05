@@ -198,9 +198,9 @@
       "from": "Eeeee Eeeeeeeeee",
       "from_id": 44444444,
       "via_bot": "@saytextbot",
-      "file": "chats/chat_01/voice_messages/voice1.ogg",
+      "file": "chats/chat_01/voice_messages/test.mp3",
       "media_type": "voice_message",
-      "mime_type": "audio/ogg",
+      "mime_type": "audio/mpeg",
       "duration_seconds": 2,
       "text": ""
      },

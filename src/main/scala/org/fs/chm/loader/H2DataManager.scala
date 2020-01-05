@@ -50,6 +50,6 @@ class H2DataManager extends DataLoader {
     val execCxt: ExecutionContext = ExecutionContext.global
     val blocker: Blocker = Blocker.liftExecutionContext(execCxt)
     val txctr = Transactor.fromDataSource[IO](connPool, execCxt, blocker)
-    new H2ChatHistoryDao(dataPathRoot = path, txctr = txctr, () => txctr.kernel.dispose())
+    new H2ChatHistoryDao(dataPathRoot = path.getParentFile, txctr = txctr, () => txctr.kernel.dispose())
   }
 }

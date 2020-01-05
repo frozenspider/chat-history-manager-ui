@@ -1,6 +1,7 @@
 package org.fs.chm.dao
 
 import java.io.File
+import java.nio.file.Files
 import java.sql.Connection
 import java.sql.Timestamp
 import java.util.UUID
@@ -12,12 +13,12 @@ import doobie._
 import doobie.free.connection
 import doobie.h2.implicits._
 import doobie.implicits._
-import org.fs.chm.utility.IoUtils
+import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
 
 class H2ChatHistoryDao(
-    override val dataPathRoot: File,
+    dataPathRoot: File,
     txctr: Transactor.Aux[IO, _],
     closeTransactor: () => Unit
 ) extends ChatHistoryDao
@@ -27,6 +28,10 @@ class H2ChatHistoryDao(
 
   override def datasets: Seq[Dataset] = {
     queries.datasets.selectAll.transact(txctr).unsafeRunSync()
+  }
+
+  override def dataPath(dsUuid: UUID): File = {
+    new File(dataPathRoot, dsUuid.toString.toLowerCase)
   }
 
   override def myself(dsUuid: UUID): User = {
@@ -44,9 +49,9 @@ class H2ChatHistoryDao(
 
   private lazy val interlocutorsCache: Map[UUID, Map[Chat, Seq[User]]] = {
     (for {
-      ds <- datasets.par
+      ds      <- datasets.par
       myself1 = myself(ds.uuid)
-      users1 = users(ds.uuid)
+      users1  = users(ds.uuid)
     } yield {
       val chatInterlocutors = chats(ds.uuid).map { c =>
         val ids: Seq[Long] = queries.users.selectInterlocutorIds(c.id).transact(txctr).unsafeRunSync()
@@ -80,129 +85,11 @@ class H2ChatHistoryDao(
   }
 
   def createTables(): Unit = {
-    val createQueries = Seq(
-      sql"""
-        CREATE TABLE datasets (
-          uuid                UUID NOT NULL PRIMARY KEY,
-          alias               VARCHAR(255),
-          source_type         VARCHAR(255)
-        );
-      """,
-      sql"""
-        CREATE TABLE users (
-          ds_uuid             UUID NOT NULL,
-          id                  BIGINT NOT NULL,
-          first_name          VARCHAR(255),
-          last_name           VARCHAR(255),
-          username            VARCHAR(255),
-          phone_number        VARCHAR(20),
-          last_seen_time      TIMESTAMP,
-          -- Not in the entity
-          is_myself           BOOLEAN NOT NULL,
-          PRIMARY KEY (ds_uuid, id),
-          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid)
-        );
-      """,
-      sql"""
-        CREATE TABLE chats (
-          ds_uuid             UUID NOT NULL,
-          id                  BIGINT NOT NULL,
-          name                VARCHAR(255),
-          type                VARCHAR(255) NOT NULL,
-          img_path            VARCHAR(4095),
-          PRIMARY KEY (ds_uuid, id),
-          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid)
-        );
-      """,
-      sql"""
-        CREATE TABLE messages (
-          ds_uuid             UUID NOT NULL,
-          chat_id             BIGINT NOT NULL,
-          id                  BIGINT NOT NULL,
-          message_type        VARCHAR(255) NOT NULL,
-          time                TIMESTAMP NOT NULL,
-          edit_time           TIMESTAMP,
-          from_name           VARCHAR(255),
-          from_id             BIGINT NOT NULL,
-          forward_from_name   VARCHAR(255),
-          reply_to_message_id BIGINT, -- not a reference
-          title               VARCHAR(255),
-          members             VARCHAR, -- serialized
-          duration_sec        INT,
-          discard_reason      VARCHAR(255),
-          pinned_message_id   BIGINT,
-          path                VARCHAR(4095),
-          width               INT,
-          height              INT,
-          PRIMARY KEY (ds_uuid, chat_id, id),
-          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
-          FOREIGN KEY (chat_id) REFERENCES chats (id),
-          FOREIGN KEY (from_id) REFERENCES users (id)
-        );
-      """,
-      sql"""
-        CREATE TABLE messages_text (
-          id                  IDENTITY NOT NULL,
-          ds_uuid             UUID NOT NULL,
-          chat_id             BIGINT NOT NULL,
-          message_id          BIGINT NOT NULL,
-          plaintext           VARCHAR NOT NULL,
-          PRIMARY KEY (id),
-          UNIQUE      (ds_uuid, chat_id, message_id),
-          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
-          FOREIGN KEY (chat_id) REFERENCES chats (id),
-          FOREIGN KEY (message_id) REFERENCES messages (id)
-        );
-      """,
-      sql"""
-        CREATE TABLE messages_text_element (
-          id                  IDENTITY NOT NULL,
-          text_id             BIGINT NOT NULL,
-          element_type        VARCHAR(255) NOT NULL,
-          text                VARCHAR,
-          href                VARCHAR(4095),
-          hidden              BOOLEAN,
-          language            VARCHAR(4095),
-          PRIMARY KEY (id),
-          FOREIGN KEY (text_id) REFERENCES messages_text (id)
-        );
-      """,
-      sql"""
-        CREATE TABLE messages_content (
-          id                  IDENTITY NOT NULL,
-          ds_uuid             UUID NOT NULL,
-          chat_id             BIGINT NOT NULL,
-          message_id          BIGINT NOT NULL,
-          element_type        VARCHAR(255) NOT NULL,
-          path                VARCHAR(4095),
-          thumbnail_path      VARCHAR(4095),
-          emoji               VARCHAR(255),
-          width               INT,
-          height              INT,
-          mime_type           VARCHAR(255),
-          title               VARCHAR(255),
-          performer           VARCHAR(255),
-          lat                 DECIMAL(9,6),
-          lon                 DECIMAL(9,6),
-          duration_sec        INT,
-          poll_question       VARCHAR,
-          first_name          VARCHAR(255),
-          last_name           VARCHAR(255),
-          phone_number        VARCHAR(20),
-          vcard_path          VARCHAR(4095),
-          PRIMARY KEY (id),
-          UNIQUE      (ds_uuid, chat_id, message_id),
-          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
-          FOREIGN KEY (chat_id) REFERENCES chats (id),
-          FOREIGN KEY (message_id) REFERENCES messages (id)
-        );
-      """
-    ) map (_.update.run)
-    createQueries.reduce((a, b) => a flatMap (_ => b)).transact(txctr).unsafeRunSync()
+    queries.createDdl.transact(txctr).unsafeRunSync()
   }
 
-  def insertAll(dao: ChatHistoryDao): Unit = {
-    // FIXME: Copy files
+  def copyAllFrom(dao: ChatHistoryDao): Unit = {
+    // FIXME: Liquibase
     StopWatch.measureAndCall {
       log.info("Starting insertAll")
       for (ds <- dao.datasets) {
@@ -274,6 +161,27 @@ class H2ChatHistoryDao(
             }((_, t) => log.info(s"Chat checked in $t ms"))
           }
         }((_, t) => log.info(s"Dataset checked in $t ms"))
+
+        // Copying files
+        val fromPath = dao.dataPath(ds.uuid)
+        val toPath   = dataPath(ds.uuid)
+        toPath.mkdir()
+        val localPaths = queries.selectAllPaths(ds.uuid).transact(txctr).unsafeRunSync()
+        log.info(s"Copying ${localPaths.size} files")
+        var notFoundCount = 0
+        for (localPath <- localPaths) {
+          val from = new File(fromPath, localPath)
+          val to   = new File(toPath, localPath)
+          if (from.exists()) {
+            if (!to.exists()) {
+              to.getParentFile.mkdirs()
+              Files.copy(from.toPath, to.toPath)
+            }
+          } else {
+            notFoundCount += 1
+          }
+        }
+        log.info(s"Done copying ${localPaths.size} files, ${notFoundCount} not found")
       }
     }((_, t) => log.info(s"All done in $t ms"))
   }
@@ -282,7 +190,129 @@ class H2ChatHistoryDao(
     closeTransactor()
   }
 
-  private object queries {
+  object queries {
+    lazy val createDdl: ConnectionIO[Int] = {
+      val createQueries = Seq(
+        sql"""
+        CREATE TABLE datasets (
+          uuid                UUID NOT NULL PRIMARY KEY,
+          alias               VARCHAR(255),
+          source_type         VARCHAR(255)
+        );
+        """,
+        sql"""
+        CREATE TABLE users (
+          ds_uuid             UUID NOT NULL,
+          id                  BIGINT NOT NULL,
+          first_name          VARCHAR(255),
+          last_name           VARCHAR(255),
+          username            VARCHAR(255),
+          phone_number        VARCHAR(20),
+          last_seen_time      TIMESTAMP,
+          -- Not in the entity
+          is_myself           BOOLEAN NOT NULL,
+          PRIMARY KEY (ds_uuid, id),
+          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid)
+        );
+        """,
+        sql"""
+        CREATE TABLE chats (
+          ds_uuid             UUID NOT NULL,
+          id                  BIGINT NOT NULL,
+          name                VARCHAR(255),
+          type                VARCHAR(255) NOT NULL,
+          img_path            VARCHAR(4095),
+          PRIMARY KEY (ds_uuid, id),
+          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid)
+        );
+        """,
+        sql"""
+        CREATE TABLE messages (
+          ds_uuid             UUID NOT NULL,
+          chat_id             BIGINT NOT NULL,
+          id                  BIGINT NOT NULL,
+          message_type        VARCHAR(255) NOT NULL,
+          time                TIMESTAMP NOT NULL,
+          edit_time           TIMESTAMP,
+          from_name           VARCHAR(255),
+          from_id             BIGINT NOT NULL,
+          forward_from_name   VARCHAR(255),
+          reply_to_message_id BIGINT, -- not a reference
+          title               VARCHAR(255),
+          members             VARCHAR, -- serialized
+          duration_sec        INT,
+          discard_reason      VARCHAR(255),
+          pinned_message_id   BIGINT,
+          path                VARCHAR(4095),
+          width               INT,
+          height              INT,
+          PRIMARY KEY (ds_uuid, chat_id, id),
+          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
+          FOREIGN KEY (chat_id) REFERENCES chats (id),
+          FOREIGN KEY (from_id) REFERENCES users (id)
+        );
+        """,
+        sql"""
+        CREATE TABLE messages_text (
+          id                  IDENTITY NOT NULL,
+          ds_uuid             UUID NOT NULL,
+          chat_id             BIGINT NOT NULL,
+          message_id          BIGINT NOT NULL,
+          plaintext           VARCHAR NOT NULL,
+          PRIMARY KEY (id),
+          UNIQUE      (ds_uuid, chat_id, message_id),
+          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
+          FOREIGN KEY (chat_id) REFERENCES chats (id),
+          FOREIGN KEY (message_id) REFERENCES messages (id)
+        );
+        """,
+        sql"""
+        CREATE TABLE messages_text_element (
+          id                  IDENTITY NOT NULL,
+          text_id             BIGINT NOT NULL,
+          element_type        VARCHAR(255) NOT NULL,
+          text                VARCHAR,
+          href                VARCHAR(4095),
+          hidden              BOOLEAN,
+          language            VARCHAR(4095),
+          PRIMARY KEY (id),
+          FOREIGN KEY (text_id) REFERENCES messages_text (id)
+        );
+        """,
+        sql"""
+        CREATE TABLE messages_content (
+          id                  IDENTITY NOT NULL,
+          ds_uuid             UUID NOT NULL,
+          chat_id             BIGINT NOT NULL,
+          message_id          BIGINT NOT NULL,
+          element_type        VARCHAR(255) NOT NULL,
+          path                VARCHAR(4095),
+          thumbnail_path      VARCHAR(4095),
+          emoji               VARCHAR(255),
+          width               INT,
+          height              INT,
+          mime_type           VARCHAR(255),
+          title               VARCHAR(255),
+          performer           VARCHAR(255),
+          lat                 DECIMAL(9,6),
+          lon                 DECIMAL(9,6),
+          duration_sec        INT,
+          poll_question       VARCHAR,
+          first_name          VARCHAR(255),
+          last_name           VARCHAR(255),
+          phone_number        VARCHAR(20),
+          vcard_path          VARCHAR(4095),
+          PRIMARY KEY (id),
+          UNIQUE      (ds_uuid, chat_id, message_id),
+          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
+          FOREIGN KEY (chat_id) REFERENCES chats (id),
+          FOREIGN KEY (message_id) REFERENCES messages (id)
+        );
+      """
+      ) map (_.update.run)
+      createQueries.reduce((a, b) => a flatMap (_ => b))
+    }
+
     object datasets {
       private val colsFr = fr"uuid, alias, source_type"
 
@@ -294,8 +324,8 @@ class H2ChatHistoryDao(
     }
 
     object users {
-      private val colsFr = fr"ds_uuid, id, first_name, last_name, username, phone_number, last_seen_time"
-      private val selectAllFr = fr"SELECT" ++ colsFr ++ fr"FROM users"
+      private val colsFr                 = fr"ds_uuid, id, first_name, last_name, username, phone_number, last_seen_time"
+      private val selectAllFr            = fr"SELECT" ++ colsFr ++ fr"FROM users"
       private def selectFr(dsUuid: UUID) = selectAllFr ++ fr"WHERE ds_uuid = $dsUuid"
 
       def selectAll(dsUuid: UUID) =
@@ -315,7 +345,7 @@ class H2ChatHistoryDao(
     }
 
     object chats {
-      private val colsFr = fr"ds_uuid, id, name, type, img_path"
+      private val colsFr     = fr"ds_uuid, id, name, type, img_path"
       private val msgCountFr = fr"(SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id) AS msg_count"
 
       def selectAll(dsUuid: UUID) =
@@ -328,7 +358,7 @@ class H2ChatHistoryDao(
     }
 
     object rawMessages {
-      private val colsFr = Fragment.const(s"""|ds_uuid, chat_id, id, message_type, time, edit_time, from_name,
+      private val colsFr      = Fragment.const(s"""|ds_uuid, chat_id, id, message_type, time, edit_time, from_name,
                                               |from_id, forward_from_name, reply_to_message_id, title, members,
                                               |duration_sec, discard_reason, pinned_message_id,
                                               |path, width, height""".stripMargin)
@@ -406,6 +436,25 @@ class H2ChatHistoryDao(
           ++ fr" ${rc.lastNameOption}, ${rc.phoneNumberOption}, ${rc.vcardPathOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
     }
+
+    /** Select all non-null filesystem paths from all tables for the specific datased */
+    def selectAllPaths(dsUuid: UUID): ConnectionIO[Seq[String]] = {
+      def q(col: String, table: String) = {
+        val whereFr = Fragments.whereAnd(
+          fr"ds_uuid = ${dsUuid}",
+          (Fragment.const(col) ++ fr"IS NOT NULL")
+        )
+        (fr"SELECT" ++ Fragment.const(col) ++ fr"FROM" ++ Fragment.const(table) ++ whereFr).query[String].to[Seq]
+      }
+      for {
+        chatImgPaths   <- q("img_path", "chats")
+        msgPaths       <- q("path", "messages")
+        msgCPaths      <- q("path", "messages_content")
+        msgCThumbPaths <- q("thumbnail_path", "messages_content")
+        msgCVcardPaths <- q("vcard_path", "messages_content")
+      } yield chatImgPaths ++ msgPaths ++ msgCPaths ++ msgCThumbPaths ++ msgCVcardPaths
+    }
+
   }
 
   object Raws {
