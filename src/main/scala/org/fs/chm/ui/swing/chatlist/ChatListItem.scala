@@ -7,6 +7,8 @@ import scala.swing.BorderPanel.Position._
 import scala.swing._
 import scala.swing.event._
 
+import javax.swing.JMenuItem
+import javax.swing.JPopupMenu
 import javax.swing.SwingUtilities
 import javax.swing.border.EmptyBorder
 import javax.swing.border.LineBorder
@@ -25,6 +27,8 @@ class ChatListItem(
   val labelBorderWidth    = 3
 
   val interlocutors = cc.dao.interlocutors(cc.chat)
+
+  val popupMenu = new JPopupMenu
 
   {
     val emptyBorder = new EmptyBorder(labelBorderWidth, labelBorderWidth, labelBorderWidth, labelBorderWidth)
@@ -64,11 +68,20 @@ class ChatListItem(
     tpeLabel.verticalAlignment = Alignment.Center
     layout(tpeLabel) = East
 
+    // Popup menu
+    popupMenu.add({
+      val detailsItem = new JMenuItem("Details")
+      detailsItem.addActionListener(e => showDetailsPopup())
+      detailsItem
+    })
+
     // Reactions
     listenTo(this, this.mouse.clicks)
     reactions += {
-      case e @ MouseReleased(_, _, _, _, _) if SwingUtilities.isLeftMouseButton(e.peer) && enabled =>
+      case e @ MouseReleased(_, __, _, _, _) if SwingUtilities.isLeftMouseButton(e.peer) && enabled =>
         select()
+      case e @ MouseReleased(_, pt, _, _, _) if SwingUtilities.isRightMouseButton(e.peer) && enabled =>
+        popupMenu.show(peer, pt.x, pt.y)
     }
 
     maximumSize = new Dimension(Int.MaxValue, preferredSize.height)
@@ -134,6 +147,10 @@ class ChatListItem(
   private def markDeselected(): Unit = {
     border = new LineBorder(Color.GRAY, 1)
     background = Color.WHITE
+  }
+
+  private def showDetailsPopup(): Unit = {
+    println("There will be popup!")
   }
 }
 
