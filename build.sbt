@@ -57,6 +57,7 @@ libraryDependencies ++= Seq(
   // Database
   "org.tpolecat"                  %% "doobie-core"              % "0.8.8",
   "org.tpolecat"                  %% "doobie-h2"                % "0.8.8",
+  "org.flywaydb"                  %  "flyway-core"              % "6.1.3",
   // Other
   "org.json4s"                    %% "json4s-jackson"           % "3.6.7",
   "org.json4s"                    %% "json4s-ext"               % "3.6.7",

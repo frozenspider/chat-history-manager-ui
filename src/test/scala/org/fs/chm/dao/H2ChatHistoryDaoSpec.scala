@@ -27,7 +27,8 @@ class H2ChatHistoryDaoSpec //
     log.info(s"Using temp dir $dir")
 
     val manager = new H2DataManager
-    h2dao = manager.create(dir)
+    manager.create(dir)
+    h2dao = manager.loadData(dir)
   }
 
   after {

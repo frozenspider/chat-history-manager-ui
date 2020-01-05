@@ -12,7 +12,7 @@ import org.fs.utility.Imports._
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
-class TelegramDataLoader extends DataLoader {
+class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
   implicit private val formats: Formats = DefaultFormats.withLong.withBigDecimal
 
   /** Path should point to the folder with `result.json` and other stuff */

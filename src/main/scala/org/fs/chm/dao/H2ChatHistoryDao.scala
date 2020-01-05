@@ -89,7 +89,6 @@ class H2ChatHistoryDao(
   }
 
   def copyAllFrom(dao: ChatHistoryDao): Unit = {
-    // FIXME: Liquibase
     StopWatch.measureAndCall {
       log.info("Starting insertAll")
       for (ds <- dao.datasets) {
