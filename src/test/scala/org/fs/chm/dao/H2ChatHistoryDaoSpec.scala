@@ -27,7 +27,6 @@ class H2ChatHistoryDaoSpec //
 
     val manager = new H2DataManager
     h2dao = manager.create(dir)
-    h2dao.createTables()
   }
 
   after {

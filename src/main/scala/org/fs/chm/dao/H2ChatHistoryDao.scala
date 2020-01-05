@@ -1,6 +1,7 @@
 package org.fs.chm.dao
 
 import java.io.File
+import java.sql.Connection
 import java.sql.Timestamp
 import java.util.UUID
 
@@ -11,12 +12,13 @@ import doobie._
 import doobie.free.connection
 import doobie.h2.implicits._
 import doobie.implicits._
+import org.fs.chm.utility.IoUtils
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
 
 class H2ChatHistoryDao(
     override val dataPathRoot: File,
-    txctr: Transactor.Aux[IO, Unit]
+    txctr: Transactor.Aux[IO, Connection]
 ) extends ChatHistoryDao
     with Logging {
 
@@ -79,14 +81,14 @@ class H2ChatHistoryDao(
   def createTables(): Unit = {
     val createQueries = Seq(
       sql"""
-        CREATE TABLE IF NOT EXISTS datasets (
+        CREATE TABLE datasets (
           uuid                UUID NOT NULL PRIMARY KEY,
           alias               VARCHAR(255),
           source_type         VARCHAR(255)
         );
       """,
       sql"""
-        CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE users (
           ds_uuid             UUID NOT NULL,
           id                  BIGINT NOT NULL,
           first_name          VARCHAR(255),
@@ -101,7 +103,7 @@ class H2ChatHistoryDao(
         );
       """,
       sql"""
-        CREATE TABLE IF NOT EXISTS chats (
+        CREATE TABLE chats (
           ds_uuid             UUID NOT NULL,
           id                  BIGINT NOT NULL,
           name                VARCHAR(255),
@@ -112,7 +114,7 @@ class H2ChatHistoryDao(
         );
       """,
       sql"""
-        CREATE TABLE IF NOT EXISTS messages (
+        CREATE TABLE messages (
           ds_uuid             UUID NOT NULL,
           chat_id             BIGINT NOT NULL,
           id                  BIGINT NOT NULL,
@@ -138,7 +140,7 @@ class H2ChatHistoryDao(
         );
       """,
       sql"""
-        CREATE TABLE IF NOT EXISTS messages_text (
+        CREATE TABLE messages_text (
           id                  IDENTITY NOT NULL,
           ds_uuid             UUID NOT NULL,
           chat_id             BIGINT NOT NULL,
@@ -152,7 +154,7 @@ class H2ChatHistoryDao(
         );
       """,
       sql"""
-        CREATE TABLE IF NOT EXISTS messages_text_element (
+        CREATE TABLE messages_text_element (
           id                  IDENTITY NOT NULL,
           text_id             BIGINT NOT NULL,
           element_type        VARCHAR(255) NOT NULL,
@@ -165,7 +167,7 @@ class H2ChatHistoryDao(
         );
       """,
       sql"""
-        CREATE TABLE IF NOT EXISTS messages_content (
+        CREATE TABLE messages_content (
           id                  IDENTITY NOT NULL,
           ds_uuid             UUID NOT NULL,
           chat_id             BIGINT NOT NULL,
@@ -257,23 +259,26 @@ class H2ChatHistoryDao(
           val chats2 = chats(ds.uuid)
           assert(chats1.size == chats2.size, s"Chat size differs:\nWas    ${chats1.size}\nBecame ${chats2.size}")
           for (((c1, c2), i) <- chats1.zip(chats2).zipWithIndex) {
-            assert(c1 == c2, s"Chat #$i differs:\nWas    $c1\nBecame $c2")
-            val messages1 = dao.lastMessages(c1, c1.msgCount + 1)
-            val messages2 = lastMessages(c2, c2.msgCount + 1)
-            assert(
-              messages1.size == messages1.size,
-              s"Messages size for chat $c1 (#$i) differs:\nWas    ${messages1.size}\nBecame ${messages2.size}")
-            for (((m1, m2), j) <- messages1.zip(messages2).zipWithIndex) {
-              assert(m1 == m2, s"Message #$j for chat $c1 (#$i) differs:\nWas    $m1\nBecame $m2")
-            }
+            StopWatch.measureAndCall {
+              log.info(s"Checking chat '${c1.nameOption.getOrElse("")}' with ${c1.msgCount} messages")
+              assert(c1 == c2, s"Chat #$i differs:\nWas    $c1\nBecame $c2")
+              val messages1 = dao.lastMessages(c1, c1.msgCount + 1)
+              val messages2 = lastMessages(c2, c2.msgCount + 1)
+              assert(
+                messages1.size == messages1.size,
+                s"Messages size for chat $c1 (#$i) differs:\nWas    ${messages1.size}\nBecame ${messages2.size}")
+              for (((m1, m2), j) <- messages1.zip(messages2).zipWithIndex) {
+                assert(m1 == m2, s"Message #$j for chat $c1 (#$i) differs:\nWas    $m1\nBecame $m2")
+              }
+            }((_, t) => log.info(s"Chat checked in $t ms"))
           }
-        }((_, t) => log.info(s"Checked in $t ms"))
+        }((_, t) => log.info(s"Dataset checked in $t ms"))
       }
     }((_, t) => log.info(s"All done in $t ms"))
   }
 
   override def close(): Unit = {
-//    IoUtils.closeWithoutThrowing(conn)
+    IoUtils.closeWithoutThrowing(txctr.kernel)
   }
 
   private object queries {
@@ -299,7 +304,7 @@ class H2ChatHistoryDao(
         (selectFr(dsUuid) ++ fr"AND is_myself = true").query[User].unique
 
       def selectInterlocutorIds(chatId: Long) =
-        sql"SELECT DISTINCT user_id FROM messages WHERE chat_id = $chatId".query[Long].to[Seq]
+        sql"SELECT DISTINCT from_id FROM messages WHERE chat_id = $chatId".query[Long].to[Seq]
 
       def insert(u: User, isMyself: Boolean) =
         (fr"INSERT INTO users (" ++ colsFr ++ fr", is_myself) VALUES ("
@@ -331,7 +336,7 @@ class H2ChatHistoryDao(
       private def selectAllByChatFr(dsUuid: UUID, chatId: Long) =
         selectAllFr ++ fr"WHERE ds_uuid = $dsUuid AND chat_id = $chatId"
 
-      private def orderByTimeDescLimit(limit: Int) = fr"ORDER BY time DESC LIMIT ${limit}"
+      private def orderByTimeDescLimit(limit: Int) = fr"ORDER BY time DESC, id DESC LIMIT ${limit}"
 
       def selectOption(chat: Chat, id: Long) =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND id = ${id}").query[RawMessage].option

@@ -2,10 +2,13 @@ package org.fs.chm.loader
 
 import java.io.File
 import java.io.FileNotFoundException
+import java.sql.DriverManager
 
 import scala.concurrent.ExecutionContext
 
+import cats.effect.Blocker
 import cats.effect.IO
+import doobie.util.ExecutionContexts
 import doobie.util.transactor.Transactor
 import org.fs.chm.dao._
 
@@ -14,6 +17,13 @@ class H2DataManager extends DataLoader {
 
   private val defaultExt = ".mv.db"
   private val dataFileName = "data" + defaultExt
+
+  private val options = Seq(
+    "DATABASE_TO_UPPER=false"
+    //"TRACE_LEVEL_SYSTEM_OUT=2",
+    //"TRACE_LEVEL_FILE=2",
+  )
+  private val optionsString = options.mkString(";")
 
   def create(path: File): H2ChatHistoryDao = {
     val dataDbFile: File = new File(path, dataFileName)
@@ -30,15 +40,16 @@ class H2DataManager extends DataLoader {
     daoFromFile(dataDbFile)
   }
 
-
   private def daoFromFile(path: File): H2ChatHistoryDao = {
+    Class.forName("org.h2.Driver")
     val innerPath = path.getAbsolutePath.replaceAll(defaultExt.replace(".", "\\.") + "$", "").replace("\\", "/")
-    val txctr = Transactor.fromDriverManager[IO](
-      "org.h2.Driver",
-      "jdbc:h2:" + innerPath + ";DATABASE_TO_UPPER=false;TRACE_LEVEL_SYSTEM_OUT=2",
+    val conn = DriverManager.getConnection(
+      "jdbc:h2:" + innerPath + optionsString,
       "sa",
       ""
     )
+    val blocker: Blocker = Blocker.liftExecutionContext(ExecutionContexts.synchronous)
+    val txctr = Transactor.fromConnection[IO](conn, blocker)
     new H2ChatHistoryDao(dataPathRoot = path, txctr = txctr)
   }
 }
