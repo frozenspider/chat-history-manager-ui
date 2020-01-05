@@ -25,20 +25,20 @@ class EagerChatHistoryDao(
 
   val users1: Seq[User] = {
     val allUsersFromIdName =
-      chatsWithMessages.values.flatten.toSet.map((m: Message) => (m.fromId, m.fromName))
+      chatsWithMessages.values.flatten.toSet.map((m: Message) => (m.fromId, m.fromNameOption))
     allUsersFromIdName.toSeq
       .map({
         case (fromId, _) if fromId == myself1.id =>
           myself1
-        case (fromId, fromName) =>
+        case (fromId, fromNameOption) =>
           rawUsers
             .find(_.id == fromId)
-            .orElse(rawUsers.find(_.prettyName == fromName))
+            .orElse(rawUsers.find(u => fromNameOption contains u.prettyName))
             .getOrElse(
               User(
                 dsUuid             = dataset.uuid,
                 id                 = fromId,
-                firstNameOption    = Some(fromName),
+                firstNameOption    = fromNameOption,
                 lastNameOption     = None,
                 usernameOption     = None,
                 phoneNumberOption  = None,
@@ -55,14 +55,14 @@ class EagerChatHistoryDao(
     case (c, ms) =>
       val usersWithoutMe: Seq[User] =
         ms.toSet
-          .map((m: Message) => (m.fromId, m.fromName))
+          .map((m: Message) => (m.fromId, m.fromNameOption))
           .toSeq
           .filter(_._1 != myself1.id)
           .map {
-            case (fromId, fromName) =>
+            case (fromId, fromNameOption) =>
               users1
                 .find(_.id == fromId)
-                .orElse(users1.find(_.prettyName == fromName))
+                .orElse(users1.find(u => fromNameOption contains u.prettyName))
                 .get
           }
 

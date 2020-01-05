@@ -42,5 +42,6 @@ class H2ChatHistoryDaoSpec //
     val loader = new TelegramDataLoader
     val eagerDao = loader.loadData(new File(resourcesFolder, "telegram"))
     h2dao.insertAll(eagerDao)
+    // All invariants are checked within insertAll
   }
 }

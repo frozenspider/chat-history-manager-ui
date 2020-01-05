@@ -166,7 +166,7 @@ object RichText {
 sealed trait Message extends Searchable {
   val id: Long
   val time: DateTime
-  val fromName: String
+  val fromNameOption: Option[String]
   val fromId: Long
   val textOption: Option[RichText]
 
@@ -182,7 +182,7 @@ object Message {
       id: Long,
       time: DateTime,
       editTimeOption: Option[DateTime],
-      fromName: String,
+      fromNameOption: Option[String],
       fromId: Long,
       forwardFromNameOption: Option[String],
       replyToMessageIdOption: Option[Long],
@@ -200,7 +200,7 @@ object Message {
     case class PhoneCall(
         id: Long,
         time: DateTime,
-        fromName: String,
+        fromNameOption: Option[String],
         fromId: Long,
         textOption: Option[RichText],
         durationSecOption: Option[Int],
@@ -210,17 +210,17 @@ object Message {
     case class PinMessage(
         id: Long,
         time: DateTime,
-        fromName: String,
+        fromNameOption: Option[String],
         fromId: Long,
         textOption: Option[RichText],
         messageId: Long
     ) extends Service
 
-    /** Note: for Telegram, from is not always meaningful */
+    /** Note: for Telegram, `from...` is not always meaningful */
     case class ClearHistory(
         id: Long,
         time: DateTime,
-        fromName: String,
+        fromNameOption: Option[String],
         fromId: Long,
         textOption: Option[RichText]
     ) extends Service
@@ -228,7 +228,7 @@ object Message {
     case class EditPhoto(
         id: Long,
         time: DateTime,
-        fromName: String,
+        fromNameOption: Option[String],
         fromId: Long,
         textOption: Option[RichText],
         pathOption: Option[String],
@@ -240,7 +240,7 @@ object Message {
       case class Create(
           id: Long,
           time: DateTime,
-          fromName: String,
+          fromNameOption: Option[String],
           fromId: Long,
           textOption: Option[RichText],
           title: String,
@@ -253,7 +253,7 @@ object Message {
       case class InviteMembers(
           id: Long,
           time: DateTime,
-          fromName: String,
+          fromNameOption: Option[String],
           fromId: Long,
           textOption: Option[RichText],
           members: Seq[String]
@@ -265,7 +265,7 @@ object Message {
       case class RemoveMembers(
           id: Long,
           time: DateTime,
-          fromName: String,
+          fromNameOption: Option[String],
           fromId: Long,
           textOption: Option[RichText],
           members: Seq[String]

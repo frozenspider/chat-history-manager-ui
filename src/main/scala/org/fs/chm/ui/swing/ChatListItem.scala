@@ -98,7 +98,9 @@ class ChatListItem(
   }
 
   private def simpleRenderMsg(msg: Message): String = {
-    val prefix = if (interlocutors.size == 2 && msg.fromId == interlocutors(1).id) "" else (msg.fromName + ": ")
+    val prefix =
+      if (interlocutors.size == 2 && msg.fromId == interlocutors(1).id) ""
+      else (msg.fromNameOption.getOrElse("<Unnamed>") + ": ")
     val text = msg match {
       case msg: Message.Regular =>
         (msg.textOption, msg.contentOption) match {

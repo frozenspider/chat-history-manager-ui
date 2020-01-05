@@ -18,7 +18,7 @@ class H2DataManager extends DataLoader {
   def create(path: File): H2ChatHistoryDao = {
     val dataDbFile: File = new File(path, dataFileName)
     if (dataDbFile.exists()) throw new FileNotFoundException(s"$dataFileName already exists in " + path.getAbsolutePath)
-    val dao = daoFromInnerPath(fileToInnerPath(dataDbFile), dataDbFile)
+    val dao = daoFromFile(dataDbFile)
     dao.createTables()
     dao
   }
@@ -27,20 +27,18 @@ class H2DataManager extends DataLoader {
   override protected def loadDataInner(path: File): H2ChatHistoryDao = {
     val dataDbFile: File = new File(path, dataFileName)
     if (!dataDbFile.exists()) throw new FileNotFoundException(s"$dataFileName not found in " + path.getAbsolutePath)
-    daoFromInnerPath(fileToInnerPath(dataDbFile), dataDbFile)
+    daoFromFile(dataDbFile)
   }
 
-  private def fileToInnerPath(f: File): String = {
-    f.getAbsolutePath.replaceAll(defaultExt.replace(".", "\\.") + "$", "").replace("\\", "/")
-  }
 
-  private def daoFromInnerPath(innerPath: String, dataPath: File): H2ChatHistoryDao = {
+  private def daoFromFile(path: File): H2ChatHistoryDao = {
+    val innerPath = path.getAbsolutePath.replaceAll(defaultExt.replace(".", "\\.") + "$", "").replace("\\", "/")
     val txctr = Transactor.fromDriverManager[IO](
       "org.h2.Driver",
-      "jdbc:h2:" + innerPath + ";DATABASE_TO_UPPER=false",
+      "jdbc:h2:" + innerPath + ";DATABASE_TO_UPPER=false;TRACE_LEVEL_SYSTEM_OUT=2",
       "sa",
       ""
     )
-    new H2ChatHistoryDao(dataPathRoot = dataPath, txctr = txctr)
+    new H2ChatHistoryDao(dataPathRoot = path, txctr = txctr)
   }
 }

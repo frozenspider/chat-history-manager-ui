@@ -99,7 +99,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
       case sm: Message.Service =>
         ServiceMessageHtmlRenderer.render(c, sm)
     }
-    val titleNameHtml = renderTitleName(c, Some(m.fromId), m.fromName)
+    val titleNameHtml = renderTitleName(c, Some(m.fromId), m.fromNameOption)
     val titleHtml =
       s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})"""
     s"""
@@ -111,15 +111,15 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     """.stripMargin // TODO: Remove <p>
   }
 
-  private def renderTitleName(c: Chat, idOption: Option[Long], name: String): String = {
+  private def renderTitleName(c: Chat, idOption: Option[Long], nameOption: Option[String]): String = {
     val intl = dao.interlocutors(c)
     val idx = {
       val idx1 = idOption map (id => intl indexWhere (_.id == id)) getOrElse -1
-      val idx2 = intl indexWhere (_.prettyName == name)
+      val idx2 = intl indexWhere (u => nameOption contains u.prettyName)
       if (idx1 != -1) idx1 else idx2
     }
     val color = if (idx >= 0) NameColors(idx % NameColors.length) else "#000000"
-    s"""<span class="title-name" style="color: $color;">$name</span>"""
+    s"""<span class="title-name" style="color: $color;">${nameOption getOrElse "<Unnamed>"}</span>"""
   }
 
   private def renderTextOption(textOption: Option[RichText]): Option[String] =
@@ -128,7 +128,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     }
 
   private def renderFwdFrom(c: Chat, fromName: String): String = {
-    val titleNameHtml = renderTitleName(c, None, fromName)
+    val titleNameHtml = renderTitleName(c, None, Some(fromName))
     s"""<div class="forwarded-from">Forwarded from $titleNameHtml</div>"""
   }
 
@@ -199,7 +199,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
 
     private def renderMembershipChangeMessage(c: Chat, sm: Service.MembershipChange) = {
       val members = sm.members
-        .map(name => renderTitleName(c, None, name))
+        .map(name => renderTitleName(c, None, Some(name)))
         .mkString("<ul><li>", "</li><li>", "</li></ul>")
       val content = sm match {
         case sm: Service.Group.Create        => s"Created group <b>${sm.title}</b>"
@@ -304,7 +304,7 @@ class MessagesService(dao: ChatHistoryDao, htmlKit: HTMLEditorKit) {
     }
 
     def renderSharedContact(c: Chat, ct: Content.SharedContact): String = {
-      val name  = renderTitleName(c, None, ct.prettyName)
+      val name  = renderTitleName(c, None, Some(ct.prettyName))
       val phone = ct.phoneNumberOption map (pn => s"(phone: $pn)") getOrElse "(no phone number)"
       s"""<blockquote><i>Shared contact:</i> $name $phone</blockquote>"""
     }

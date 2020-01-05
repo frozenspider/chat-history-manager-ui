@@ -110,7 +110,7 @@ class TelegramDataLoader extends DataLoader {
         id                     = getCheckedField[Long](jv, "id"),
         time                   = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
         editTimeOption         = stringToDateTimeOpt(getCheckedField[String](jv, "edited")),
-        fromName               = getCheckedField[String](jv, "from"),
+        fromNameOption         = getStringOpt(jv, "from", true),
         fromId                 = getCheckedField[Long](jv, "from_id"),
         forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
         replyToMessageIdOption = getFieldOpt[Long](jv, "reply_to_message_id", false),
@@ -126,7 +126,7 @@ class TelegramDataLoader extends DataLoader {
           Message.Service.PhoneCall(
             id                  = getCheckedField[Long](jv, "id"),
             time                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromName            = getCheckedField[String](jv, "actor"),
+            fromNameOption      = getStringOpt(jv, "actor", true),
             fromId              = getCheckedField[Long](jv, "actor_id"),
             durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
             discardReasonOption = getStringOpt(jv, "discard_reason", false),
@@ -134,59 +134,59 @@ class TelegramDataLoader extends DataLoader {
           )
         case "pin_message" =>
           Message.Service.PinMessage(
-            id         = getCheckedField[Long](jv, "id"),
-            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromName   = getCheckedField[String](jv, "actor"),
-            fromId     = getCheckedField[Long](jv, "actor_id"),
-            messageId  = getCheckedField[Long](jv, "message_id"),
-            textOption = RichTextParser.parseRichTextOption(jv)
+            id             = getCheckedField[Long](jv, "id"),
+            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromNameOption = getStringOpt(jv, "actor", true),
+            fromId         = getCheckedField[Long](jv, "actor_id"),
+            messageId      = getCheckedField[Long](jv, "message_id"),
+            textOption     = RichTextParser.parseRichTextOption(jv)
           )
         case "clear_history" =>
           Message.Service.ClearHistory(
-            id         = getCheckedField[Long](jv, "id"),
-            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromName   = getCheckedField[String](jv, "actor"),
-            fromId     = getCheckedField[Long](jv, "actor_id"),
-            textOption = RichTextParser.parseRichTextOption(jv)
+            id             = getCheckedField[Long](jv, "id"),
+            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromNameOption = getStringOpt(jv, "actor", true),
+            fromId         = getCheckedField[Long](jv, "actor_id"),
+            textOption     = RichTextParser.parseRichTextOption(jv)
           )
         case "edit_group_photo" =>
           Message.Service.EditPhoto(
-            id           = getCheckedField[Long](jv, "id"),
-            time         = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromName     = getCheckedField[String](jv, "actor"),
-            fromId       = getCheckedField[Long](jv, "actor_id"),
-            pathOption   = getStringOpt(jv, "photo", true),
-            widthOption  = getFieldOpt[Int](jv, "width", false),
-            heightOption = getFieldOpt[Int](jv, "height", false),
-            textOption   = RichTextParser.parseRichTextOption(jv)
+            id             = getCheckedField[Long](jv, "id"),
+            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromNameOption = getStringOpt(jv, "actor", true),
+            fromId         = getCheckedField[Long](jv, "actor_id"),
+            pathOption     = getStringOpt(jv, "photo", true),
+            widthOption    = getFieldOpt[Int](jv, "width", false),
+            heightOption   = getFieldOpt[Int](jv, "height", false),
+            textOption     = RichTextParser.parseRichTextOption(jv)
           )
         case "create_group" =>
           Message.Service.Group.Create(
-            id         = getCheckedField[Long](jv, "id"),
-            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromName   = getCheckedField[String](jv, "actor"),
-            fromId     = getCheckedField[Long](jv, "actor_id"),
-            title      = getCheckedField[String](jv, "title"),
-            members    = getCheckedField[Seq[String]](jv, "members"),
-            textOption = RichTextParser.parseRichTextOption(jv)
+            id             = getCheckedField[Long](jv, "id"),
+            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromNameOption = getStringOpt(jv, "actor", true),
+            fromId         = getCheckedField[Long](jv, "actor_id"),
+            title          = getCheckedField[String](jv, "title"),
+            members        = getCheckedField[Seq[String]](jv, "members"),
+            textOption     = RichTextParser.parseRichTextOption(jv)
           )
         case "invite_members" =>
           Message.Service.Group.InviteMembers(
-            id         = getCheckedField[Long](jv, "id"),
-            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromName   = getCheckedField[String](jv, "actor"),
-            fromId     = getCheckedField[Long](jv, "actor_id"),
-            members    = getCheckedField[Seq[String]](jv, "members"),
-            textOption = RichTextParser.parseRichTextOption(jv)
+            id             = getCheckedField[Long](jv, "id"),
+            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromNameOption = getStringOpt(jv, "actor", true),
+            fromId         = getCheckedField[Long](jv, "actor_id"),
+            members        = getCheckedField[Seq[String]](jv, "members"),
+            textOption     = RichTextParser.parseRichTextOption(jv)
           )
         case "remove_members" =>
           Message.Service.Group.RemoveMembers(
-            id         = getCheckedField[Long](jv, "id"),
-            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromName   = getCheckedField[String](jv, "actor"),
-            fromId     = getCheckedField[Long](jv, "actor_id"),
-            members    = getCheckedField[Seq[String]](jv, "members"),
-            textOption = RichTextParser.parseRichTextOption(jv)
+            id             = getCheckedField[Long](jv, "id"),
+            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromNameOption = getStringOpt(jv, "actor", true),
+            fromId         = getCheckedField[Long](jv, "actor_id"),
+            members        = getCheckedField[Seq[String]](jv, "members"),
+            textOption     = RichTextParser.parseRichTextOption(jv)
           )
         case other =>
           throw new IllegalArgumentException(
@@ -414,7 +414,7 @@ class TelegramDataLoader extends DataLoader {
       Chat(
         dsUuid        = dsUuid,
         id            = getCheckedField[Long](jv, "id"),
-        nameOption    = getCheckedField[Option[String]](jv, "name"),
+        nameOption    = getStringOpt(jv, "name", true),
         tpe = getCheckedField[String](jv, "type") match {
           case "personal_chat" => ChatType.Personal
           case "private_group" => ChatType.PrivateGroup
