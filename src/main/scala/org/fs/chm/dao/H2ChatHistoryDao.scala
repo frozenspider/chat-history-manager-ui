@@ -18,7 +18,8 @@ import org.slf4s.Logging
 
 class H2ChatHistoryDao(
     override val dataPathRoot: File,
-    txctr: Transactor.Aux[IO, Connection]
+    txctr: Transactor.Aux[IO, _],
+    closeTransactor: () => Unit
 ) extends ChatHistoryDao
     with Logging {
 
@@ -278,7 +279,7 @@ class H2ChatHistoryDao(
   }
 
   override def close(): Unit = {
-    IoUtils.closeWithoutThrowing(txctr.kernel)
+    closeTransactor()
   }
 
   private object queries {

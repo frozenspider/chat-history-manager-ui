@@ -30,6 +30,7 @@ class H2ChatHistoryDaoSpec //
   }
 
   after {
+    h2dao.close()
     def delete(f: File): Unit = {
       (Option(f.listFiles()) getOrElse Array.empty) foreach delete
       assert(f.delete(), s"Couldn't delete $f")
