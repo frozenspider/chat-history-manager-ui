@@ -25,8 +25,9 @@ class ChatListItem(
   val labelPreferredWidth = 200
   val labelBorderWidth    = 3
 
+  val interlocutors = dao.interlocutors(c)
+
   {
-    val interlocutors = dao.interlocutors(c)
     val emptyBorder   = new EmptyBorder(labelBorderWidth, labelBorderWidth, labelBorderWidth, labelBorderWidth)
 
     layout(new BorderPanel {
@@ -57,7 +58,7 @@ class ChatListItem(
     // Type
     val tpeString = c.tpe match {
       case Personal     => ""
-      case PrivateGroup => "(" + dao.interlocutors(c).size + ")"
+      case PrivateGroup => "(" + interlocutors.size + ")"
     }
     val tpeLabel = new Label(tpeString)
     tpeLabel.preferredSize = new Dimension(30, tpeLabel.preferredSize.height)
@@ -97,8 +98,9 @@ class ChatListItem(
   }
 
   private def simpleRenderMsg(msg: Message): String = {
-    val interlocutors = dao.interlocutors(c)
-    val prefix        = if (interlocutors.size == 2 && msg.fromId == interlocutors(1).id) "" else (msg.fromName + ": ")
+    val prefix =
+      if (interlocutors.size == 2 && msg.fromId == interlocutors(1).id) ""
+      else (msg.fromNameOption.getOrElse("<Unnamed>") + ": ")
     val text = msg match {
       case msg: Message.Regular =>
         (msg.textOption, msg.contentOption) match {
@@ -114,13 +116,13 @@ class ChatListItem(
           case (Some(_), _)                           => msg.plainSearchableString
           case (None, None)                           => "(???)" // We don't really expect this
         }
-      case _: Message.Service.PhoneCall          => "(phone call)"
-      case _: Message.Service.PinMessage         => "(message pinned)"
-      case _: Message.Service.CreateGroup        => "(group created)"
-      case _: Message.Service.InviteGroupMembers => "(invited members)"
-      case _: Message.Service.RemoveGroupMembers => "(removed members)"
-      case _: Message.Service.EditGroupPhoto     => "(photo changed)"
-      case _: Message.Service.ClearHistory       => "(history cleared)"
+      case _: Message.Service.PhoneCall           => "(phone call)"
+      case _: Message.Service.PinMessage          => "(message pinned)"
+      case _: Message.Service.ClearHistory        => "(history cleared)"
+      case _: Message.Service.EditPhoto           => "(photo changed)"
+      case _: Message.Service.Group.Create        => "(group created)"
+      case _: Message.Service.Group.InviteMembers => "(invited members)"
+      case _: Message.Service.Group.RemoveMembers => "(removed members)"
     }
     prefix + text.take(50)
   }

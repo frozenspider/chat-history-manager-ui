@@ -1,6 +1,7 @@
 package org.fs.chm.dao
 
 import java.io.File
+import java.util.UUID
 
 import com.github.nscala_time.time.Imports._
 import org.fs.utility.Imports._
@@ -8,29 +9,42 @@ import org.fs.utility.Imports._
 /**
  * Everything except for messages should be pre-cached and readily available.
  */
-trait ChatHistoryDao {
-  /** Base of relative paths specified in messages */
-  def dataPath: File
+trait ChatHistoryDao extends AutoCloseable {
+  sys.addShutdownHook(close())
 
-  def myself: Contact
+  def datasets: Seq[Dataset]
+
+  /** Base of relative paths specified in messages */
+  def dataPath(dsUuid: UUID): File
+
+  def myself(dsUuid: UUID): User
 
   /** Contains myself as well */
-  def contacts: Seq[Contact]
+  def users(dsUuid: UUID): Seq[User]
 
-  def chats: Seq[Chat]
+  def chats(dsUuid: UUID): Seq[Chat]
 
   /**
    * First returned element MUST be myself, the rest should be in some fixed order.
    * This method should be fast.
    */
-  def interlocutors(chat: Chat): Seq[Contact]
+  def interlocutors(chat: Chat): Seq[User]
 
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
-  def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
+  /** Return N messages before the given one (exclusive). Returns None if message isn't found */
+  def messagesBefore(chat: Chat, msgId: Long, limit: Int): Option[IndexedSeq[Message]]
 
   def messageOption(chat: Chat, id: Long): Option[Message]
+
+  override def close(): Unit = {}
 }
+
+case class Dataset(
+    uuid: UUID,
+    alias: String,
+    sourceType: String,
+)
 
 sealed trait PersonInfo {
   val firstNameOption: Option[String]
@@ -43,28 +57,31 @@ sealed trait PersonInfo {
   }
 }
 
-case class Contact(
+case class User(
+    dsUuid: UUID,
     /** Might be 0, otherwise - is presumed to be unique */
     id: Long,
+    /** If there's no first/last name separation, everything will be in first name */
     firstNameOption: Option[String],
     lastNameOption: Option[String],
     usernameOption: Option[String],
     phoneNumberOption: Option[String],
-    lastSeenDateOption: Option[DateTime]
+    lastSeenTimeOption: Option[DateTime]
 ) extends PersonInfo
 
-sealed trait ChatType
+sealed abstract class ChatType(val name: String)
 object ChatType {
-  case object Personal     extends ChatType
-  case object PrivateGroup extends ChatType
+  case object Personal     extends ChatType("personal")
+  case object PrivateGroup extends ChatType("private_group")
 }
 
 case class Chat(
+    dsUuid: UUID,
     id: Long,
     nameOption: Option[String],
     tpe: ChatType,
     imgPathOption: Option[String],
-    msgCount: Long
+    msgCount: Int
 )
 
 trait Searchable {
@@ -88,7 +105,9 @@ case class RichText(
   }
 }
 object RichText {
-  sealed trait Element extends Searchable
+  sealed trait Element extends Searchable {
+    def text: String
+  }
 
   case class Plain(
       text: String
@@ -110,12 +129,12 @@ object RichText {
 
   case class Link(
       /** Empty text would mean that this link is hidden - but it can still be hidden even if it's not */
-      textOption: Option[String],
+      text: String,
       href: String,
       /** Some TG chats use text_links with empty/invisible text to be shown as preview but not appear in text */
       hidden: Boolean
   ) extends Element {
-    override val plainSearchableString = (textOption getOrElse href).replaceAll("[\\s\\p{Cf}\n]+", " ")
+    override val plainSearchableString = (text + " " + href).replaceAll("[\\s\\p{Cf}\n]+", " ").trim
   }
 
   case class PrefmtInline(
@@ -137,10 +156,17 @@ object RichText {
 // Message
 //
 
+/*
+ * Design goal for this section - try to reuse as many fields as possible to comfortably store
+ * the whole Message hierarchy in one table.
+ *
+ * Same applies to Content.
+ */
+
 sealed trait Message extends Searchable {
   val id: Long
-  val date: DateTime
-  val fromName: String
+  val time: DateTime
+  val fromNameOption: Option[String]
   val fromId: Long
   val textOption: Option[RichText]
 
@@ -154,9 +180,9 @@ sealed trait Message extends Searchable {
 object Message {
   case class Regular(
       id: Long,
-      date: DateTime,
-      editDateOption: Option[DateTime],
-      fromName: String,
+      time: DateTime,
+      editTimeOption: Option[DateTime],
+      fromNameOption: Option[String],
       fromId: Long,
       forwardFromNameOption: Option[String],
       replyToMessageIdOption: Option[Long],
@@ -173,8 +199,8 @@ object Message {
 
     case class PhoneCall(
         id: Long,
-        date: DateTime,
-        fromName: String,
+        time: DateTime,
+        fromNameOption: Option[String],
         fromId: Long,
         textOption: Option[RichText],
         durationSecOption: Option[Int],
@@ -183,54 +209,26 @@ object Message {
 
     case class PinMessage(
         id: Long,
-        date: DateTime,
-        fromName: String,
+        time: DateTime,
+        fromNameOption: Option[String],
         fromId: Long,
         textOption: Option[RichText],
         messageId: Long
     ) extends Service
 
-    case class CreateGroup(
+    /** Note: for Telegram, `from...` is not always meaningful */
+    case class ClearHistory(
         id: Long,
-        date: DateTime,
-        fromName: String,
+        time: DateTime,
+        fromNameOption: Option[String],
         fromId: Long,
-        textOption: Option[RichText],
-        title: String,
-        members: Seq[String]
-    ) extends MembershipChange {
-      override val plainSearchableString =
-        (plainSearchableMsgString +: title +: members).mkString(" ").trim
-    }
+        textOption: Option[RichText]
+    ) extends Service
 
-    case class InviteGroupMembers(
+    case class EditPhoto(
         id: Long,
-        date: DateTime,
-        fromName: String,
-        fromId: Long,
-        textOption: Option[RichText],
-        members: Seq[String]
-    ) extends MembershipChange {
-      override val plainSearchableString =
-        (plainSearchableMsgString +: members).mkString(" ").trim
-    }
-
-    case class RemoveGroupMembers(
-        id: Long,
-        date: DateTime,
-        fromName: String,
-        fromId: Long,
-        textOption: Option[RichText],
-        members: Seq[String]
-    ) extends MembershipChange {
-      override val plainSearchableString =
-        (plainSearchableMsgString +: members).mkString(" ").trim
-    }
-
-    case class EditGroupPhoto(
-        id: Long,
-        date: DateTime,
-        fromName: String,
+        time: DateTime,
+        fromNameOption: Option[String],
         fromId: Long,
         textOption: Option[RichText],
         pathOption: Option[String],
@@ -238,14 +236,44 @@ object Message {
         heightOption: Option[Int]
     ) extends Service
 
-    /** Note: for Telegram, from is not always meaningful */
-    case class ClearHistory(
-        id: Long,
-        date: DateTime,
-        fromName: String,
-        fromId: Long,
-        textOption: Option[RichText]
-    ) extends Service
+    object Group {
+      case class Create(
+          id: Long,
+          time: DateTime,
+          fromNameOption: Option[String],
+          fromId: Long,
+          textOption: Option[RichText],
+          title: String,
+          members: Seq[String]
+      ) extends MembershipChange {
+        override val plainSearchableString =
+          (plainSearchableMsgString +: title +: members).mkString(" ").trim
+      }
+
+      case class InviteMembers(
+          id: Long,
+          time: DateTime,
+          fromNameOption: Option[String],
+          fromId: Long,
+          textOption: Option[RichText],
+          members: Seq[String]
+      ) extends MembershipChange {
+        override val plainSearchableString =
+          (plainSearchableMsgString +: members).mkString(" ").trim
+      }
+
+      case class RemoveMembers(
+          id: Long,
+          time: DateTime,
+          fromNameOption: Option[String],
+          fromId: Long,
+          textOption: Option[RichText],
+          members: Seq[String]
+      ) extends MembershipChange {
+        override val plainSearchableString =
+          (plainSearchableMsgString +: members).mkString(" ").trim
+      }
+    }
   }
 }
 
@@ -308,7 +336,7 @@ object Content {
   case class Location(
       lat: BigDecimal,
       lon: BigDecimal,
-      liveDurationSecOption: Option[Int],
+      durationSecOption: Option[Int],
   ) extends Content
 
   /** We don't really care about poll result */

@@ -1,75 +1,91 @@
 package org.fs.chm.dao
 
 import java.io.File
+import java.util.UUID
 
 import scala.collection.immutable.ListMap
 import scala.collection.immutable.TreeMap
 
 class EagerChatHistoryDao(
-    override val dataPath: File,
-    override val myself: Contact,
-    contactsRaw: Seq[Contact],
+    dataPathRoot: File,
+    dataset: Dataset,
+    myself1: User,
+    rawUsers: Seq[User],
     chatsWithMessages: ListMap[Chat, IndexedSeq[Message]]
 ) extends ChatHistoryDao {
+
+  override def datasets: Seq[Dataset] = Seq(dataset)
+
+  override def dataPath(dsUuid: UUID): File = dataPathRoot
+
+  override def myself(dsUuid: UUID): User = myself1
 
   // We can't use mapValues because it's lazy...
   val messagesMap: ListMap[Chat, TreeMap[Long, Message]] = chatsWithMessages map {
     case (c, ms) => (c, TreeMap(ms.map(m => (m.id, m)): _*))
   }
 
-  override val contacts: Seq[Contact] = {
-    val allContactsFromIdName =
-      chatsWithMessages.values.flatten.toSet.map((m: Message) => (m.fromId, m.fromName))
-    allContactsFromIdName.toSeq
+  val users1: Seq[User] = {
+    val allUsersFromIdName =
+      chatsWithMessages.values.flatten.toSet.map((m: Message) => (m.fromId, m.fromNameOption))
+    allUsersFromIdName.toSeq
       .map({
-        case (fromId, _) if fromId == myself.id =>
-          myself
-        case (fromId, fromName) =>
-          contactsRaw
+        case (fromId, _) if fromId == myself1.id =>
+          myself1
+        case (fromId, fromNameOption) =>
+          rawUsers
             .find(_.id == fromId)
-            .orElse(contactsRaw.find(_.prettyName == fromName))
+            .orElse(rawUsers.find(u => fromNameOption contains u.prettyName))
             .getOrElse(
-              Contact(
+              User(
+                dsUuid             = dataset.uuid,
                 id                 = fromId,
-                firstNameOption    = Some(fromName),
+                firstNameOption    = fromNameOption,
                 lastNameOption     = None,
                 usernameOption     = None,
                 phoneNumberOption  = None,
-                lastSeenDateOption = None
+                lastSeenTimeOption = None
               ))
             .copy(id = fromId)
       })
       .sortBy(c => (c.id, c.prettyName))
   }
 
-  val interlocutorsMap: Map[Chat, Seq[Contact]] = chatsWithMessages map {
+  override def users(dsUuid: UUID): Seq[User] = users1
+
+  val interlocutorsMap: Map[Chat, Seq[User]] = chatsWithMessages map {
     case (c, ms) =>
-      val contactsWithoutMe: Seq[Contact] =
+      val usersWithoutMe: Seq[User] =
         ms.toSet
-          .map((m: Message) => (m.fromId, m.fromName))
+          .map((m: Message) => (m.fromId, m.fromNameOption))
           .toSeq
-          .filter(_._1 != myself.id)
+          .filter(_._1 != myself1.id)
           .map {
-            case (fromId, fromName) =>
-              contacts
+            case (fromId, fromNameOption) =>
+              users1
                 .find(_.id == fromId)
-                .orElse(contacts.find(_.prettyName == fromName))
+                .orElse(users1.find(u => fromNameOption contains u.prettyName))
                 .get
           }
 
-      (c, myself +: contactsWithoutMe.sortBy(c => (c.id, c.prettyName)))
+      (c, myself1 +: usersWithoutMe.sortBy(c => (c.id, c.prettyName)))
   }
 
-  override def chats = chatsWithMessages.keys.toSeq
+  val chats1 = chatsWithMessages.keys.toSeq
 
-  override def interlocutors(chat: Chat): Seq[Contact] = interlocutorsMap(chat)
+  override def chats(dsUuid: UUID) = chats1
 
-  override def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
+  override def interlocutors(chat: Chat): Seq[User] = interlocutorsMap(chat)
+
+  override def messagesBefore(chat: Chat, msgId: Long, limit: Int): Option[IndexedSeq[Message]] = {
     val messages = chatsWithMessages(chat)
-    val idx      = messages.indexWhere(_.id == msgId)
-    require(idx > -1, "Message not found, that's unexpected")
-    val upperLimit = (idx - limit) max 0
-    messages.slice(upperLimit, idx)
+    val idx = messages.indexWhere(_.id == msgId)
+    if (idx < 0) {
+      None
+    } else {
+      val upperLimit = (idx - limit) max 0
+      Some(messages.slice(upperLimit, idx))
+    }
   }
 
   override def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message] = {
@@ -83,11 +99,11 @@ class EagerChatHistoryDao(
     Seq(
       "EagerChatHistoryDao(",
       "  myself:",
-      "    " + myself.toString + "\n",
-      "  contacts:",
-      contacts.mkString("    ", "\n    ", "\n"),
+      "    " + myself1.toString + "\n",
+      "  users:",
+      users1.mkString("    ", "\n    ", "\n"),
       "  chats:",
-      chats.mkString("    ", "\n    ", "\n"),
+      chats1.mkString("    ", "\n    ", "\n"),
       ")"
     ).mkString("\n")
   }

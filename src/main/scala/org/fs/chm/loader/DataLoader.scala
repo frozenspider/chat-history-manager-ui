@@ -5,11 +5,11 @@ import java.io.FileNotFoundException
 
 import org.fs.chm.dao.ChatHistoryDao
 
-trait DataLoader {
-  def loadData(path: File): ChatHistoryDao = {
+trait DataLoader[D <: ChatHistoryDao] {
+  def loadData(path: File): D = {
     if (!path.exists()) throw new FileNotFoundException(s"File ${path.getAbsolutePath} not found")
     loadDataInner(path)
   }
 
-  protected def loadDataInner(path: File): ChatHistoryDao
+  protected def loadDataInner(path: File): D
 }

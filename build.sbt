@@ -29,7 +29,7 @@ lazy val root = (project in file("."))
     buildInfoUsePackageAsPath := true
   )
 
-resolvers += "jitpack"  at "https://jitpack.io"
+resolvers += "jitpack" at "https://jitpack.io"
 
 // Regular dependencies
 libraryDependencies ++= Seq(
@@ -49,11 +49,16 @@ libraryDependencies ++= Seq(
   "com.github.lostromb.concentus" %  "Concentus"                % "fdf276ed6b",
   // WebP codec
   "org.scijava"                   %  "native-lib-loader"        % "2.3.4",
-  // Other
+  // Utility
   "com.github.frozenspider"       %% "fs-common-utils"          % "0.1.3",
-  "commons-codec"                 %  "commons-codec"            % "1.11",
-  "org.apache.commons"            %  "commons-lang3"            % "3.4",
+  "commons-codec"                 %  "commons-codec"            % "1.13",
+  "org.apache.commons"            %  "commons-lang3"            % "3.9",
   "com.github.nscala-time"        %% "nscala-time"              % "2.16.0",
+  // Database
+  "org.tpolecat"                  %% "doobie-core"              % "0.8.8",
+  "org.tpolecat"                  %% "doobie-h2"                % "0.8.8",
+  "org.flywaydb"                  %  "flyway-core"              % "6.1.3",
+  // Other
   "org.json4s"                    %% "json4s-jackson"           % "3.6.7",
   "org.json4s"                    %% "json4s-ext"               % "3.6.7",
   "com.typesafe"                  %  "config"                   % "1.3.2",

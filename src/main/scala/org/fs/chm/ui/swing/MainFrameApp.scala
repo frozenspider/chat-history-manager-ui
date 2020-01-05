@@ -67,7 +67,11 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
     import scala.swing.BorderPanel.Position._
 
     layout(new ScrollPane(new BoxPanel(Orientation.Vertical) {
-      for (c <- dao.chats) {
+      // TODO: Support separate datasets
+      for {
+        ds <- dao.datasets
+        c <- dao.chats(ds.uuid)
+      } {
         contents += new ChatListItem(c, chatSelected, dao)
       }
     }) {
@@ -163,7 +167,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
               Lock.synchronized {
                 val (viewPos1, viewSize1) = msgAreaContainer.view.posAndSize
                 md.insert("<div id=\"loading\"><hr><p> Loading... </p><hr></div>", MessageInsertPosition.Leading)
-                val addedMessages = dao.messagesBefore(c, loadStatus.firstId, MsgBatchLoadSize)
+                val addedMessages = dao.messagesBefore(c, loadStatus.firstId, MsgBatchLoadSize).get
                 loadStatusCache = loadStatusCache.updated(
                   c,
                   loadStatusCache(c).copy(
