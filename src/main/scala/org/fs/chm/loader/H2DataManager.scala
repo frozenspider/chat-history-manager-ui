@@ -20,6 +20,7 @@ class H2DataManager extends DataLoader {
   private val options = Seq(
     //"TRACE_LEVEL_FILE=2",
     //"TRACE_LEVEL_SYSTEM_OUT=2",
+    "COMPRESS=TRUE",
     "DATABASE_TO_UPPER=false"
   )
   private val optionsString = options.mkString(";", ";", "")
