@@ -3,6 +3,7 @@ package org.fs.chm.ui.swing
 import java.awt.Desktop
 import java.awt.EventQueue
 import java.awt.event.AdjustmentEvent
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.immutable.ListMap
@@ -23,9 +24,10 @@ import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.webp.Webp
+import org.fs.chm.utility.SimpleConfigAware
 import org.fs.utility.Imports._
 
-class MainFrameApp extends SimpleSwingApplication { app =>
+class MainFrameApp extends SimpleSwingApplication with SimpleConfigAware { app =>
   private val Lock             = new Object
   private val MsgBatchLoadSize = 100
 
@@ -125,11 +127,15 @@ class MainFrameApp extends SimpleSwingApplication { app =>
   def showOpenDialog(): Unit = {
     // TODO: Show errors
     val chooser = DataLoaders.chooser
+    if (config.contains("last_database_file")) {
+      chooser.selectedFile = new File(config("last_database_file"))
+    }
     chooser.showOpenDialog(null) match {
       case FileChooser.Result.Cancel => // NOOP
       case FileChooser.Result.Error  => // Mostly means that dialog was dismissed, also NOOP
       case FileChooser.Result.Approve => {
         changeChatsClickable(false)
+        config.update("last_database_file", chooser.selectedFile.getAbsolutePath)
         Future { // To release UI lock
           Swing.onEDT {
             val dao = if (DataLoaders.h2ff.accept(chooser.selectedFile)) {
