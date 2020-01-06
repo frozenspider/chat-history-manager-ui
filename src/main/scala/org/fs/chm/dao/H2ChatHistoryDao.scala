@@ -107,7 +107,7 @@ class H2ChatHistoryDao(
 
             // TODO: Iterate over smaller subset?
             for (m <- dao.lastMessages(c, c.msgCount + 1)) {
-              val (rm, rcOption, rrtOption) = Raws.fromMessage(ds.uuid, c.id, m)
+              val (rm, rcOption, rrtEls) = Raws.fromMessage(ds.uuid, c.id, m)
               query = query flatMap (_ => queries.rawMessages.insert(rm))
 
               // Content
@@ -116,14 +116,8 @@ class H2ChatHistoryDao(
               }
 
               // RichText
-              for ((rrt, rrtEls) <- rrtOption) {
-                val rrtQuery = for {
-                  rrtId <- queries.rawRichText.insert(rrt, ds.uuid, c.id, m.id)
-                  combined <- (for (rrtEl <- rrtEls) yield {
-                    queries.rawRichTextElements.insert(rrtEl, rrtId)
-                  }) reduce ((a, b) => a flatMap (_ => b))
-                } yield combined
-                query = query flatMap (_ => rrtQuery)
+              for (rrtEl <- rrtEls) {
+                query = query flatMap (_ => queries.rawRichTextElements.insert(rrtEl, ds.uuid, c.id, m.id))
               }
             }
           }
@@ -252,31 +246,24 @@ class H2ChatHistoryDao(
         );
         """,
         sql"""
-        CREATE TABLE messages_text (
+        CREATE TABLE messages_text_elements (
           id                  IDENTITY NOT NULL,
           ds_uuid             UUID NOT NULL,
           chat_id             BIGINT NOT NULL,
           message_id          BIGINT NOT NULL,
-          plaintext           VARCHAR NOT NULL,
-          PRIMARY KEY (id),
-          UNIQUE      (ds_uuid, chat_id, message_id),
-          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
-          FOREIGN KEY (chat_id) REFERENCES chats (id),
-          FOREIGN KEY (message_id) REFERENCES messages (id)
-        );
-        """,
-        sql"""
-        CREATE TABLE messages_text_element (
-          id                  IDENTITY NOT NULL,
-          text_id             BIGINT NOT NULL,
           element_type        VARCHAR(255) NOT NULL,
           text                VARCHAR,
           href                VARCHAR(4095),
           hidden              BOOLEAN,
           language            VARCHAR(4095),
           PRIMARY KEY (id),
-          FOREIGN KEY (text_id) REFERENCES messages_text (id)
+          FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
+          FOREIGN KEY (chat_id) REFERENCES chats (id),
+          FOREIGN KEY (message_id) REFERENCES messages (id)
         );
+        """,
+        sql"""
+        CREATE INDEX messages_text_elements_idx ON messages_text_elements(ds_uuid, chat_id, message_id);
         """,
         sql"""
         CREATE TABLE messages_content (
@@ -388,28 +375,17 @@ class H2ChatHistoryDao(
           ++ fr")").update.run
     }
 
-    object rawRichText {
-      def insert(rrt: RawRichText, dsUuid: UUID, chatId: Long, messageId: Long): ConnectionIO[Long] =
-        (fr"INSERT INTO messages_text(ds_uuid, chat_id, message_id, plaintext) VALUES ("
-          ++ fr"${dsUuid}, ${chatId}, ${messageId}, ${rrt.plaintext}"
-          ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
-
-      def selectId(dsUuid: UUID, chatId: Long, messageId: Long): ConnectionIO[Option[Long]] =
-        (fr"SELECT id FROM messages_text"
-          ++ fr"WHERE ds_uuid = ${dsUuid} AND chat_id = ${chatId} AND message_id = ${messageId}").query[Long].option
-    }
-
     object rawRichTextElements {
-      private val colsNoIdentityFr = fr"element_type, text, href, hidden, language"
+      private val colsNoKeysFr = fr"element_type, text, href, hidden, language"
 
-      def select(richTextId: Long) =
-        (fr"SELECT" ++ colsNoIdentityFr ++ fr"FROM messages_text_element"
-          ++ fr"WHERE text_id = ${richTextId}"
+      def selectAll(dsUuid: UUID, chatId: Long, messageId: Long) =
+        (fr"SELECT" ++ colsNoKeysFr ++ fr"FROM messages_text_elements"
+          ++ fr"WHERE ds_uuid = ${dsUuid} AND chat_id = ${chatId} AND message_id = ${messageId}"
           ++ fr"ORDER BY id").query[RawRichTextElement].to[Seq]
 
-      def insert(rrte: RawRichTextElement, textId: Long) =
-        (fr"INSERT INTO messages_text_element(text_id," ++ colsNoIdentityFr ++ fr") VALUES ("
-          ++ fr"${textId}, ${rrte.elementType}, ${rrte.text},"
+      def insert(rrte: RawRichTextElement, dsUuid: UUID, chatId: Long, messageId: Long) =
+        (fr"INSERT INTO messages_text_elements(ds_uuid, chat_id, message_id, " ++ colsNoKeysFr ++ fr") VALUES ("
+          ++ fr"${dsUuid}, ${chatId}, ${messageId}, ${rrte.elementType}, ${rrte.text},"
           ++ fr"${rrte.hrefOption}, ${rrte.hiddenOption}, ${rrte.languageOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
     }
@@ -459,16 +435,11 @@ class H2ChatHistoryDao(
   object Raws {
     def toMessage(rm: RawMessage): Message = {
       val textOption: Option[RichText] =
-        queries.rawRichText
-          .selectId(rm.dsUuid, rm.chatId, rm.id)
-          .flatMap {
-            // For some reason we do need explicit type ascriptions
-            case Some(rrtId) =>
-              queries.rawRichTextElements
-                .select(rrtId)
-                .map[Option[RichText]](els => Some(RichText(components = els map toRichTextElement)))
-            case None =>
-              connection.pure[Option[RichText]](None)
+        queries.rawRichTextElements
+          .selectAll(rm.dsUuid, rm.chatId, rm.id)
+          .map {
+            case els if els.nonEmpty => Some(RichText(components = els map toRichTextElement))
+            case _                   => None
           }
           .transact(txctr)
           .unsafeRunSync()
@@ -648,8 +619,8 @@ class H2ChatHistoryDao(
         dsUuid: UUID,
         chatId: Long,
         m: Message
-    ): (RawMessage, Option[RawContent], Option[(RawRichText, Seq[RawRichTextElement])]) = {
-      val rawRichTextOption = m.textOption map fromRichText
+    ): (RawMessage, Option[RawContent], Seq[RawRichTextElement]) = {
+      val rawRichTextEls = m.textOption map fromRichText getOrElse Seq.empty
       val template = RawMessage(
         dsUuid                 = dsUuid,
         chatId                 = chatId,
@@ -719,10 +690,10 @@ class H2ChatHistoryDao(
             members     = m.members
           ) -> None
       }
-      (rawMessage, rawContentOption, rawRichTextOption)
+      (rawMessage, rawContentOption, rawRichTextEls)
     }
 
-    def fromRichText(t: RichText): (RawRichText, Seq[RawRichTextElement]) = {
+    def fromRichText(t: RichText): Seq[RawRichTextElement] = {
       val rawEls: Seq[RawRichTextElement] = t.components.map { el =>
         val template = RawRichTextElement(
           elementType    = "",
@@ -749,7 +720,7 @@ class H2ChatHistoryDao(
             )
         }
       }
-      (RawRichText(t.plainSearchableString), rawEls)
+      rawEls
     }
 
     def fromContent(c: Content): RawContent = {
@@ -879,10 +850,6 @@ object H2ChatHistoryDao {
       pathOption: Option[String],
       widthOption: Option[Int],
       heightOption: Option[Int]
-  )
-
-  case class RawRichText(
-      plaintext: String
   )
 
   case class RawRichTextElement(
