@@ -26,8 +26,9 @@ import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.webp.Webp
 import org.fs.chm.utility.SimpleConfigAware
 import org.fs.utility.Imports._
+import org.slf4s.Logging
 
-class MainFrameApp extends SimpleSwingApplication with SimpleConfigAware { app =>
+class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfigAware { app =>
   private val Lock             = new Object
   private val MsgBatchLoadSize = 100
 
@@ -133,6 +134,9 @@ class MainFrameApp extends SimpleSwingApplication with SimpleConfigAware { app =
     chooser.showOpenDialog(null) match {
       case FileChooser.Result.Cancel => // NOOP
       case FileChooser.Result.Error  => // Mostly means that dialog was dismissed, also NOOP
+      case FileChooser.Result.Approve if loadedDaos.keys.exists(_ isLoaded chooser.selectedFile) =>
+        // TODO: Show error?
+        log.warn(s"File ${chooser.selectedFile} is already loaded")
       case FileChooser.Result.Approve => {
         changeChatsClickable(false)
         config.update("last_database_file", chooser.selectedFile.getAbsolutePath)

@@ -108,4 +108,15 @@ class EagerChatHistoryDao(
       ")"
     ).mkString("\n")
   }
+
+  override def isLoaded(f: File): Boolean = {
+    f != null && this.dataPathRoot == f.getParentFile
+  }
+
+  override def equals(that: Any): Boolean = that match {
+    case that: EagerChatHistoryDao => this.name == that.name && that.isLoaded(this.dataPathRoot)
+    case _                         => false
+  }
+
+  override def hashCode(): Int = this.name.hashCode + 17 * this.dataPathRoot.hashCode
 }

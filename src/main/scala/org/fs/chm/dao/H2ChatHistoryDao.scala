@@ -185,6 +185,17 @@ class H2ChatHistoryDao(
     closeTransactor()
   }
 
+  override def isLoaded(f: File): Boolean = {
+    f != null && this.dataPathRoot == f.getParentFile
+  }
+
+  override def equals(that: Any): Boolean = that match {
+    case that: H2ChatHistoryDao => this.name == that.name && that.isLoaded(this.dataPathRoot)
+    case _                      => false
+  }
+
+  override def hashCode(): Int = this.name.hashCode + 17 * this.dataPathRoot.hashCode
+
   object queries {
     lazy val createDdl: ConnectionIO[Int] = {
       val createQueries = Seq(
