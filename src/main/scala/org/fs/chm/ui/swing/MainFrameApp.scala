@@ -15,23 +15,26 @@ import org.fs.chm.dao._
 import org.fs.chm.ui.swing.MessagesService._
 import org.fs.chm.ui.swing.chatlist.ChatListSelectionCallbacks
 import org.fs.chm.ui.swing.chatlist.DaoItem
+import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
+import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.webp.Webp
 import org.fs.utility.Imports._
 
-class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication { app =>
+class MainFrameApp extends SimpleSwingApplication { app =>
   val Lock             = new Object
   val MsgBatchLoadSize = 100
 
-  var documentsCache:  Map[Chat, MessageDocument] = Map.empty
-  var loadStatusCache: Map[Chat, LoadStatus]      = Map.empty
+  var loadedDaos:      Seq[ChatHistoryDao]               = Seq.empty
+  var documentsCache:  Map[ChatWithDao, MessageDocument] = Map.empty
+  var loadStatusCache: Map[ChatWithDao, LoadStatus]      = Map.empty
 
-  var currentChatOption:      Option[Chat]  = None
+  var currentChatOption:      Option[ChatWithDao]  = None
   var loadMessagesInProgress: AtomicBoolean = new AtomicBoolean(false)
 
   val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
   val htmlKit       = new ExtendedHtmlEditorKit(desktopOption)
-  val msgService    = new MessagesService(dao, htmlKit)
+  val msgService    = new MessagesService(htmlKit)
 
   // TODO:
   // reply-to (make clickable)
@@ -65,19 +68,21 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication { app =>
 //    }
   }
 
-  lazy val chatsPane = new BorderPanel {
-    import scala.swing.BorderPanel.Position._
+  lazy val (chatsPane, chatsListContents) = {
+    val panePreferredWidth = 300
 
-    layout(new ScrollPane(new BoxPanel(Orientation.Vertical) {
-      // TODO: Support separate DAOs
-      contents += new DaoItem(new ChatListSelectionCallbacks {
-        override def chatSelected(c: Chat): Unit = app.chatSelected(c)
-      }, dao)
-    }) {
-      verticalScrollBar.unitIncrement = 10
-      verticalScrollBarPolicy   = ScrollPane.BarPolicy.Always
-      horizontalScrollBarPolicy = ScrollPane.BarPolicy.Never
-    }) = Center
+    val panel = new BoxPanel(Orientation.Vertical)
+    panel.preferredWidth = panePreferredWidth
+
+    new BorderPanel {
+      import scala.swing.BorderPanel.Position._
+
+      layout(new ScrollPane(panel) {
+        verticalScrollBar.unitIncrement = 10
+        verticalScrollBarPolicy = ScrollPane.BarPolicy.Always
+        horizontalScrollBarPolicy = ScrollPane.BarPolicy.Never
+      }) = Center
+    } -> panel.contents
   }
 
   lazy val msgAreaContainer: MessagesAreaContainer = {
@@ -113,7 +118,16 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication { app =>
   // Events
   //
 
-  def chatSelected(c: Chat): Unit = {
+  def loadDao(dao: ChatHistoryDao): Unit = {
+    Swing.onEDTWait(Lock.synchronized {
+      loadedDaos = dao +: loadedDaos
+      chatsListContents += new DaoItem(new ChatListSelectionCallbacks {
+        override def chatSelected(cc: ChatWithDao): Unit = app.chatSelected(cc)
+      }, dao)
+    })
+  }
+
+  def chatSelected(cc: ChatWithDao): Unit = {
     Lock.synchronized {
       currentChatOption         = None
       msgAreaContainer.document = msgService.pleaseWaitDoc
@@ -121,11 +135,11 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication { app =>
     }
     val f = Future {
       // If the chat has been already rendered, restore previous document as-is
-      if (!documentsCache.contains(c)) {
+      if (!documentsCache.contains(cc)) {
         val md       = msgService.createStubDoc
-        val messages = dao.lastMessages(c, MsgBatchLoadSize)
+        val messages = cc.dao.lastMessages(cc.chat, MsgBatchLoadSize)
         for (m <- messages) {
-          md.insert(msgService.renderMessageHtml(c, m), MessageInsertPosition.Trailing)
+          md.insert(msgService.renderMessageHtml(cc, m), MessageInsertPosition.Trailing)
         }
         val loadStatus = LoadStatus(
           firstId      = messages.headOption map (_.id) getOrElse (-1),
@@ -134,15 +148,15 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication { app =>
           endReached   = true
         )
         Lock.synchronized {
-          loadStatusCache = loadStatusCache + ((c, loadStatus))
-          documentsCache  = documentsCache + ((c, md))
+          loadStatusCache = loadStatusCache + ((cc, loadStatus))
+          documentsCache  = documentsCache + ((cc, md))
         }
       }
     }
     f foreach { _ =>
       Swing.onEDTWait(Lock.synchronized {
-        currentChatOption = Some(c)
-        val doc = documentsCache(c).doc
+        currentChatOption = Some(cc)
+        val doc = documentsCache(cc).doc
         msgAreaContainer.document = doc
         msgAreaContainer.scroll.toEnd() // FIXME: Doesn't always work!
         changeChatsClickable(true)
@@ -154,22 +168,22 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication { app =>
     currentChatOption match {
       case _ if loadMessagesInProgress.get => // NOOP
       case None                            => // NOOP
-      case Some(c) =>
+      case Some(cc) =>
         Lock.synchronized {
           msgAreaContainer.caretUpdatesEnabled = false
-          val loadStatus = loadStatusCache(c)
+          val loadStatus = loadStatusCache(cc)
           if (!loadStatus.beginReached) {
             changeChatsClickable(false)
             loadMessagesInProgress set true
-            val md = documentsCache(c)
+            val md = documentsCache(cc)
             val f = Future {
               Lock.synchronized {
                 val (viewPos1, viewSize1) = msgAreaContainer.view.posAndSize
                 md.insert("<div id=\"loading\"><hr><p> Loading... </p><hr></div>", MessageInsertPosition.Leading)
-                val addedMessages = dao.messagesBefore(c, loadStatus.firstId, MsgBatchLoadSize).get
+                val addedMessages = cc.dao.messagesBefore(cc.chat, loadStatus.firstId, MsgBatchLoadSize).get
                 loadStatusCache = loadStatusCache.updated(
-                  c,
-                  loadStatusCache(c).copy(
+                  cc,
+                  loadStatusCache(cc).copy(
                     firstId      = addedMessages.headOption map (_.id) getOrElse (-1),
                     beginReached = addedMessages.size < MsgBatchLoadSize
                   )
@@ -180,7 +194,7 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication { app =>
                   // TODO: Preserve selection
                   md.removeFirst()
                   for (m <- addedMessages.reverse) {
-                    md.insert(msgService.renderMessageHtml(c, m), MessageInsertPosition.Leading)
+                    md.insert(msgService.renderMessageHtml(cc, m), MessageInsertPosition.Leading)
                   }
                   val (_, viewSize2) = msgAreaContainer.view.posAndSize
                   val heightDiff     = viewSize2.height - viewSize1.height

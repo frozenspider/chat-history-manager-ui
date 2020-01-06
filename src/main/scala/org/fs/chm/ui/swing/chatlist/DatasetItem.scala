@@ -7,6 +7,7 @@ import scala.swing.Label
 
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Dataset
+import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.utility.Imports._
 
@@ -24,7 +25,7 @@ class DatasetItem(
   }
 
   val items: Seq[ChatListItem] =
-    dao.chats(ds.uuid) map (c => new ChatListItem(c, callbacks, dao))
+    dao.chats(ds.uuid) map (c => new ChatListItem(ChatWithDao(c, dao), callbacks))
 
   {
     val c = new Constraints

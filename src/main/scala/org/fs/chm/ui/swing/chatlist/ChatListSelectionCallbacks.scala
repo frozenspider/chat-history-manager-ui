@@ -1,7 +1,7 @@
 package org.fs.chm.ui.swing.chatlist
 
-import org.fs.chm.dao.Chat
+import org.fs.chm.ui.swing.general.ChatWithDao
 
 trait ChatListSelectionCallbacks {
-  def chatSelected(c: Chat): Unit
+  def chatSelected(cc: ChatWithDao): Unit
 }

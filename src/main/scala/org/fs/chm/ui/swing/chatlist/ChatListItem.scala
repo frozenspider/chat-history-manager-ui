@@ -11,29 +11,27 @@ import javax.swing.SwingUtilities
 import javax.swing.border.EmptyBorder
 import javax.swing.border.LineBorder
 import org.apache.commons.lang3.StringEscapeUtils
-import org.fs.chm.dao.Chat
-import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.ChatType._
 import org.fs.chm.dao.Content
 import org.fs.chm.dao.Message
+import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
 
 class ChatListItem(
-    c: Chat,
+    cc: ChatWithDao,
     callbacks: ChatListSelectionCallbacks,
-    dao: ChatHistoryDao
 ) extends BorderPanel {
-  val labelPreferredWidth = 200
+  val labelPreferredWidth = 200 // TODO: Remove
   val labelBorderWidth    = 3
 
-  val interlocutors = dao.interlocutors(c)
+  val interlocutors = cc.dao.interlocutors(cc.chat)
 
   {
     val emptyBorder = new EmptyBorder(labelBorderWidth, labelBorderWidth, labelBorderWidth, labelBorderWidth)
 
     layout(new BorderPanel {
       // Name
-      val nameString = c.nameOption getOrElse "<Unnamed>"
+      val nameString = cc.chat.nameOption getOrElse "<Unnamed>"
       val nameLabel = new Label(
         s"""<html><p style="text-align: left; width: ${labelPreferredWidth}px;">"""
           + StringEscapeUtils.escapeHtml4(nameString)
@@ -42,7 +40,7 @@ class ChatListItem(
       layout(nameLabel) = North
 
       // Last message
-      val lastMsgString = dao.lastMessages(c, 1) match {
+      val lastMsgString = cc.dao.lastMessages(cc.chat, 1) match {
         case x if x.isEmpty => "<No messages>"
         case msg +: _       => simpleRenderMsg(msg)
       }
@@ -57,7 +55,7 @@ class ChatListItem(
     }) = Center
 
     // Type
-    val tpeString = c.tpe match {
+    val tpeString = cc.chat.tpe match {
       case Personal     => ""
       case PrivateGroup => "(" + interlocutors.size + ")"
     }
@@ -83,7 +81,7 @@ class ChatListItem(
       ChatListItem.SelectedOption = Some(this)
       markSelected()
     }
-    callbacks.chatSelected(c)
+    callbacks.chatSelected(cc)
   }
 
   override def enabled_=(b: Boolean): Unit = {
