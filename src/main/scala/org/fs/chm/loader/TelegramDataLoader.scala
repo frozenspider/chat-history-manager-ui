@@ -47,6 +47,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
 
     new EagerChatHistoryDao(
+      name              = "result.json from " + path.getName,
       dataPathRoot      = path,
       dataset           = dataset,
       myself1           = myself,

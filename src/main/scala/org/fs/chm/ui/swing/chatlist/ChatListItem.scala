@@ -1,4 +1,4 @@
-package org.fs.chm.ui.swing
+package org.fs.chm.ui.swing.chatlist
 
 import java.awt.Color
 import java.awt.{ Container => AwtContainer }
@@ -16,10 +16,11 @@ import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.ChatType._
 import org.fs.chm.dao.Content
 import org.fs.chm.dao.Message
+import org.fs.chm.ui.swing.general.SwingUtils._
 
 class ChatListItem(
     c: Chat,
-    selectionCallback: Chat => Unit,
+    callbacks: ChatListSelectionCallbacks,
     dao: ChatHistoryDao
 ) extends BorderPanel {
   val labelPreferredWidth = 200
@@ -28,7 +29,7 @@ class ChatListItem(
   val interlocutors = dao.interlocutors(c)
 
   {
-    val emptyBorder   = new EmptyBorder(labelBorderWidth, labelBorderWidth, labelBorderWidth, labelBorderWidth)
+    val emptyBorder = new EmptyBorder(labelBorderWidth, labelBorderWidth, labelBorderWidth, labelBorderWidth)
 
     layout(new BorderPanel {
       // Name
@@ -48,7 +49,7 @@ class ChatListItem(
       val msgLabel = new Label(lastMsgString)
       msgLabel.horizontalAlignment = Alignment.Left
       msgLabel.foreground = new Color(0, 0, 0, 100)
-      msgLabel.preferredSize = new Dimension(labelPreferredWidth, msgLabel.preferredSize.height)
+      msgLabel.preferredWidth = labelPreferredWidth
       msgLabel.border = emptyBorder
       layout(msgLabel) = Center
 
@@ -61,7 +62,7 @@ class ChatListItem(
       case PrivateGroup => "(" + interlocutors.size + ")"
     }
     val tpeLabel = new Label(tpeString)
-    tpeLabel.preferredSize = new Dimension(30, tpeLabel.preferredSize.height)
+    tpeLabel.preferredWidth = 30
     tpeLabel.verticalAlignment = Alignment.Center
     layout(tpeLabel) = East
 
@@ -82,7 +83,7 @@ class ChatListItem(
       ChatListItem.SelectedOption = Some(this)
       markSelected()
     }
-    selectionCallback(c)
+    callbacks.chatSelected(c)
   }
 
   override def enabled_=(b: Boolean): Unit = {

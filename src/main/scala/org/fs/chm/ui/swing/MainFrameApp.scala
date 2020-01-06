@@ -13,11 +13,13 @@ import com.github.nscala_time.time.Imports._
 import javax.swing.event.HyperlinkEvent
 import org.fs.chm.dao._
 import org.fs.chm.ui.swing.MessagesService._
+import org.fs.chm.ui.swing.chatlist.ChatListSelectionCallbacks
+import org.fs.chm.ui.swing.chatlist.DaoItem
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.webp.Webp
 import org.fs.utility.Imports._
 
-class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
+class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication { app =>
   val Lock             = new Object
   val MsgBatchLoadSize = 100
 
@@ -67,13 +69,10 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
     import scala.swing.BorderPanel.Position._
 
     layout(new ScrollPane(new BoxPanel(Orientation.Vertical) {
-      // TODO: Support separate datasets
-      for {
-        ds <- dao.datasets
-        c <- dao.chats(ds.uuid)
-      } {
-        contents += new ChatListItem(c, chatSelected, dao)
-      }
+      // TODO: Support separate DAOs
+      contents += new DaoItem(new ChatListSelectionCallbacks {
+        override def chatSelected(c: Chat): Unit = app.chatSelected(c)
+      }, dao)
     }) {
       verticalScrollBar.unitIncrement = 10
       verticalScrollBarPolicy   = ScrollPane.BarPolicy.Always
@@ -104,8 +103,8 @@ class MainFrameApp(dao: ChatHistoryDao) extends SimpleSwingApplication {
   def changeChatsClickable(enabled: Boolean): Unit = {
     chatsPane.enabled = enabled
     def changeClickableRecursive(c: Component): Unit = c match {
-      case i: ChatListItem => i.enabled = enabled
-      case c: Container    => c.contents foreach changeClickableRecursive
+      case i: DaoItem   => i.enabled = enabled
+      case c: Container => c.contents foreach changeClickableRecursive
     }
     changeClickableRecursive(chatsPane)
   }

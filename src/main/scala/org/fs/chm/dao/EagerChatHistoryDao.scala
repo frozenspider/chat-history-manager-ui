@@ -7,6 +7,7 @@ import scala.collection.immutable.ListMap
 import scala.collection.immutable.TreeMap
 
 class EagerChatHistoryDao(
+    override val name: String,
     dataPathRoot: File,
     dataset: Dataset,
     myself1: User,

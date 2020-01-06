@@ -26,6 +26,8 @@ class H2ChatHistoryDao(
 
   import org.fs.chm.dao.H2ChatHistoryDao._
 
+  override def name: String = s"Database '${dataPathRoot.getName}'"
+
   override def datasets: Seq[Dataset] = {
     queries.datasets.selectAll.transact(txctr).unsafeRunSync()
   }

@@ -12,6 +12,9 @@ import org.fs.utility.Imports._
 trait ChatHistoryDao extends AutoCloseable {
   sys.addShutdownHook(close())
 
+  /** User-friendly name of a loaded data */
+  def name: String
+
   def datasets: Seq[Dataset]
 
   /** Base of relative paths specified in messages */
