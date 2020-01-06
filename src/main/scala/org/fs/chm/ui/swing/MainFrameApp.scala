@@ -1,6 +1,7 @@
 package org.fs.chm.ui.swing
 
 import java.awt.Desktop
+import java.awt.EventQueue
 import java.awt.event.AdjustmentEvent
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -8,11 +9,13 @@ import scala.collection.immutable.ListMap
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.swing._
-import scala.swing.event.ButtonClicked
 
 import com.github.nscala_time.time.Imports._
 import javax.swing.event.HyperlinkEvent
+import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
+import org.fs.chm.loader.H2DataManager
+import org.fs.chm.loader.TelegramDataLoader
 import org.fs.chm.ui.swing.MessagesService._
 import org.fs.chm.ui.swing.chatlist.ChatListSelectionCallbacks
 import org.fs.chm.ui.swing.chatlist.DaoItem
@@ -23,17 +26,17 @@ import org.fs.chm.ui.swing.webp.Webp
 import org.fs.utility.Imports._
 
 class MainFrameApp extends SimpleSwingApplication { app =>
-  val Lock             = new Object
-  val MsgBatchLoadSize = 100
+  private val Lock             = new Object
+  private val MsgBatchLoadSize = 100
 
-  var loadedDaos: ListMap[ChatHistoryDao, Map[Chat, ChatCache]] = ListMap.empty
+  private var loadedDaos: ListMap[ChatHistoryDao, Map[Chat, ChatCache]] = ListMap.empty
 
-  var currentChatOption:      Option[ChatWithDao] = None
-  var loadMessagesInProgress: AtomicBoolean       = new AtomicBoolean(false)
+  private var currentChatOption:      Option[ChatWithDao] = None
+  private var loadMessagesInProgress: AtomicBoolean       = new AtomicBoolean(false)
 
-  val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
-  val htmlKit       = new ExtendedHtmlEditorKit(desktopOption)
-  val msgService    = new MessagesService(htmlKit)
+  private val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
+  private val htmlKit       = new ExtendedHtmlEditorKit(desktopOption)
+  private val msgService    = new MessagesService(htmlKit)
 
   // TODO:
   // reply-to (make clickable)
@@ -57,14 +60,16 @@ class MainFrameApp extends SimpleSwingApplication { app =>
   val ui = new BorderPanel {
     import scala.swing.BorderPanel.Position._
 
-//    val browseBtn = new Button("Browse")
-//    listenTo(startBtn, browseBtn)
+    layout(menuBar)                = North
     layout(chatsPane)              = West
     layout(msgAreaContainer.panel) = Center
-//    reactions += {
-//      case ButtonClicked(`startBtn`)  => eventStartClick
-//      case ButtonClicked(`browseBtn`) => eventBrowseClick
-//    }
+  }
+
+  lazy val menuBar = new MenuBar {
+    val fileMenu = new Menu("File") {
+      contents += menuItem("Open Database", () => showOpenDialog())
+    }
+    contents += fileMenu
   }
 
   lazy val (chatsPane, chatsListContents) = {
@@ -117,13 +122,40 @@ class MainFrameApp extends SimpleSwingApplication { app =>
   // Events
   //
 
-  def loadDao(dao: ChatHistoryDao): Unit = {
-    Swing.onEDTWait(Lock.synchronized {
+  def showOpenDialog(): Unit = {
+    // TODO: Show errors
+    val chooser = DataLoaders.chooser
+    chooser.showOpenDialog(null) match {
+      case FileChooser.Result.Cancel => // NOOP
+      case FileChooser.Result.Error  => // Mostly means that dialog was dismissed, also NOOP
+      case FileChooser.Result.Approve => {
+        changeChatsClickable(false)
+        Future { // To release UI lock
+          Swing.onEDT {
+            val dao = if (DataLoaders.h2ff.accept(chooser.selectedFile)) {
+              DataLoaders.h2.loadData(chooser.selectedFile.getParentFile)
+            } else if (DataLoaders.tgFf.accept(chooser.selectedFile)) {
+              DataLoaders.tg.loadData(chooser.selectedFile.getParentFile)
+            } else {
+              throw new IllegalStateException("Unknown file type!")
+            }
+            loadDaoFromEDT(dao)
+          }
+        }
+      }
+    }
+  }
+
+  def loadDaoFromEDT(dao: ChatHistoryDao): Unit = {
+    require(EventQueue.isDispatchThread, "Should be called from EDT")
+    Lock.synchronized {
       loadedDaos = loadedDaos + (dao -> Map.empty) // TODO: Reverse?
       chatsListContents += new DaoItem(new ChatListSelectionCallbacks {
         override def chatSelected(cc: ChatWithDao): Unit = app.chatSelected(cc)
       }, dao)
-    })
+    }
+    chatsPane.validate()
+    changeChatsClickable(true)
   }
 
   def chatSelected(cc: ChatWithDao): Unit = {
@@ -223,15 +255,33 @@ class MainFrameApp extends SimpleSwingApplication { app =>
       loadedDaos = loadedDaos + (dao -> (loadedDaos(dao) + (chat -> cache)))
     }
 
-  case class ChatCache(
+  private case class ChatCache(
       msgDocOption: Option[MessageDocument],
       loadStatusOption: Option[LoadStatus]
   )
 
-  case class LoadStatus(
+  private case class LoadStatus(
       firstId: Long,
       lastId: Long,
       beginReached: Boolean,
       endReached: Boolean
   )
+
+  private object DataLoaders {
+    val h2 = new H2DataManager
+    val tg = new TelegramDataLoader
+
+    val h2ff = easyFileFilter(s"${BuildInfo.name} database (*${H2DataManager.DefaultExt})") { f =>
+      f.getName endsWith H2DataManager.DefaultExt
+    }
+
+    val tgFf = easyFileFilter("Telegram export JSON database (result.json)") { f =>
+      f.getName == "result.json"
+    }
+
+    val chooser = new FileChooser(null) {
+      peer.addChoosableFileFilter(h2ff)
+      peer.addChoosableFileFilter(tgFf)
+    }
+  }
 }

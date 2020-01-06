@@ -1,9 +1,14 @@
 package org.fs.chm.ui.swing.general
 
 import java.awt.Font
+import java.io.File
 
+import scala.swing.Action
 import scala.swing.Dimension
+import scala.swing.MenuItem
 import scala.swing.UIElement
+
+import javax.swing.filechooser.FileFilter
 
 object SwingUtils {
   implicit class RichUIElement(el: UIElement) {
@@ -19,4 +24,13 @@ object SwingUtils {
 
     def fontSize_=(s: Int) = el.font = new Font(el.font.getName, el.font.getStyle, s)
   }
+
+  def menuItem(title: String, action: () => _): MenuItem =
+    new MenuItem(new Action(title) { override def apply(): Unit = action() })
+
+  def easyFileFilter(desc: String)(filter: File => Boolean): FileFilter =
+    new FileFilter() {
+      override def accept(f: File): Boolean = f.isDirectory || filter(f)
+      override def getDescription:  String  = desc
+    }
 }
