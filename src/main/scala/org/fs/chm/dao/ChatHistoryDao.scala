@@ -50,8 +50,8 @@ trait ChatHistoryDao extends AutoCloseable {
 
   override def close(): Unit = {}
 
-  /** Whether given file is the one loaded in this DAO */
-  def isLoaded(f: File): Boolean
+  /** Whether given data path is the one loaded in this DAO */
+  def isLoaded(dataPathRoot: File): Boolean
 }
 
 case class Dataset(

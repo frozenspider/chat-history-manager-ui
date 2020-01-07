@@ -4,13 +4,16 @@ import java.awt.Font
 import java.io.File
 
 import scala.swing.Action
+import scala.swing.Dialog
 import scala.swing.Dimension
+import scala.swing.Font.Style
 import scala.swing.MenuItem
 import scala.swing.UIElement
 
 import javax.swing.filechooser.FileFilter
+import org.slf4s.Logging
 
-object SwingUtils {
+object SwingUtils extends Logging {
   implicit class RichUIElement(el: UIElement) {
     def width            = el.size.width
     def width_=(w: Int)  = el.peer.setSize(w, el.size.height)
@@ -27,9 +30,10 @@ object SwingUtils {
     def minimumHeight           = el.minimumSize.height
     def minimumHeight_=(h: Int) = el.minimumSize = new Dimension(el.minimumSize.width, h)
 
-    def fontSize = el.font.getSize
-
-    def fontSize_=(s: Int) = el.font = new Font(el.font.getName, el.font.getStyle, s)
+    def fontSize                    = el.font.getSize
+    def fontSize_=(s: Int)          = el.font = new Font(el.font.getName, el.font.getStyle, s)
+    def fontStyle                   = Style.values.find(_.id == el.font.getStyle).get
+    def fontStyle_=(s: Style.Value) = el.font = new Font(el.font.getName, s.id, el.font.getSize)
   }
 
   def menuItem(title: String, enabled: Boolean = true)(action: => Any): MenuItem = {
@@ -44,4 +48,14 @@ object SwingUtils {
       override def accept(f: File): Boolean = f.isDirectory || filter(f)
       override def getDescription:  String  = desc
     }
+
+  def showWarning(msg: String): Unit = {
+    log.warn(msg)
+    Dialog.showMessage(title = "Warining", message = msg, messageType = Dialog.Message.Warning)
+  }
+
+  def showError(msg: String): Unit = {
+    log.error(msg)
+    Dialog.showMessage(title = "Error", message = msg, messageType = Dialog.Message.Error)
+  }
 }

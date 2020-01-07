@@ -117,8 +117,8 @@ class EagerChatHistoryDao(
     ).mkString("\n")
   }
 
-  override def isLoaded(f: File): Boolean = {
-    f != null && this.dataPathRoot == f.getParentFile
+  override def isLoaded(dataPathRoot: File): Boolean = {
+    dataPathRoot != null && this.dataPathRoot == dataPathRoot
   }
 
   override def equals(that: Any): Boolean = that match {

@@ -218,8 +218,8 @@ class H2ChatHistoryDao(
     closeTransactor()
   }
 
-  override def isLoaded(f: File): Boolean = {
-    f != null && this.dataPathRoot == f.getParentFile
+  override def isLoaded(dataPathRoot: File): Boolean = {
+    dataPathRoot != null && this.dataPathRoot == dataPathRoot
   }
 
   object queries {

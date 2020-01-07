@@ -24,6 +24,7 @@ import org.fs.chm.ui.swing.chatlist.DaoItem
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.ui.swing.merge.SelectMergeDatasetDialog
 import org.fs.chm.ui.swing.webp.Webp
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.SimpleConfigAware
@@ -75,13 +76,15 @@ class MainFrameApp //
   }
 
   lazy val (menuBar, saveAsMenuRoot) = {
-    val saveAsMenuRoot = new Menu("Save Database As...")
+    val saveAsMenuRoot = new Menu("Save As...")
     new MenuBar {
-      val fileMenu = new Menu("File") {
-        contents += menuItem("Open Database")(showOpenDialog())
+      contents += new Menu("Database") {
+        contents += menuItem("Open")(showOpenDialog())
         contents += saveAsMenuRoot
       }
-      contents += fileMenu
+      contents += new Menu("Edit") {
+        contents += menuItem("Merge Datasets")(showSelectDatasetsToMergeDialog())
+      }
     } -> saveAsMenuRoot
   }
 
@@ -156,9 +159,8 @@ class MainFrameApp //
     chooser.showOpenDialog(null) match {
       case FileChooser.Result.Cancel => // NOOP
       case FileChooser.Result.Error  => // Mostly means that dialog was dismissed, also NOOP
-      case FileChooser.Result.Approve if loadedDaos.keys.exists(_ isLoaded chooser.selectedFile) =>
-        // TODO: Show error?
-        log.warn(s"File ${chooser.selectedFile} is already loaded")
+      case FileChooser.Result.Approve if loadedDaos.keys.exists(_ isLoaded chooser.selectedFile.getParentFile) =>
+        showWarning(s"File '${chooser.selectedFile}' is already loaded")
       case FileChooser.Result.Approve => {
         changeChatsClickable(false)
         config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
@@ -193,6 +195,31 @@ class MainFrameApp //
         }
       }
     }
+  }
+
+  def showSelectDatasetsToMergeDialog(): Unit = {
+    if (loadedDaos.isEmpty) {
+      showWarning("Load a database first!")
+    } else if (!loadedDaos.exists(_._1.isMutable)) {
+      showWarning("You'll need an editable database first. Save the one you want to use as base.")
+    } else if (loadedDaos.keys.flatMap(_.datasets).size == 1) {
+      showWarning("Only one dataset is loaded - nothing to merge.")
+    } else {
+      val selectDialog = new SelectMergeDatasetDialog(loadedDaos.keys.toSeq)
+      selectDialog.visible = true
+      selectDialog.selection foreach {
+        case ((masterDao, masterDs), (slaveDao, slaveDs)) => mergeDatasets(masterDao, masterDs, slaveDao, slaveDs)
+      }
+    }
+  }
+
+  def mergeDatasets(
+      masterDao: ChatHistoryDao,
+      masterDs: Dataset,
+      slaveDao: ChatHistoryDao,
+      slaveDs: Dataset
+  ): Unit = {
+    ???
   }
 
   def loadDaoFromEDT(dao: ChatHistoryDao): Unit = {
