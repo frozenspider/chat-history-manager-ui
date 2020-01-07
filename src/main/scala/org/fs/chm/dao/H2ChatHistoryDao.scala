@@ -2,6 +2,7 @@ package org.fs.chm.dao
 
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.attribute.FileTime
 import java.sql.Connection
 import java.sql.Timestamp
 import java.util.UUID
@@ -195,7 +196,22 @@ class H2ChatHistoryDao(
   }
 
   private def backup(): Unit = {
-    // TODO: Implement me!
+    val backupDir = new File(dataPathRoot, H2ChatHistoryDao.BackupsDir)
+    backupDir.mkdir()
+    val backups =
+      backupDir
+        .listFiles((dir, name) => name.matches("""backup_(\d\d\d\d)-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d).zip"""))
+        .sortBy(f => Files.getAttribute(f.toPath, "creationTime").asInstanceOf[FileTime].toMillis)
+    val newBackupName = "backup_" + DateTime.now.toString("yyyy-MM-dd_HH-mm-ss") + ".zip"
+    StopWatch.measureAndCall {
+      queries
+        .backup(new File(backupDir, newBackupName).getAbsolutePath.replace("\\", "/"))
+        .transact(txctr)
+        .unsafeRunSync()
+    }((_, t) => log.info(s"Backup ${newBackupName} done in $t ms"))
+    for (oldBackup <- backups.dropRight(H2ChatHistoryDao.MaxBackups - 1)) {
+      oldBackup.delete()
+    }
   }
 
   override def close(): Unit = {
@@ -321,6 +337,9 @@ class H2ChatHistoryDao(
       ) map (_.update.run)
       createQueries.reduce((a, b) => a flatMap (_ => b))
     }
+
+    def backup(path: String): ConnectionIO[Int] =
+      sql"BACKUP TO $path".update.run
 
     object datasets {
       private val colsFr = fr"uuid, alias, source_type"
@@ -857,6 +876,9 @@ class H2ChatHistoryDao(
 }
 
 object H2ChatHistoryDao {
+
+  val BackupsDir = "_backups"
+  val MaxBackups = 3
 
   //
   // "Raw" case classes, more closely matching DB structure
