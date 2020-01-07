@@ -4,6 +4,7 @@ import java.awt.Desktop
 import java.awt.EventQueue
 import java.awt.event.AdjustmentEvent
 import java.io.File
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.immutable.ListMap
@@ -29,7 +30,11 @@ import org.fs.chm.utility.SimpleConfigAware
 import org.fs.utility.Imports._
 import org.slf4s.Logging
 
-class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfigAware { app =>
+class MainFrameApp //
+    extends SimpleSwingApplication
+    with ChatListSelectionCallbacks
+    with SimpleConfigAware
+    with Logging { app =>
   private val Lock             = new Object
   private val MsgBatchLoadSize = 100
 
@@ -73,7 +78,7 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
     val saveAsMenuRoot = new Menu("Save Database As...")
     new MenuBar {
       val fileMenu = new Menu("File") {
-        contents += menuItem("Open Database", () => showOpenDialog())
+        contents += menuItem("Open Database")(showOpenDialog())
         contents += saveAsMenuRoot
       }
       contents += fileMenu
@@ -93,9 +98,9 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
         layout {
           // That's the only solution I came up with that worked to set a minimum width of an empty chat list
           // (setting minimum size doesn't work, setting preferred size screws up scrollbar)
-          val placeholder = new BorderPanel()
-          placeholder.preferredWidth = panePreferredWidth
-          placeholder
+          new BorderPanel {
+            this.preferredWidth = panePreferredWidth
+          }
         } = South
       }
 
@@ -143,8 +148,10 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
   def showOpenDialog(): Unit = {
     // TODO: Show errors
     val chooser = DataLoaders.openChooser
-    if (config.contains(DataLoaders.LastFileKey)) {
-      chooser.peer.setCurrentDirectory((new File(config(DataLoaders.LastFileKey))).existingDir)
+    for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
+      val lastFile = new File(lastFileString)
+      chooser.peer.setCurrentDirectory(lastFile.existingDir)
+      chooser.selectedFile = lastFile
     }
     chooser.showOpenDialog(null) match {
       case FileChooser.Result.Cancel => // NOOP
@@ -167,8 +174,9 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
 
   def showSaveAsDialog(srcDao: ChatHistoryDao): Unit = {
     val chooser = DataLoaders.saveAsChooser
-    if (config.contains(DataLoaders.LastFileKey)) {
-      chooser.peer.setCurrentDirectory((new File(config(DataLoaders.LastFileKey))).existingDir)
+    for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
+      val lastFile = new File(lastFileString)
+      chooser.peer.setCurrentDirectory(lastFile.existingDir)
     }
     chooser.showOpenDialog(null) match {
       case FileChooser.Result.Cancel => // NOOP
@@ -191,9 +199,7 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
     require(EventQueue.isDispatchThread, "Should be called from EDT")
     Lock.synchronized {
       loadedDaos = loadedDaos + (dao -> Map.empty) // TODO: Reverse?
-      chatsListContents += new DaoItem(new ChatListSelectionCallbacks {
-        override def chatSelected(cc: ChatWithDao): Unit = app.chatSelected(cc)
-      }, dao)
+      chatsListContents += new DaoItem(this, dao)
     }
     daoListChanged()
     changeChatsClickable(true)
@@ -202,13 +208,30 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
   def daoListChanged(): Unit = {
     saveAsMenuRoot.contents.clear()
     for (dao <- loadedDaos.keys) {
-      saveAsMenuRoot.contents += menuItem(dao.name, () => showSaveAsDialog(dao))
+      saveAsMenuRoot.contents += menuItem(dao.name)(showSaveAsDialog(dao))
     }
     chatsOuterPanel.revalidate()
     chatsOuterPanel.repaint()
   }
 
-  def chatSelected(cc: ChatWithDao): Unit = {
+  override def renameDataset(dsUuid: UUID, newName: String, dao: ChatHistoryDao): Unit = {
+    require(EventQueue.isDispatchThread, "Should be called from EDT")
+    changeChatsClickable(false)
+    Swing.onEDT { // To release UI lock
+      Lock.synchronized {
+        dao.renameDataset(dsUuid, newName)
+        chatsListContents.clear()
+        for (dao <- loadedDaos.keys) {
+          chatsListContents += new DaoItem(this, dao)
+        }
+      }
+      chatsOuterPanel.revalidate()
+      chatsOuterPanel.repaint()
+      changeChatsClickable(true)
+    }
+  }
+
+  override def chatSelected(cc: ChatWithDao): Unit = {
     Lock.synchronized {
       currentChatOption         = None
       msgAreaContainer.document = msgService.pleaseWaitDoc
