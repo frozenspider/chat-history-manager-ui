@@ -90,6 +90,14 @@ class ChatListItem(
     callbacks.chatSelected(cc)
   }
 
+  private def showDetailsPopup(): Unit = {
+    Dialog.showMessage(
+      message = new ChatDetailsPane(cc).peer,
+      title = "Chat Details",
+      messageType = Dialog.Message.Plain
+    )
+  }
+
   override def enabled_=(b: Boolean): Unit = {
     super.enabled_=(b)
     def changeClickableRecursive(c: AwtContainer): Unit = {
@@ -140,10 +148,6 @@ class ChatListItem(
   private def markDeselected(): Unit = {
     border = new LineBorder(Color.GRAY, 1)
     background = Color.WHITE
-  }
-
-  private def showDetailsPopup(): Unit = {
-    println("There will be popup!")
   }
 }
 
