@@ -181,6 +181,23 @@ class H2ChatHistoryDao(
     }((_, t) => log.info(s"All done in $t ms"))
   }
 
+  override def isMutable: Boolean = true
+
+  override def renameDataset(dsUuid: UUID, newName: String): Dataset = {
+    backup()
+    queries.datasets.rename(dsUuid, newName).transact(txctr).unsafeRunSync()
+    datasets.find(_.uuid == dsUuid).get
+  }
+
+  override def delete(chat: Chat): Unit = {
+    backup()
+    ???
+  }
+
+  private def backup(): Unit = {
+    // TODO: Implement me!
+  }
+
   override def close(): Unit = {
     closeTransactor()
   }
@@ -188,13 +205,6 @@ class H2ChatHistoryDao(
   override def isLoaded(f: File): Boolean = {
     f != null && this.dataPathRoot == f.getParentFile
   }
-
-  override def equals(that: Any): Boolean = that match {
-    case that: H2ChatHistoryDao => this.name == that.name && that.isLoaded(this.dataPathRoot)
-    case _                      => false
-  }
-
-  override def hashCode(): Int = this.name.hashCode + 17 * this.dataPathRoot.hashCode
 
   object queries {
     lazy val createDdl: ConnectionIO[Int] = {
@@ -315,11 +325,14 @@ class H2ChatHistoryDao(
     object datasets {
       private val colsFr = fr"uuid, alias, source_type"
 
-      lazy val selectAll =
+      lazy val selectAll: ConnectionIO[Seq[Dataset]] =
         (fr"SELECT" ++ colsFr ++ fr"FROM datasets").query[Dataset].to[Seq]
 
-      def insert(ds: Dataset) =
+      def insert(ds: Dataset): ConnectionIO[Int] =
         (fr"INSERT INTO datasets (" ++ colsFr ++ fr") VALUES (${ds.uuid}, ${ds.alias}, ${ds.sourceType})").update.run
+
+      def rename(dsUuid: UUID, newName: String): ConnectionIO[Int] =
+        sql"UPDATE datasets SET alias = ${newName} WHERE uuid = ${dsUuid}".update.run
     }
 
     object users {
@@ -442,7 +455,6 @@ class H2ChatHistoryDao(
         msgCVcardPaths <- q("vcard_path", "messages_content")
       } yield chatImgPaths ++ msgPaths ++ msgCPaths ++ msgCThumbPaths ++ msgCVcardPaths
     }
-
   }
 
   object Raws {
@@ -835,6 +847,13 @@ class H2ChatHistoryDao(
       }
     }
   }
+
+  override def equals(that: Any): Boolean = that match {
+    case that: H2ChatHistoryDao => this.name == that.name && that.isLoaded(this.dataPathRoot)
+    case _                      => false
+  }
+
+  override def hashCode: Int = this.name.hashCode + 17 * this.dataPathRoot.hashCode
 }
 
 object H2ChatHistoryDao {

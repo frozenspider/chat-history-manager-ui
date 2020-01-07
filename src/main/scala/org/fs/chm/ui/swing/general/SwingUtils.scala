@@ -32,8 +32,12 @@ object SwingUtils {
     def fontSize_=(s: Int) = el.font = new Font(el.font.getName, el.font.getStyle, s)
   }
 
-  def menuItem(title: String, action: () => _): MenuItem =
-    new MenuItem(new Action(title) { override def apply(): Unit = action() })
+  def menuItem(title: String, enabled: Boolean = true)(action: => Any): MenuItem = {
+    val e = enabled // To avoid name shadowing
+    new MenuItem(new Action(title) { override def apply(): Unit = action }) {
+      enabled = e
+    }
+  }
 
   def easyFileFilter(desc: String)(filter: File => Boolean): FileFilter =
     new FileFilter() {

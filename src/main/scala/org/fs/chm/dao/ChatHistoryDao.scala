@@ -41,6 +41,13 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def messageOption(chat: Chat, id: Long): Option[Message]
 
+  /** Whether the following methods can be called */
+  def isMutable: Boolean
+
+  def renameDataset(dsUuid: UUID, newName: String): Dataset
+
+  def delete(chat: Chat): Unit
+
   override def close(): Unit = {}
 
   /** Whether given file is the one loaded in this DAO */
@@ -50,8 +57,14 @@ trait ChatHistoryDao extends AutoCloseable {
 case class Dataset(
     uuid: UUID,
     alias: String,
-    sourceType: String,
-)
+    sourceType: String
+) {
+  override def equals(that: Any): Boolean = that match {
+    case that: Dataset => this.uuid == that.uuid
+    case _             => false
+  }
+  override def hashCode: Int = this.uuid.hashCode
+}
 
 sealed trait PersonInfo {
   val firstNameOption: Option[String]

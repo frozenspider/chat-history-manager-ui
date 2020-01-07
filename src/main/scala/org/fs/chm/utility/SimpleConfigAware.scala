@@ -14,6 +14,9 @@ trait SimpleConfigAware {
     def contains(key: String): Boolean =
       SimpleConfigAware.config.contains(key)
 
+    def get(key: String): Option[String] =
+      SimpleConfigAware.config.get(key)
+
     def apply(key: String): String =
       SimpleConfigAware.config(key)
 
