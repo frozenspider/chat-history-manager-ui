@@ -8,9 +8,13 @@ import org.fs.utility.Imports._
 
 /**
  * Everything except for messages should be pre-cached and readily available.
+ * Should support equality.
  */
 trait ChatHistoryDao extends AutoCloseable {
   sys.addShutdownHook(close())
+
+  /** User-friendly name of a loaded data */
+  def name: String
 
   def datasets: Seq[Dataset]
 
@@ -38,6 +42,9 @@ trait ChatHistoryDao extends AutoCloseable {
   def messageOption(chat: Chat, id: Long): Option[Message]
 
   override def close(): Unit = {}
+
+  /** Whether given file is the one loaded in this DAO */
+  def isLoaded(f: File): Boolean
 }
 
 case class Dataset(

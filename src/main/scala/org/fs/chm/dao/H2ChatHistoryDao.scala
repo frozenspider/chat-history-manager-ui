@@ -26,6 +26,8 @@ class H2ChatHistoryDao(
 
   import org.fs.chm.dao.H2ChatHistoryDao._
 
+  override def name: String = s"Database '${dataPathRoot.getName}'"
+
   override def datasets: Seq[Dataset] = {
     queries.datasets.selectAll.transact(txctr).unsafeRunSync()
   }
@@ -182,6 +184,17 @@ class H2ChatHistoryDao(
   override def close(): Unit = {
     closeTransactor()
   }
+
+  override def isLoaded(f: File): Boolean = {
+    f != null && this.dataPathRoot == f.getParentFile
+  }
+
+  override def equals(that: Any): Boolean = that match {
+    case that: H2ChatHistoryDao => this.name == that.name && that.isLoaded(this.dataPathRoot)
+    case _                      => false
+  }
+
+  override def hashCode(): Int = this.name.hashCode + 17 * this.dataPathRoot.hashCode
 
   object queries {
     lazy val createDdl: ConnectionIO[Int] = {

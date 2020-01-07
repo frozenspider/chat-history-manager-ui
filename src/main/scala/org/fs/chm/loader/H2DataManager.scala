@@ -13,10 +13,11 @@ import org.fs.chm.dao._
 import org.h2.jdbcx.JdbcConnectionPool
 
 class H2DataManager extends DataLoader[H2ChatHistoryDao] {
+  import org.fs.chm.loader.H2DataManager._
+
   private implicit val cs = IO.contextShift(ExecutionContext.global)
 
-  private val defaultExt   = ".mv.db"
-  private val dataFileName = "data" + defaultExt
+  private val dataFileName = "data" + DefaultExt
 
   private val options = Seq(
     //"TRACE_LEVEL_FILE=2",
@@ -46,7 +47,7 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
   }
 
   private def dbUrl(path: File): String = {
-    val innerPath = path.getAbsolutePath.replaceAll(defaultExt.replace(".", "\\.") + "$", "").replace("\\", "/")
+    val innerPath = path.getAbsolutePath.replaceAll(DefaultExt.replace(".", "\\.") + "$", "").replace("\\", "/")
     "jdbc:h2:" + innerPath + optionsString
   }
 
@@ -58,4 +59,8 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
     val txctr = Transactor.fromDataSource[IO](connPool, execCxt, blocker)
     new H2ChatHistoryDao(dataPathRoot = path.getParentFile, txctr = txctr, () => txctr.kernel.dispose())
   }
+}
+
+object H2DataManager {
+  val DefaultExt   = ".mv.db"
 }

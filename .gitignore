@@ -23,6 +23,7 @@ project/target/
 
 # Application
 /log
+application.conf
 
 *.class
 *.log
