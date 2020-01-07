@@ -12,13 +12,20 @@ import javax.swing.filechooser.FileFilter
 
 object SwingUtils {
   implicit class RichUIElement(el: UIElement) {
-    def preferredWidth = el.preferredSize.width
+    def width            = el.size.width
+    def width_=(w: Int)  = el.peer.setSize(w, el.size.height)
+    def height           = el.size.height
+    def height_=(h: Int) = el.peer.setSize(el.size.width, h)
 
-    def preferredWidth_=(w: Int) = el.preferredSize = new Dimension(w, el.preferredSize.height)
-
-    def preferredHeight = el.preferredSize.height
-
+    def preferredWidth            = el.preferredSize.width
+    def preferredWidth_=(w: Int)  = el.preferredSize = new Dimension(w, el.preferredSize.height)
+    def preferredHeight           = el.preferredSize.height
     def preferredHeight_=(h: Int) = el.preferredSize = new Dimension(el.preferredSize.width, h)
+
+    def minimumWidth            = el.minimumSize.width
+    def minimumWidth_=(w: Int)  = el.minimumSize = new Dimension(w, el.minimumSize.height)
+    def minimumHeight           = el.minimumSize.height
+    def minimumHeight_=(h: Int) = el.minimumSize = new Dimension(el.minimumSize.width, h)
 
     def fontSize = el.font.getSize
 

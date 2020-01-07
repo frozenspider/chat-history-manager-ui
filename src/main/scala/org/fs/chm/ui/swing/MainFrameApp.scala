@@ -64,7 +64,7 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
     import scala.swing.BorderPanel.Position._
 
     layout(menuBar)                = North
-    layout(chatsPane)              = West
+    layout(chatsOuterPanel)        = West
     layout(msgAreaContainer.panel) = Center
   }
 
@@ -75,16 +75,26 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
     contents += fileMenu
   }
 
-  lazy val (chatsPane, chatsListContents) = {
+  lazy val (chatsOuterPanel, chatsListContents) = {
     val panePreferredWidth = 300
 
     val panel = new BoxPanel(Orientation.Vertical)
-    panel.preferredWidth = panePreferredWidth
 
     new BorderPanel {
       import scala.swing.BorderPanel.Position._
 
-      layout(new ScrollPane(panel) {
+      val panel2 = new BorderPanel {
+        layout(panel) = North
+        layout {
+          // That's the only solution I came up with that worked to set a minimum width of an empty chat list
+          // (setting minimum size doesn't work, setting preferred size screws up scrollbar)
+          val placeholder = new BorderPanel()
+          placeholder.preferredWidth = panePreferredWidth
+          placeholder
+        } = South
+      }
+
+      layout(new ScrollPane(panel2) {
         verticalScrollBar.unitIncrement = 10
         verticalScrollBarPolicy = ScrollPane.BarPolicy.Always
         horizontalScrollBarPolicy = ScrollPane.BarPolicy.Never
@@ -113,12 +123,12 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
   }
 
   def changeChatsClickable(enabled: Boolean): Unit = {
-    chatsPane.enabled = enabled
+    chatsOuterPanel.enabled = enabled
     def changeClickableRecursive(c: Component): Unit = c match {
       case i: DaoItem   => i.enabled = enabled
       case c: Container => c.contents foreach changeClickableRecursive
     }
-    changeClickableRecursive(chatsPane)
+    changeClickableRecursive(chatsOuterPanel)
   }
 
   //
@@ -164,7 +174,8 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
         override def chatSelected(cc: ChatWithDao): Unit = app.chatSelected(cc)
       }, dao)
     }
-    chatsPane.validate()
+    chatsOuterPanel.revalidate()
+    chatsOuterPanel.repaint()
     changeChatsClickable(true)
   }
 
