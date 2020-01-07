@@ -23,7 +23,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
 
     val dataset = Dataset(
       uuid       = UUID.randomUUID(),
-      alias      = "Telegram data @ " + DateTime.now().toString("yyyy-MM-dd"),
+      alias      = "Telegram data loaded @ " + DateTime.now().toString("yyyy-MM-dd"),
       sourceType = "telegram"
     )
 
@@ -47,7 +47,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
 
     new EagerChatHistoryDao(
-      name              = "result.json from " + path.getName,
+      name              = "Telegram export data from " + path.getName,
       dataPathRoot      = path,
       dataset           = dataset,
       myself1           = myself,

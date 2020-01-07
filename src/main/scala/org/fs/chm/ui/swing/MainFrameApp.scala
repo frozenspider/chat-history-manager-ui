@@ -24,6 +24,7 @@ import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.webp.Webp
+import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.SimpleConfigAware
 import org.fs.utility.Imports._
 import org.slf4s.Logging
@@ -68,11 +69,15 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
     layout(msgAreaContainer.panel) = Center
   }
 
-  lazy val menuBar = new MenuBar {
-    val fileMenu = new Menu("File") {
-      contents += menuItem("Open Database", () => showOpenDialog())
-    }
-    contents += fileMenu
+  lazy val (menuBar, saveAsMenuRoot) = {
+    val saveAsMenuRoot = new Menu("Save Database As...")
+    new MenuBar {
+      val fileMenu = new Menu("File") {
+        contents += menuItem("Open Database", () => showOpenDialog())
+        contents += saveAsMenuRoot
+      }
+      contents += fileMenu
+    } -> saveAsMenuRoot
   }
 
   lazy val (chatsOuterPanel, chatsListContents) = {
@@ -137,9 +142,9 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
 
   def showOpenDialog(): Unit = {
     // TODO: Show errors
-    val chooser = DataLoaders.chooser
-    if (config.contains("last_database_file")) {
-      chooser.selectedFile = new File(config("last_database_file"))
+    val chooser = DataLoaders.openChooser
+    if (config.contains(DataLoaders.LastFileKey)) {
+      chooser.peer.setCurrentDirectory((new File(config(DataLoaders.LastFileKey))).existingDir)
     }
     chooser.showOpenDialog(null) match {
       case FileChooser.Result.Cancel => // NOOP
@@ -149,17 +154,33 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
         log.warn(s"File ${chooser.selectedFile} is already loaded")
       case FileChooser.Result.Approve => {
         changeChatsClickable(false)
-        config.update("last_database_file", chooser.selectedFile.getAbsolutePath)
+        config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
         Future { // To release UI lock
           Swing.onEDT {
-            val dao = if (DataLoaders.h2ff.accept(chooser.selectedFile)) {
-              DataLoaders.h2.loadData(chooser.selectedFile.getParentFile)
-            } else if (DataLoaders.tgFf.accept(chooser.selectedFile)) {
-              DataLoaders.tg.loadData(chooser.selectedFile.getParentFile)
-            } else {
-              throw new IllegalStateException("Unknown file type!")
-            }
+            val dao = DataLoaders.load(chooser.selectedFile)
             loadDaoFromEDT(dao)
+          }
+        }
+      }
+    }
+  }
+
+  def showSaveAsDialog(srcDao: ChatHistoryDao): Unit = {
+    val chooser = DataLoaders.saveAsChooser
+    if (config.contains(DataLoaders.LastFileKey)) {
+      chooser.peer.setCurrentDirectory((new File(config(DataLoaders.LastFileKey))).existingDir)
+    }
+    chooser.showOpenDialog(null) match {
+      case FileChooser.Result.Cancel => // NOOP
+      case FileChooser.Result.Error  => // Mostly means that dialog was dismissed, also NOOP
+      case FileChooser.Result.Approve => {
+        changeChatsClickable(false)
+        config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
+        Future { // To release UI lock
+          Swing.onEDT {
+            val dstDao = DataLoaders.saveAs(srcDao, chooser.selectedFile)
+            // TODO: Unload srcDao
+            loadDaoFromEDT(dstDao)
           }
         }
       }
@@ -174,9 +195,17 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
         override def chatSelected(cc: ChatWithDao): Unit = app.chatSelected(cc)
       }, dao)
     }
+    daoListChanged()
+    changeChatsClickable(true)
+  }
+
+  def daoListChanged(): Unit = {
+    saveAsMenuRoot.contents.clear()
+    for (dao <- loadedDaos.keys) {
+      saveAsMenuRoot.contents += menuItem(dao.name, () => showSaveAsDialog(dao))
+    }
     chatsOuterPanel.revalidate()
     chatsOuterPanel.repaint()
-    changeChatsClickable(true)
   }
 
   def chatSelected(cc: ChatWithDao): Unit = {
@@ -289,20 +318,46 @@ class MainFrameApp extends SimpleSwingApplication with Logging with SimpleConfig
   )
 
   private object DataLoaders {
-    val h2 = new H2DataManager
-    val tg = new TelegramDataLoader
+    val LastFileKey = "last_database_file"
 
-    val h2ff = easyFileFilter(s"${BuildInfo.name} database (*${H2DataManager.DefaultExt})") { f =>
+    private val h2 = new H2DataManager
+    private val tg = new TelegramDataLoader
+
+    private val h2ff = easyFileFilter(s"${BuildInfo.name} database (*${H2DataManager.DefaultExt})") { f =>
       f.getName endsWith H2DataManager.DefaultExt
     }
 
-    val tgFf = easyFileFilter("Telegram export JSON database (result.json)") { f =>
+    private val tgFf = easyFileFilter("Telegram export JSON database (result.json)") { f =>
       f.getName == "result.json"
     }
 
-    val chooser = new FileChooser(null) {
+    val openChooser = new FileChooser(null) {
+      title = "Select a database to open"
       peer.addChoosableFileFilter(h2ff)
       peer.addChoosableFileFilter(tgFf)
+    }
+
+    def load(file: File): ChatHistoryDao = {
+      if (h2ff.accept(file)) {
+        h2.loadData(file.getParentFile)
+      } else if (tgFf.accept(file)) {
+        tg.loadData(file.getParentFile)
+      } else {
+        throw new IllegalStateException("Unknown file type!")
+      }
+    }
+
+    val saveAsChooser = new FileChooser(null) {
+      title = "Choose a directory where the new database will be stored"
+      fileSelectionMode = FileChooser.SelectionMode.DirectoriesOnly
+      peer.setAcceptAllFileFilterUsed(false)
+    }
+
+    def saveAs(srcDao: ChatHistoryDao, dir: File): ChatHistoryDao = {
+      h2.create(dir)
+      val dstDao = h2.loadData(dir)
+      dstDao.copyAllFrom(srcDao)
+      dstDao
     }
   }
 }
