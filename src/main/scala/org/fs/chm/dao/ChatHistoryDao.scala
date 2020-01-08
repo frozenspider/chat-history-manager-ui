@@ -57,6 +57,8 @@ trait ChatHistoryDao extends AutoCloseable {
   def isLoaded(dataPathRoot: File): Boolean
 }
 
+trait MutableChatHistoryDao extends ChatHistoryDao {}
+
 case class Dataset(
     uuid: UUID,
     alias: String,

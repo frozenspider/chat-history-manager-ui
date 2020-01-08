@@ -22,7 +22,7 @@ class H2ChatHistoryDao(
     dataPathRoot: File,
     txctr: Transactor.Aux[IO, _],
     closeTransactor: () => Unit
-) extends ChatHistoryDao
+) extends MutableChatHistoryDao
     with Logging {
 
   import org.fs.chm.dao.H2ChatHistoryDao._
@@ -420,7 +420,9 @@ class H2ChatHistoryDao(
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND id = ${id}").query[RawMessage].option
 
       def selectSlice(chat: Chat, offset: Int, limit: Int) =
-        (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"OFFSET $offset LIMIT ${limit}").query[RawMessage].to[IndexedSeq]
+        (selectAllByChatFr(chat.dsUuid, chat.id)
+          ++ fr"OFFSET $offset"
+          ++ orderByTimeDescLimit(limit)).query[RawMessage].to[IndexedSeq]
 
       def selectLastInversed(chat: Chat, limit: Int) =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ orderByTimeDescLimit(limit)).query[RawMessage].to[IndexedSeq]

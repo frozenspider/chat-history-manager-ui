@@ -1,13 +1,11 @@
 package org.fs.chm.ui.swing.merge
 
 import scala.annotation.tailrec
-import scala.swing.GridBagPanel.Fill
+import scala.swing.GridBagPanel._
 import scala.swing._
-import scala.swing.event.ButtonClicked
 
 import javax.swing.DefaultListSelectionModel
 import javax.swing.ListSelectionModel
-import javax.swing.WindowConstants
 import javax.swing.border.LineBorder
 import javax.swing.table.AbstractTableModel
 import javax.swing.table.DefaultTableCellRenderer
@@ -15,20 +13,22 @@ import javax.swing.table.TableModel
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Dataset
 import org.fs.chm.dao.H2ChatHistoryDao
+import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 
 class SelectMergeDatasetDialog(
     daos: Seq[ChatHistoryDao]
-) extends Dialog {
-  private val TableWidth = 500
+) extends CustomDialog[((H2ChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))] {
 
-  private val daosWithDatasets        = daos map (dao => (dao, dao.datasets))
-  private val mutableDaosWithDatasets = daosWithDatasets filter (_._1.isMutable)
+  // All values are lazy to be accessible from parent's constructor
 
-  private val masterTable = createTable("Base dataset", mutableDaosWithDatasets)
-  private val slaveTable  = createTable("Dataset to be added to it", daosWithDatasets)
+  private lazy val TableWidth = 500
 
-  private var _selectedDaosWithDs: Option[((H2ChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))] = None
+  private lazy val daosWithDatasets        = daos map (dao => (dao, dao.datasets))
+  private lazy val mutableDaosWithDatasets = daosWithDatasets filter (_._1.isMutable)
+
+  private lazy val masterTable = createTable("Base dataset", mutableDaosWithDatasets)
+  private lazy val slaveTable  = createTable("Dataset to be added to it", daosWithDatasets)
 
   private def createTable(title: String, data: Seq[(ChatHistoryDao, Seq[Dataset])]): Table = {
     val models = new MergeDatasetModels(title, data)
@@ -47,49 +47,24 @@ class SelectMergeDatasetDialog(
     }
   }
 
-  {
-    val okBtn = new Button("OK")
+  override def dialogComponent(): Panel =
+    new GridBagPanel {
+      val c = new Constraints
+      c.fill  = Fill.Both
+      c.gridy = 0
+      c.gridx = 0
+      peer.add(masterTable.peer.getTableHeader, c.peer)
+      c.gridx = 1
+      peer.add(slaveTable.peer.getTableHeader, c.peer)
 
-    contents = new BorderPanel {
-      import scala.swing.BorderPanel.Position._
-
-      val panel = new GridBagPanel {
-        val c = new Constraints
-        c.fill = Fill.Both
-        c.gridy = 0
-        c.gridx = 0
-        peer.add(masterTable.peer.getTableHeader, c.peer)
-        c.gridx = 1
-        peer.add(slaveTable.peer.getTableHeader, c.peer)
-
-        c.gridy = 1
-        c.gridx = 0
-        add(masterTable, c)
-        c.gridx = 1
-        add(slaveTable, c)
-      }
-
-      layout(panel) = Center
-      layout(new FlowPanel(okBtn)) = South
+      c.gridy = 1
+      c.gridx = 0
+      add(masterTable, c)
+      c.gridx = 1
+      add(slaveTable, c)
     }
 
-    modal = true
-    defaultButton = okBtn
-
-    peer.setLocationRelativeTo(null)
-    peer.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE)
-
-    listenTo(okBtn)
-    reactions += {
-      case ButtonClicked(`okBtn`) => validateAndClose()
-    }
-  }
-
-  def selection: Option[((H2ChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))] =
-    _selectedDaosWithDs
-
-  private def validateAndClose(): Unit = {
-
+  override def validateChoices(): Option[((H2ChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))] = {
     /** Find the DAO for the given dataset row by abusing the table structure */
     @tailrec
     def findDao(tm: TableModel, idx: Int): ChatHistoryDao = tm.getValueAt(idx, 0) match {
@@ -107,12 +82,13 @@ class SelectMergeDatasetDialog(
         val slaveDao  = findDao(slaveTable.model, slaveRow)
         if (masterDao == slaveDao && masterDs == slaveDs) {
           showWarning("Can't merge dataset with itself.")
+          None
         } else {
-          _selectedDaosWithDs = Some((masterDao, masterDs), (slaveDao, slaveDs))
-          dispose()
+          Some((masterDao, masterDs), (slaveDao, slaveDs))
         }
       case _ =>
         showWarning("Select both base and added datasets.")
+        None
     }
   }
 }

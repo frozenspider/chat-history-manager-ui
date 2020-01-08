@@ -17,15 +17,16 @@ import org.fs.utility.Imports._
 
 class DatasetItem(
     ds: Dataset,
+    itemSelectionGroup: ChatListItemSelectionGroup,
     callbacks: ChatListSelectionCallbacks,
     dao: ChatHistoryDao
 ) extends GridBagPanel {
 
   val header: Label = new Label {
-    text = ds.alias
+    text                = ds.alias
     horizontalAlignment = Alignment.Center
-    tooltip = ds.alias
-    this.fontSize = this.fontSize + 2
+    tooltip             = ds.alias
+    this.fontSize       = this.fontSize + 2
 
     // Reactions
     listenTo(this, mouse.clicks)
@@ -40,11 +41,11 @@ class DatasetItem(
   }
 
   val items: Seq[ChatListItem] =
-    dao.chats(ds.uuid) map (c => new ChatListItem(ChatWithDao(c, dao), callbacks))
+    dao.chats(ds.uuid) map (c => new ChatListItem(ChatWithDao(c, dao), Some(itemSelectionGroup), Some(callbacks)))
 
   {
     val c = new Constraints
-    c.fill = Fill.Horizontal
+    c.fill  = Fill.Horizontal
     c.gridx = 0
     c.gridy = 0
 

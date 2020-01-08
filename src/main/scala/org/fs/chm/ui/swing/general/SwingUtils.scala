@@ -58,4 +58,6 @@ object SwingUtils extends Logging {
     log.error(msg)
     Dialog.showMessage(title = "Error", message = msg, messageType = Dialog.Message.Error)
   }
+
+  val comfortableScrollSpeed: Int = 10
 }

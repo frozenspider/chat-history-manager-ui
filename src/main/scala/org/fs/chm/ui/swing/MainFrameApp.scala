@@ -16,14 +16,18 @@ import com.github.nscala_time.time.Imports._
 import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
+import org.fs.chm.dao.merge.ChatHistoryMerger
+import org.fs.chm.dao.merge.ChatHistoryMerger.ChangedMergeOption
 import org.fs.chm.loader.H2DataManager
 import org.fs.chm.loader.TelegramDataLoader
 import org.fs.chm.ui.swing.MessagesService._
+import org.fs.chm.ui.swing.chatlist.ChatListItemSelectionGroup
 import org.fs.chm.ui.swing.chatlist.ChatListSelectionCallbacks
 import org.fs.chm.ui.swing.chatlist.DaoItem
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.ui.swing.merge.SelectMergeChatsDialog
 import org.fs.chm.ui.swing.merge.SelectMergeDatasetDialog
 import org.fs.chm.ui.swing.webp.Webp
 import org.fs.chm.utility.IoUtils._
@@ -47,6 +51,7 @@ class MainFrameApp //
   private val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
   private val htmlKit       = new ExtendedHtmlEditorKit(desktopOption)
   private val msgService    = new MessagesService(htmlKit)
+  private val chatSelGroup  = new ChatListItemSelectionGroup
 
   // TODO:
   // reply-to (make clickable)
@@ -108,7 +113,7 @@ class MainFrameApp //
       }
 
       layout(new ScrollPane(panel2) {
-        verticalScrollBar.unitIncrement = 10
+        verticalScrollBar.unitIncrement = comfortableScrollSpeed
         verticalScrollBarPolicy = ScrollPane.BarPolicy.Always
         horizontalScrollBarPolicy = ScrollPane.BarPolicy.Never
       }) = Center
@@ -205,28 +210,37 @@ class MainFrameApp //
     } else if (loadedDaos.keys.flatMap(_.datasets).size == 1) {
       showWarning("Only one dataset is loaded - nothing to merge.")
     } else {
-      val selectDialog = new SelectMergeDatasetDialog(loadedDaos.keys.toSeq)
-      selectDialog.visible = true
-      selectDialog.selection foreach {
-        case ((masterDao, masterDs), (slaveDao, slaveDs)) => mergeDatasets(masterDao, masterDs, slaveDao, slaveDs)
+      val selectDsDialog = new SelectMergeDatasetDialog(loadedDaos.keys.toSeq)
+      selectDsDialog.visible = true
+      selectDsDialog.selection foreach {
+        case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
+          val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
+          selectChatsDialog.visible = true
+          selectChatsDialog.selection foreach { whatToMerge =>
+            mergeDatasets(masterDao, masterDs, slaveDao, slaveDs, whatToMerge)
+          }
       }
     }
   }
 
   def mergeDatasets(
-      masterDao: ChatHistoryDao,
+      masterDao: H2ChatHistoryDao,
       masterDs: Dataset,
       slaveDao: ChatHistoryDao,
-      slaveDs: Dataset
+      slaveDs: Dataset,
+      whatToMerge: Seq[ChangedMergeOption]
   ): Unit = {
-    ???
+    val merger = new ChatHistoryMerger(masterDao, masterDs, slaveDao, slaveDs, whatToMerge)
+    val analysis = merger.analyze
+    val resolution = ??? // FIXME: Resolution dialog
+    merger.merge(resolution)
   }
 
   def loadDaoFromEDT(dao: ChatHistoryDao): Unit = {
     require(EventQueue.isDispatchThread, "Should be called from EDT")
     Lock.synchronized {
       loadedDaos = loadedDaos + (dao -> Map.empty) // TODO: Reverse?
-      chatsListContents += new DaoItem(this, dao)
+      chatsListContents += new DaoItem(chatSelGroup, this, dao)
     }
     daoListChanged()
     changeChatsClickable(true)
@@ -249,7 +263,7 @@ class MainFrameApp //
         dao.renameDataset(dsUuid, newName)
         chatsListContents.clear()
         for (dao <- loadedDaos.keys) {
-          chatsListContents += new DaoItem(this, dao)
+          chatsListContents += new DaoItem(chatSelGroup, this, dao)
         }
       }
       chatsOuterPanel.revalidate()

@@ -19,8 +19,9 @@ import org.fs.chm.ui.swing.general.SwingUtils._
 
 class ChatListItem(
     cc: ChatWithDao,
-    callbacks: ChatListSelectionCallbacks,
-) extends BorderPanel {
+    selectionGroupOption: Option[ChatListItemSelectionGroup],
+    callbacksOption: Option[ChatListSelectionCallbacks]
+) extends BorderPanel { self =>
   val labelPreferredWidth = 200 // TODO: Remove
   val labelBorderWidth    = 3
 
@@ -29,6 +30,9 @@ class ChatListItem(
   val popupMenu = new PopupMenu {
     contents += menuItem("Details")(showDetailsPopup())
   }
+
+  private var _activeColor:   Color = Color.LIGHT_GRAY
+  private var _inactiveColor: Color = Color.WHITE
 
   {
     val emptyBorder = new EmptyBorder(labelBorderWidth, labelBorderWidth, labelBorderWidth, labelBorderWidth)
@@ -50,9 +54,9 @@ class ChatListItem(
       }
       val msgLabel = new Label(lastMsgString)
       msgLabel.horizontalAlignment = Alignment.Left
-      msgLabel.foreground = new Color(0, 0, 0, 100)
-      msgLabel.preferredWidth = labelPreferredWidth
-      msgLabel.border = emptyBorder
+      msgLabel.foreground          = new Color(0, 0, 0, 100)
+      msgLabel.preferredWidth      = labelPreferredWidth
+      msgLabel.border              = emptyBorder
       layout(msgLabel) = Center
 
       opaque = false
@@ -64,7 +68,7 @@ class ChatListItem(
       case PrivateGroup => "(" + interlocutors.size + ")"
     }
     val tpeLabel = new Label(tpeString)
-    tpeLabel.preferredWidth = 30
+    tpeLabel.preferredWidth    = 30
     tpeLabel.verticalAlignment = Alignment.Center
     layout(tpeLabel) = East
 
@@ -79,21 +83,34 @@ class ChatListItem(
 
     maximumSize = new Dimension(Int.MaxValue, preferredSize.height)
     markDeselected()
+    selectionGroupOption foreach (_.add(this))
   }
 
-  private def select(): Unit = {
-    ChatListItem.Lock.synchronized {
-      ChatListItem.SelectedOption foreach (_.markDeselected())
-      ChatListItem.SelectedOption = Some(this)
-      markSelected()
-    }
-    callbacks.chatSelected(cc)
+  def activeColor:               Color = _activeColor
+  def activeColor_=(c: Color):   Unit  = { _activeColor = c; }
+  def inactiveColor:             Color = _inactiveColor
+  def inactiveColor_=(c: Color): Unit  = _inactiveColor = c
+
+  def select(): Unit = {
+    markSelected()
+    selectionGroupOption foreach (_.deselectOthers(this))
+    callbacksOption foreach (_.chatSelected(cc))
+  }
+
+  def markSelected(): Unit = {
+    border     = new LineBorder(Color.BLACK, 1)
+    background = _activeColor
+  }
+
+  def markDeselected(): Unit = {
+    border     = new LineBorder(Color.GRAY, 1)
+    background = _inactiveColor
   }
 
   private def showDetailsPopup(): Unit = {
     Dialog.showMessage(
-      message = new ChatDetailsPane(cc).peer,
-      title = "Chat Details",
+      message     = new ChatDetailsPane(cc).peer,
+      title       = "Chat Details",
       messageType = Dialog.Message.Plain
     )
   }
@@ -139,19 +156,28 @@ class ChatListItem(
     }
     prefix + text.take(50)
   }
-
-  private def markSelected(): Unit = {
-    border = new LineBorder(Color.BLACK, 1)
-    background = Color.LIGHT_GRAY
-  }
-
-  private def markDeselected(): Unit = {
-    border = new LineBorder(Color.GRAY, 1)
-    background = Color.WHITE
-  }
 }
 
-private object ChatListItem {
-  private val Lock = new Object
-  private var SelectedOption: Option[ChatListItem] = None
+class ChatListItemSelectionGroup {
+  private val lock:           AnyRef               = new AnyRef
+  private var selectedOption: Option[ChatListItem] = None
+  private var items:          Seq[ChatListItem]    = Seq.empty
+
+  def add(item: ChatListItem): Unit = {
+    items = items :+ item
+  }
+
+  def deselectOthers(item: ChatListItem): Unit =
+    lock.synchronized {
+      selectedOption = Some(item)
+      for (item2 <- items if item2 != item) {
+        item2.markDeselected()
+      }
+    }
+
+  def deselectAll(): Unit =
+    lock.synchronized {
+      selectedOption = None
+      items map (_.markDeselected())
+    }
 }
