@@ -34,6 +34,9 @@ trait ChatHistoryDao extends AutoCloseable {
    */
   def interlocutors(chat: Chat): Seq[User]
 
+  /** Return N messages after skipping first M of them. Trivial pagination in a nutshell. */
+  def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message]
+
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
   /** Return N messages before the given one (exclusive). Returns None if message isn't found */
