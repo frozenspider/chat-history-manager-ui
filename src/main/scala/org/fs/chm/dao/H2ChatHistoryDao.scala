@@ -71,6 +71,11 @@ class H2ChatHistoryDao(
       c2 <- c1.get(chat)
     } yield c2) getOrElse Seq.empty
 
+  override def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message] = {
+    val raws = queries.rawMessages.selectSlice(chat, offset, limit).transact(txctr).unsafeRunSync().reverse
+    raws map Raws.toMessage
+  }
+
   override def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message] = {
     val raws = queries.rawMessages.selectLastInversed(chat, limit).transact(txctr).unsafeRunSync().reverse
     raws map Raws.toMessage
@@ -108,8 +113,19 @@ class H2ChatHistoryDao(
           for (c <- dao.chats(ds.uuid)) {
             query = query flatMap (_ => queries.chats.insert(c))
 
-            // TODO: Iterate over smaller subset?
-            for (m <- dao.lastMessages(c, c.msgCount + 1)) {
+            val batchSize = 1000
+            def batchStream(idx: Int): Stream[IndexedSeq[Message]] = {
+              val batch = dao.scrollMessages(c, idx * batchSize, batchSize)
+              if (batch.isEmpty) {
+                Stream.empty
+              } else {
+                batch #:: batchStream(idx + 1)
+              }
+            }
+            for {
+              batch <- batchStream(0)
+              m     <- batch
+            } {
               val (rm, rcOption, rrtEls) = Raws.fromMessage(ds.uuid, c.id, m)
               query = query flatMap (_ => queries.rawMessages.insert(rm))
 
@@ -402,6 +418,9 @@ class H2ChatHistoryDao(
 
       def selectOption(chat: Chat, id: Long) =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND id = ${id}").query[RawMessage].option
+
+      def selectSlice(chat: Chat, offset: Int, limit: Int) =
+        (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"OFFSET $offset LIMIT ${limit}").query[RawMessage].to[IndexedSeq]
 
       def selectLastInversed(chat: Chat, limit: Int) =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ orderByTimeDescLimit(limit)).query[RawMessage].to[IndexedSeq]

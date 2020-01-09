@@ -89,6 +89,10 @@ class EagerChatHistoryDao(
     }
   }
 
+  override def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message] = {
+    chatsWithMessages.get(chat) map (_.slice(offset, offset + limit)) getOrElse IndexedSeq.empty
+  }
+
   override def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message] = {
     chatsWithMessages.get(chat) map (_.takeRight(limit)) getOrElse IndexedSeq.empty
   }
