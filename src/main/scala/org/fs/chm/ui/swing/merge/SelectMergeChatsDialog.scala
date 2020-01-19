@@ -80,7 +80,7 @@ class SelectMergeChatsDialog(
       for (mc <- masterChats) {
         combinesMasterToSlaveMap.get(mc) match {
           case Some(sc) => mergesAcc = mergesAcc :+ MergeOption.Combine(masterChat   = mc, slaveChat = sc)
-          case None     => mergesAcc = mergesAcc :+ MergeOption.Unchanged(masterChat = mc)
+          case None     => mergesAcc = mergesAcc :+ MergeOption.Retain(masterChat = mc)
         }
       }
 
@@ -111,7 +111,7 @@ class SelectMergeChatsDialog(
               true: java.lang.Boolean,
               ChatRenderable(ChatWithDao(sc, slaveDao), isAdd = true)
             )
-          case MergeOption.Unchanged(mc) =>
+          case MergeOption.Retain(mc) =>
             Array(
               ChatRenderable(ChatWithDao(mc, masterDao)),
               "",

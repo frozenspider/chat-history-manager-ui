@@ -53,6 +53,7 @@ class ChatHistoryMerger(
     }
   }
 
+  /** Iterate through both master and slave streams using state machine like approach */
   @tailrec
   private def iterate(
       cxt: IterationContext,
@@ -62,52 +63,103 @@ class ChatHistoryMerger(
     import IterationState._
     def prevMmId = cxt.prevMm map (_.id) getOrElse -1L
     def prevSmId = cxt.prevSm map (_.id) getOrElse -1L
-    def mismatchOptionAfterConflictEnd(conflict: ConflictInProgress): Option[Mismatch] = {
-      val slaveMsgIds = (conflict.slaveMsgId, prevSmId)
-      if (cxt.mmStream.headOption map (_.id) contains conflict.slaveMsgId) {
-        // Chunk of master was absent from slave.
-        // This is not treated as a conflict.
-        None
-      } else  if (prevMmId == conflict.prevMasterMsgId) {
-        // Master stream hasn't advanced
-        Some(Mismatch.Addition(prevMasterMsgId = conflict.prevMasterMsgId, slaveMsgIds = slaveMsgIds))
-      } else {
-        assert(conflict.masterMsgId != -1)
-        Some(Mismatch.Conflict(masterMsgIds = (conflict.masterMsgId, prevMmId), slaveMsgIds = slaveMsgIds))
+    def mismatchOptionAfterConflictEnd(state: StateInProgress): Option[Mismatch] = {
+      state match {
+        case AdditionInProgress(prevMasterMsgId, startSlaveMsgId) =>
+          assert(prevMmId == prevMasterMsgId) // Master stream hasn't advanced
+          Some(
+            Mismatch.Addition(
+              prevMasterMsgId = prevMasterMsgId,
+              slaveMsgIds     = (startSlaveMsgId, prevSmId)
+            )
+          )
+        case ConflictInProgress(startMasterMsgId, startSlaveMsgId) =>
+          assert(startMasterMsgId != -1)
+          Some(
+            Mismatch.Conflict(
+              masterMsgIds = (startMasterMsgId, prevMmId),
+              slaveMsgIds  = (startSlaveMsgId, prevSmId)
+            )
+          )
+        case RetentionInProgress(_, prevSlaveMsgId) =>
+          assert(prevSmId == prevSlaveMsgId) // Slave stream hasn't advanced
+          // We don't treat retention as a mismatch
+          None
       }
     }
 
     (cxt.mmStream.headOption, cxt.smStream.headOption, state) match {
+
+      //
+      // Streams ended
+      //
+
       case (None, None, NoState) =>
-        // Stream ended
         ()
-      case (Some(mm), None, NoState) =>
-        // Rest of the master stream should be taken as-is
-        iterate(cxt.advance(), NoState, onMismatch)
-      case (mmOption, Some(sm), NoState) =>
-        val state2 = if (mmOption contains sm) {
-          // Continue matching subsequence
-          NoState
-        } else {
-          // Conflict  started
-            ConflictInProgress(mmOption map (_.id) getOrElse -1L, prevMmId, sm.id)
-        }
-        iterate(cxt.advance(), state2, onMismatch)
-      case (None, None, conflict: ConflictInProgress) =>
-        // Stream ended on conflict
-        val mismatchOption = mismatchOptionAfterConflictEnd(conflict)
+      case (None, None, state: StateInProgress) =>
+        val mismatchOption = mismatchOptionAfterConflictEnd(state)
         mismatchOption foreach onMismatch
-      case (mmOption, smOption, conflict: ConflictInProgress) =>
-        val state2 = if (mmOption == smOption) {
-          // Conflict ended
-          val mismatchOption = mismatchOptionAfterConflictEnd(conflict)
-          mismatchOption foreach onMismatch
-          NoState
-        } else {
-          // Conflict continues
-          conflict
-        }
-        iterate(cxt.advance(), state2, onMismatch)
+
+      //
+      // NoState
+      //
+
+      case (Some(mm), Some(sm), NoState) if mm == sm =>
+        // Matching subsequence continues
+        iterate(cxt.advanceBoth(), NoState, onMismatch)
+      case (Some(mm), Some(sm), NoState) if mm.id == sm.id =>
+        // Conflict started
+        val state2 = ConflictInProgress(mm.id, sm.id)
+        iterate(cxt.advanceBoth(), state2, onMismatch)
+      case (_, Some(sm), NoState) if cxt.cmpMasterSlave() > 0 =>
+        // Addition started
+        val state2 = AdditionInProgress(prevMmId, sm.id)
+        iterate(cxt.advanceSlave(), state2, onMismatch)
+      case (Some(mm), _, NoState) if cxt.cmpMasterSlave() < 0 =>
+        // Retention started
+        val state2 = RetentionInProgress(mm.id, prevSmId)
+        iterate(cxt.advanceMaster(), state2, onMismatch)
+
+      //
+      // AdditionInProgress
+      //
+
+      case (_, Some(sm), AdditionInProgress(prevMasterMsgId, _))
+          if prevMasterMsgId == prevMmId && cxt.cmpMasterSlave() > 0 =>
+        // Addition continues
+        iterate(cxt.advanceSlave(), state, onMismatch)
+      case (_, _, state: AdditionInProgress) =>
+        // Addition ended
+        val mismatchOption = mismatchOptionAfterConflictEnd(state)
+        mismatchOption foreach onMismatch
+        iterate(cxt, NoState, onMismatch)
+
+      //
+      // RetentionInProgress
+      //
+
+      case (Some(mm), _, RetentionInProgress(_, prevSlaveMsgId))
+          if prevSlaveMsgId == prevSmId && cxt.cmpMasterSlave() < 0 =>
+        // Retention continues
+        iterate(cxt.advanceMaster(), state, onMismatch)
+      case (_, _, state: RetentionInProgress) =>
+        // Retention ended
+        val mismatchOption = mismatchOptionAfterConflictEnd(state)
+        mismatchOption foreach onMismatch
+        iterate(cxt, NoState, onMismatch)
+
+      //
+      // ConflictInProgress
+      //
+
+      case (Some(mm), Some(sm), state: ConflictInProgress) if mm != sm && mm.id == sm.id =>
+        // Conflict continues
+        iterate(cxt.advanceBoth(), state, onMismatch)
+      case (_, _, state: ConflictInProgress) =>
+        // Conflict ended
+        val mismatchOption = mismatchOptionAfterConflictEnd(state)
+        mismatchOption foreach onMismatch
+        iterate(cxt, NoState, onMismatch)
     }
   }
 
@@ -127,16 +179,20 @@ class ChatHistoryMerger(
     def smStream: Stream[TaggedMessage.S] = cxt._2._1
     def prevSm:   Option[TaggedMessage.S] = cxt._2._2
 
-    def advance(): IterationContext = {
-      require(mmStream.nonEmpty || smStream.nonEmpty)
-      msgOptionOrdering.compare(mmStream.headOption, smStream.headOption) match {
-        case neg if neg < 0 => // mm < sm
-          ((mmStream.tail, mmStream.headOption), (smStream, prevSm))
-        case 0 =>
-          ((mmStream.tail, mmStream.headOption), (smStream.tail, smStream.headOption))
-        case pos if pos > 0 => // mm > sm
-          ((mmStream, prevMm), (smStream.tail, smStream.headOption))
-      }
+    def cmpMasterSlave(): Int = {
+      msgOptionOrdering.compare(mmStream.headOption, smStream.headOption)
+    }
+
+    def advanceBoth(): IterationContext = {
+      ((mmStream.tail, mmStream.headOption), (smStream.tail, smStream.headOption))
+    }
+
+    def advanceMaster(): IterationContext = {
+      ((mmStream.tail, mmStream.headOption), (smStream, prevSm))
+    }
+
+    def advanceSlave(): IterationContext = {
+      ((mmStream, prevMm), (smStream.tail, smStream.headOption))
     }
   }
 
@@ -153,11 +209,20 @@ class ChatHistoryMerger(
   private sealed trait IterationState
   private object IterationState {
     case object NoState extends IterationState
-    case class ConflictInProgress(
-        masterMsgId: Long,
+
+    sealed trait StateInProgress extends IterationState
+    case class AdditionInProgress(
         prevMasterMsgId: Long,
-        slaveMsgId: Long
-    ) extends IterationState
+        startSlaveMsgId: Long
+    ) extends StateInProgress
+    case class RetentionInProgress(
+        startMasterMsgId: Long,
+        prevSlaveMsgId: Long
+    ) extends StateInProgress
+    case class ConflictInProgress(
+        startMasterMsgId: Long,
+        startSlaveMsgId: Long
+    ) extends StateInProgress
   }
 }
 
@@ -171,7 +236,7 @@ object ChatHistoryMerger {
   object MergeOption {
     case class Combine(masterChat: Chat, slaveChat: Chat) extends ChangedMergeOption
     case class Add(slaveChat: Chat)                       extends ChangedMergeOption
-    case class Unchanged(masterChat: Chat)                extends MergeOption
+    case class Retain(masterChat: Chat)                   extends MergeOption
   }
 
   sealed trait Mismatch

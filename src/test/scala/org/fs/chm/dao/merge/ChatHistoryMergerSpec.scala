@@ -27,7 +27,7 @@ class ChatHistoryMergerSpec //
   val maxUserId = 3
   def rndUserId = 1 + rnd.nextInt(maxUserId)
 
-  test("merge chats - simplest single message") {
+  test("merge chats - same single message") {
     val msgs     = Seq(createMessage(1, 1))
     val helper   = new MergerHelper(msgs, msgs)
     val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
@@ -55,21 +55,6 @@ class ChatHistoryMergerSpec //
     val helper   = new MergerHelper(msgsA, msgsB)
     val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
     assert(analysis === Seq(Mismatch.Conflict((2, 2), (2, 2))))
-  }
-
-  /**
-   * {{{
-   * Master messages - 1 2     5
-   * Slave messages  - 1   3 4 5
-   * }}}
-   */
-  test("merge chats - changes one message to multiple") {
-    val msgs = for (i <- 1 to 5) yield createMessage(i, rndUserId)
-    val msgsA    = msgs.filter(Seq(1, 2, 5) contains _.id)
-    val msgsB    = msgs.filter(Seq(1, 3, 4, 5) contains _.id)
-    val helper   = new MergerHelper(msgsA, msgsB)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
-    assert(analysis === Seq(Mismatch.Conflict((2, 2), (3, 4))))
   }
 
   /**
@@ -170,6 +155,51 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
     // We don't treat this as a conflict
     assert(analysis === Seq.empty)
+  }
+
+  /**
+   * {{{
+   * Master messages - 1 2     5  6  7 8 9  10
+   * Slave messages  -     3 4 5* 6* 7 8 9* 10* 11 12
+   * }}}
+   */
+  test("merge chats - everything") {
+    val msgs  = for (i <- 1 to 12) yield createMessage(i, rndUserId)
+    val msgsA = msgs.filter(Seq(1, 2, 5, 6, 7, 8, 9, 10) contains _.id)
+    val msgsB = changedMessages(
+      msgs.filter((3 to 12) contains _.id),
+      (id => Seq(5, 6, 9, 10) contains id)
+    )
+    val helper   = new MergerHelper(msgsA, msgsB)
+    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    assert(analysis === Seq(
+      Mismatch.Addition(2, (3, 4)),
+      Mismatch.Conflict((5, 6), (5, 6)),
+      Mismatch.Conflict((9, 10), (9, 10)),
+      Mismatch.Addition(10, (11, 12))
+    ))
+  }
+
+  /**
+   * {{{
+   * Master messages -     3 4 5* 6* 7 8 9* 10* 11 12
+   * Slave messages  - 1 2     5  6  7 8 9  10
+   * }}}
+   */
+  test("merge chats - everything, roles inverted") {
+    val msgs  = for (i <- 1 to 12) yield createMessage(i, rndUserId)
+    val msgsA = msgs.filter((3 to 12) contains _.id)
+    val msgsB = changedMessages(
+      msgs.filter(Seq(1, 2, 5, 6, 7, 8, 9, 10) contains _.id),
+      (id => Seq(5, 6, 9, 10) contains id)
+    )
+    val helper   = new MergerHelper(msgsA, msgsB)
+    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    assert(analysis === Seq(
+      Mismatch.Addition(-1, (1, 2)),
+      Mismatch.Conflict((5, 6), (5, 6)),
+      Mismatch.Conflict((9, 10), (9, 10))
+    ))
   }
 
   //
