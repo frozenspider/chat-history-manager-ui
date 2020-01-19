@@ -156,6 +156,22 @@ class ChatHistoryMergerSpec //
     assert(analysis === Seq(Mismatch.Conflict((2, maxId), (2, maxId))))
   }
 
+  /**
+   * {{{
+   * Master messages - 1 2 3 4 5
+   * Slave messages  -   2   4
+   * }}}
+   */
+  test("merge chats - master has messages not present in slave") {
+    val msgs     = for (i <- 1 to 5) yield createMessage(i, rndUserId)
+    val msgsA    = msgs
+    val msgsB    = msgs.filter(Seq(2, 4) contains _.id)
+    val helper   = new MergerHelper(msgsA, msgsB)
+    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    // We don't treat this as a conflict
+    assert(analysis === Seq.empty)
+  }
+
   //
   // Helpers
   //

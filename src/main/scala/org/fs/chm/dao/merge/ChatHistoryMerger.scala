@@ -62,14 +62,18 @@ class ChatHistoryMerger(
     import IterationState._
     def prevMmId = cxt.prevMm map (_.id) getOrElse -1L
     def prevSmId = cxt.prevSm map (_.id) getOrElse -1L
-    def mismatchAfterConflictEnd(conflict: Conflict): Mismatch = {
+    def mismatchOptionAfterConflictEnd(conflict: ConflictInProgress): Option[Mismatch] = {
       val slaveMsgIds = (conflict.slaveMsgId, prevSmId)
-      if (prevMmId == conflict.prevMasterMsgId) {
+      if (cxt.mmStream.headOption map (_.id) contains conflict.slaveMsgId) {
+        // Chunk of master was absent from slave.
+        // This is not treated as a conflict.
+        None
+      } else  if (prevMmId == conflict.prevMasterMsgId) {
         // Master stream hasn't advanced
-        Mismatch.Addition(lastCommonMasterMsgId = conflict.prevMasterMsgId, slaveMsgIds = slaveMsgIds)
+        Some(Mismatch.Addition(prevMasterMsgId = conflict.prevMasterMsgId, slaveMsgIds = slaveMsgIds))
       } else {
         assert(conflict.masterMsgId != -1)
-        Mismatch.Conflict(masterMsgIds = (conflict.masterMsgId, prevMmId), slaveMsgIds = slaveMsgIds)
+        Some(Mismatch.Conflict(masterMsgIds = (conflict.masterMsgId, prevMmId), slaveMsgIds = slaveMsgIds))
       }
     }
 
@@ -79,25 +83,25 @@ class ChatHistoryMerger(
         ()
       case (Some(mm), None, NoState) =>
         // Rest of the master stream should be taken as-is
-        ???
+        iterate(cxt.advance(), NoState, onMismatch)
       case (mmOption, Some(sm), NoState) =>
         val state2 = if (mmOption contains sm) {
           // Continue matching subsequence
           NoState
         } else {
           // Conflict  started
-          Conflict(mmOption map (_.id) getOrElse -1L, prevMmId, sm.id)
+            ConflictInProgress(mmOption map (_.id) getOrElse -1L, prevMmId, sm.id)
         }
         iterate(cxt.advance(), state2, onMismatch)
-      case (None, None, conflict: Conflict) =>
+      case (None, None, conflict: ConflictInProgress) =>
         // Stream ended on conflict
-        val mismatch = mismatchAfterConflictEnd(conflict)
-        onMismatch(mismatch)
-      case (mmOption, smOption, conflict: Conflict) =>
+        val mismatchOption = mismatchOptionAfterConflictEnd(conflict)
+        mismatchOption foreach onMismatch
+      case (mmOption, smOption, conflict: ConflictInProgress) =>
         val state2 = if (mmOption == smOption) {
           // Conflict ended
-          val mismatch = mismatchAfterConflictEnd(conflict)
-          onMismatch(mismatch)
+          val mismatchOption = mismatchOptionAfterConflictEnd(conflict)
+          mismatchOption foreach onMismatch
           NoState
         } else {
           // Conflict continues
@@ -149,7 +153,7 @@ class ChatHistoryMerger(
   private sealed trait IterationState
   private object IterationState {
     case object NoState extends IterationState
-    case class Conflict(
+    case class ConflictInProgress(
         masterMsgId: Long,
         prevMasterMsgId: Long,
         slaveMsgId: Long
@@ -174,7 +178,7 @@ object ChatHistoryMerger {
   object Mismatch {
     case class Addition(
         /** -1 if appended before first */
-        lastCommonMasterMsgId: Long,
+        prevMasterMsgId: Long,
         /** First and last ID*/
         slaveMsgIds: (Long, Long)
     ) extends Mismatch
