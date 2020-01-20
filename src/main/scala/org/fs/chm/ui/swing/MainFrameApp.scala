@@ -17,7 +17,7 @@ import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.ChatHistoryMerger
-import org.fs.chm.dao.merge.ChatHistoryMerger.ChangedMergeOption
+import org.fs.chm.dao.merge.ChatHistoryMerger.ChangedChatMergeOption
 import org.fs.chm.loader.H2DataManager
 import org.fs.chm.loader.TelegramDataLoader
 import org.fs.chm.ui.swing.MessagesService._
@@ -216,8 +216,9 @@ class MainFrameApp //
         case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
           val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
           selectChatsDialog.visible = true
-          selectChatsDialog.selection foreach { whatToMerge =>
-            mergeDatasets(masterDao, masterDs, slaveDao, slaveDs, whatToMerge)
+          selectChatsDialog.selection foreach {
+            case (chatsToMerge) =>
+              mergeDatasets(masterDao, masterDs, slaveDao, slaveDs, chatsToMerge)
           }
       }
     }
@@ -228,9 +229,9 @@ class MainFrameApp //
       masterDs: Dataset,
       slaveDao: ChatHistoryDao,
       slaveDs: Dataset,
-      whatToMerge: Seq[ChangedMergeOption]
+      chatsToMerge: Seq[ChangedChatMergeOption]
   ): Unit = {
-    val merger = new ChatHistoryMerger(masterDao, masterDs, slaveDao, slaveDs, whatToMerge)
+    val merger = new ChatHistoryMerger(masterDao, masterDs, slaveDao, slaveDs, chatsToMerge)
     val analysis = merger.analyze
     val resolution = ??? // FIXME: Resolution dialog
     merger.merge(resolution)

@@ -30,14 +30,14 @@ class ChatHistoryMergerSpec //
   test("merge chats - same single message") {
     val msgs     = Seq(createMessage(1, 1))
     val helper   = new MergerHelper(msgs, msgs)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis.isEmpty)
   }
 
   test("merge chats - same multiple messages") {
     val msgs: Seq[Message] = (1 to maxId) map { i => createMessage(i, rndUserId) }
     val helper   = new MergerHelper(msgs, msgs)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis.isEmpty)
   }
 
@@ -45,7 +45,7 @@ class ChatHistoryMergerSpec //
     val msgs123  = for (i <- 1 to 3) yield createMessage(i, rndUserId)
     val msgs13   = msgs123.filter(_.id != 2)
     val helper   = new MergerHelper(msgs13, msgs123)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis === Seq(Mismatch.Addition(1, (2, 2))))
   }
 
@@ -53,7 +53,7 @@ class ChatHistoryMergerSpec //
     val msgsA    = for (i <- 1 to 3) yield createMessage(i, rndUserId)
     val msgsB    = changedMessages(msgsA, (_ == 2))
     val helper   = new MergerHelper(msgsA, msgsB)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis === Seq(Mismatch.Conflict((2, 2), (2, 2))))
   }
 
@@ -67,7 +67,7 @@ class ChatHistoryMergerSpec //
     val msgs     = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
     val msgsL    = Seq(msgs.last)
     val helper   = new MergerHelper(msgsL, msgs)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis === Seq(Mismatch.Addition(-1, (1, maxId - 1))))
   }
 
@@ -81,7 +81,7 @@ class ChatHistoryMergerSpec //
     val msgsA    = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
     val msgsB    = changedMessages(msgsA, (_ < maxId))
     val helper   = new MergerHelper(msgsA, msgsB)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis === Seq(Mismatch.Conflict((1, maxId - 1), (1, maxId - 1))))
   }
 
@@ -95,7 +95,7 @@ class ChatHistoryMergerSpec //
     val msgs     = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
     val msgsFL   = Seq(msgs.head, msgs.last)
     val helper   = new MergerHelper(msgsFL, msgs)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis === Seq(Mismatch.Addition(1, (2, maxId - 1))))
   }
 
@@ -109,7 +109,7 @@ class ChatHistoryMergerSpec //
     val msgsA    = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
     val msgsB    = changedMessages(msgsA, (id => id > 1 && id < maxId))
     val helper   = new MergerHelper(msgsA, msgsB)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis === Seq(Mismatch.Conflict((2, maxId - 1), (2, maxId - 1))))
   }
 
@@ -123,7 +123,7 @@ class ChatHistoryMergerSpec //
     val msgs     = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
     val msgsF    = Seq(msgs.head)
     val helper   = new MergerHelper(msgsF, msgs)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis === Seq(Mismatch.Addition(1, (2, maxId))))
   }
 
@@ -137,7 +137,7 @@ class ChatHistoryMergerSpec //
     val msgsA    = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
     val msgsB    = changedMessages(msgsA, (_ > 1))
     val helper   = new MergerHelper(msgsA, msgsB)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis === Seq(Mismatch.Conflict((2, maxId), (2, maxId))))
   }
 
@@ -152,7 +152,7 @@ class ChatHistoryMergerSpec //
     val msgsA    = msgs
     val msgsB    = msgs.filter(Seq(2, 4) contains _.id)
     val helper   = new MergerHelper(msgsA, msgsB)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     // We don't treat this as a conflict
     assert(analysis === Seq.empty)
   }
@@ -171,7 +171,7 @@ class ChatHistoryMergerSpec //
       (id => Seq(5, 6, 9, 10) contains id)
     )
     val helper   = new MergerHelper(msgsA, msgsB)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis === Seq(
       Mismatch.Addition(2, (3, 4)),
       Mismatch.Conflict((5, 6), (5, 6)),
@@ -194,7 +194,7 @@ class ChatHistoryMergerSpec //
       (id => Seq(5, 6, 9, 10) contains id)
     )
     val helper   = new MergerHelper(msgsA, msgsB)
-    val analysis = helper.merger.analyzeCombine(helper.d1chat, helper.d2chat)
+    val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis === Seq(
       Mismatch.Addition(-1, (1, 2)),
       Mismatch.Conflict((5, 6), (5, 6)),
@@ -231,11 +231,17 @@ class ChatHistoryMergerSpec //
 
   class MergerHelper(msgs1: Seq[Message], msgs2: Seq[Message]) {
 
-    val (dao1, d1ds, d1chat) = createDao("One", msgs1)
-    val (dao2, d2ds, d2chat) = createDao("Two", msgs2)
+    val (dao1, d1ds, d1users, d1chat) = createDao("One", msgs1)
+    val (dao2, d2ds, d2users, d2chat) = createDao("Two", msgs2)
 
     def merger: ChatHistoryMerger =
-      new ChatHistoryMerger(dao1, d1ds, dao2, d2ds, Seq(MergeOption.Combine(d1chat, d2chat)))
+      new ChatHistoryMerger(
+        dao1,
+        d1ds,
+        dao2,
+        d2ds,
+        Seq(ChatMergeOption.Combine(d1chat, d2chat))
+      )
 
     private def createDao(nameSuffix: String, msgs: Seq[Message]) = {
       val ds = Dataset(
@@ -254,7 +260,7 @@ class ChatHistoryMergerSpec //
         chatsWithMessages = ListMap(chat -> msgs.toIndexedSeq)
       ) with MutableChatHistoryDao
 
-      (dao, ds, chat)
+      (dao, ds, users, chat)
     }
 
     private def createChat(ds: Dataset, idx: Int, nameSuffix: String, messagesSize: Int): Chat = Chat(

@@ -12,18 +12,18 @@ class ChatHistoryMerger(
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset,
-    whatToMerge: Seq[ChangedMergeOption]
+    chatsToMerge: Seq[ChangedChatMergeOption]
 ) {
 
-  /** Analyze dataset mergeability, returning map from slave chat to mismatches in order */
+  /** Analyze dataset mergeability, returning the map from slave chat to mismatches in order. */
   def analyze: Map[Chat, Seq[Mismatch]] = {
-    whatToMerge.map {
-      case MergeOption.Add(sc)         => (sc, Seq.empty)
-      case MergeOption.Combine(mc, sc) => (sc, analyzeCombine(mc, sc))
+    chatsToMerge.map {
+      case ChatMergeOption.Add(sc)         => (sc, Seq.empty)
+      case ChatMergeOption.Combine(mc, sc) => (sc, analyzeMergingChats(mc, sc))
     }.toMap
   }
 
-  protected[merge] def analyzeCombine(mc: Chat, sc: Chat): Seq[Mismatch] = {
+  protected[merge] def analyzeMergingChats(mc: Chat, sc: Chat): Seq[Mismatch] = {
     def messagesStream[T <: TaggedMessage](dao: ChatHistoryDao, chat: Chat, offset: Int): Stream[T] = {
       if (offset >= chat.msgCount) {
         Stream.empty
@@ -231,12 +231,12 @@ object ChatHistoryMerger {
   protected[merge] val BatchSize = 1000
 
   /** Represents a single general merge option: a chat that should be added or merged (or skipped if no decision) */
-  sealed trait MergeOption
-  sealed trait ChangedMergeOption extends MergeOption
-  object MergeOption {
-    case class Combine(masterChat: Chat, slaveChat: Chat) extends ChangedMergeOption
-    case class Add(slaveChat: Chat)                       extends ChangedMergeOption
-    case class Retain(masterChat: Chat)                   extends MergeOption
+  sealed trait ChatMergeOption
+  sealed trait ChangedChatMergeOption extends ChatMergeOption
+  object ChatMergeOption {
+    case class Combine(masterChat: Chat, slaveChat: Chat) extends ChangedChatMergeOption
+    case class Add(slaveChat: Chat)                       extends ChangedChatMergeOption
+    case class Retain(masterChat: Chat)                   extends ChatMergeOption
   }
 
   sealed trait Mismatch
