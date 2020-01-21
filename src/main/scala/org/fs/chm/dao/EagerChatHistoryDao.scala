@@ -79,25 +79,58 @@ class EagerChatHistoryDao(
   override def interlocutors(chat: Chat): Seq[User] = interlocutorsMap(chat)
 
   override def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
-    val messages   = chatsWithMessages(chat)
-    val idx        = messages.lastIndexWhere(_.id <= msgId)
-    val lowerLimit = (idx - limit + 1) max 0
-    messages.slice(lowerLimit, idx + 1)
+    val messages = chatsWithMessages(chat)
+    val idx      = messages.lastIndexWhere(_.id <= msgId)
+    if (idx == -1) {
+      IndexedSeq.empty
+    } else {
+      val lowerLimit = (idx - limit + 1) max 0
+      messages.slice(lowerLimit, idx + 1)
+    }
   }
 
   override def messagesAfter(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
-    val messages   = chatsWithMessages(chat)
-    val idx        = messages.indexWhere(_.id >= msgId)
-    val upperLimit = (idx + limit) min messages.size
-    messages.slice(idx, upperLimit)
+    val messages = chatsWithMessages(chat)
+    val idx      = messages.indexWhere(_.id >= msgId)
+    if (idx == -1) {
+      IndexedSeq.empty
+    } else {
+      val upperLimit = (idx + limit) min messages.size
+      messages.slice(idx, upperLimit)
+    }
   }
 
   override def messagesBetween(chat: Chat, msgId1: Long, msgId2: Long): IndexedSeq[Message] = {
+    require(msgId1 <= msgId2)
     val messages = chatsWithMessages(chat)
     val idx1     = messages.indexWhere(_.id >= msgId1)
     val idx2     = messages.lastIndexWhere(_.id <= msgId2)
-    messages.slice(idx1, idx2 + 1)
+    if (idx1 == -1) {
+      // All messages are less than lower bound
+      assert(idx2 == messages.size - 1)
+      IndexedSeq.empty
+    } else if (idx2 == -1) {
+      // All messages are greater than upper bound
+      assert(idx1 == 0)
+      IndexedSeq.empty
+    } else {
+      assert(idx2 >= idx1)
+      messages.slice(idx1, idx2 + 1)
+    }
   }
+
+  override def countMessagesBetween(chat: Chat, msgId1: Long, msgId2: Long): Int = {
+    require(msgId1 <= msgId2)
+    val between = messagesBetween(chat, msgId1, msgId2)
+    var size    = between.size
+    if (size == 0) {
+      0
+    } else {
+      if (between.head.id == msgId1) size -= 1
+      if (between.last.id == msgId2) size -= 1
+      size
+    }
+  } ensuring (_ >= 0)
 
   override def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message] = {
     chatsWithMessages.get(chat) map (_.slice(offset, offset + limit)) getOrElse IndexedSeq.empty

@@ -23,28 +23,28 @@ class SelectMergeChatsDialog(
     title = "Select chats to merge"
   }
 
-  private lazy val mergeChatsTable = new SelectMergesTable[ChatWithDao, ChangedChatMergeOption](
-    new MergeChatsModels(masterDao.chats(masterDs.uuid), slaveDao.chats(slaveDs.uuid))
+  private lazy val table = new SelectMergesTable[ChatWithDao, ChangedChatMergeOption](
+    new Models(masterDao.chats(masterDs.uuid), slaveDao.chats(slaveDs.uuid))
   )
 
   override protected def dialogComponent(): Component = {
-    mergeChatsTable.wrapInScrollpane()
+    table.wrapInScrollpane()
   }
 
   override protected def validateChoices(): Option[Seq[ChangedChatMergeOption]] = {
-    Some(mergeChatsTable.selected)
+    Some(table.selected)
   }
 
   import SelectMergesTable._
 
-  private class MergeChatsModels(masterChats: Seq[Chat], slaveChats: Seq[Chat])
+  private class Models(masterChats: Seq[Chat], slaveChats: Seq[Chat])
       extends MergeModels[ChatWithDao, ChangedChatMergeOption] {
 
     def wrapMasterValue(mv: Chat): ChatWithDao = ChatWithDao(mv, masterDao)
     def wrapSlaveValue(sv: Chat):  ChatWithDao = ChatWithDao(sv, slaveDao)
 
     override val allElems: Seq[RowData[ChatWithDao]] = {
-      val masterChatsMap = groupChatsById(masterChats)
+      val masterChatsMap = groupById(masterChats)
 
       val merges: Seq[RowData[ChatWithDao]] =
         for (sc <- slaveChats) yield {
@@ -67,10 +67,10 @@ class SelectMergeChatsDialog(
       }
 
       // 2) Added chats
-      val additionsSlaveToSlaveMap: Map[Chat, RowData.InSlaveOnly[ChatWithDao]] =
+      val additionsSlaveToDataMap: Map[Chat, RowData.InSlaveOnly[ChatWithDao]] =
         merges.collect { case rd @ RowData.InSlaveOnly(sc) => (sc.chat, rd) }.toMap
-      for (sc <- slaveChats if additionsSlaveToSlaveMap.contains(sc)) {
-        mergesAcc = mergesAcc :+ additionsSlaveToSlaveMap(sc)
+      for (sc <- slaveChats if additionsSlaveToDataMap.contains(sc)) {
+        mergesAcc = mergesAcc :+ additionsSlaveToDataMap(sc)
       }
 
       mergesAcc
@@ -87,8 +87,16 @@ class SelectMergeChatsDialog(
       r
     }
 
-    override protected def rowDataToResultOption(rd: RowData[ChatWithDao]): Option[ChangedChatMergeOption] = {
+    override protected def isInBothSelectable(mv: ChatWithDao, sv: ChatWithDao): Boolean = true
+    override protected def isInSlaveSelectable(sv: ChatWithDao):                 Boolean = true
+    override protected def isInMasterSelectable(mv: ChatWithDao):                Boolean = false
+
+    override protected def rowDataToResultOption(
+        rd: RowData[ChatWithDao],
+        isSelected: Boolean
+    ): Option[ChangedChatMergeOption] = {
       rd match {
+        case _ if !isSelected                                       => None
         case RowData.InBoth(ChatWithDao(mc, _), ChatWithDao(sc, _)) => Some(ChatMergeOption.Combine(mc, sc))
         case RowData.InSlaveOnly(ChatWithDao(sc, _))                => Some(ChatMergeOption.Add(sc))
         case RowData.InMasterOnly(_)                                => None

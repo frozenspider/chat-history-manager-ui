@@ -17,7 +17,7 @@ import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.ChatHistoryMerger
-import org.fs.chm.dao.merge.ChatHistoryMerger.ChangedChatMergeOption
+import org.fs.chm.dao.merge.ChatHistoryMerger._
 import org.fs.chm.loader.H2DataManager
 import org.fs.chm.loader.TelegramDataLoader
 import org.fs.chm.ui.swing.MessagesService._
@@ -27,8 +27,7 @@ import org.fs.chm.ui.swing.chatlist.DaoItem
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
-import org.fs.chm.ui.swing.merge.SelectMergeChatsDialog
-import org.fs.chm.ui.swing.merge.SelectMergeDatasetDialog
+import org.fs.chm.ui.swing.merge._
 import org.fs.chm.ui.swing.webp.Webp
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.SimpleConfigAware
@@ -216,9 +215,12 @@ class MainFrameApp //
         case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
           val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
           selectChatsDialog.visible = true
-          selectChatsDialog.selection foreach {
-            case (chatsToMerge) =>
-              mergeDatasets(masterDao, masterDs, slaveDao, slaveDs, chatsToMerge)
+          selectChatsDialog.selection foreach { chatsToMerge =>
+            val selectUsersDialog = new SelectMergeUsersDialog(masterDao, masterDs, slaveDao, slaveDs)
+            selectUsersDialog.visible = true
+            selectUsersDialog.selection foreach { usersToMerge =>
+              mergeDatasets(masterDao, masterDs, slaveDao, slaveDs, usersToMerge, chatsToMerge)
+            }
           }
       }
     }
@@ -229,12 +231,43 @@ class MainFrameApp //
       masterDs: Dataset,
       slaveDao: ChatHistoryDao,
       slaveDs: Dataset,
+      usersToMerge: Map[User, User],
       chatsToMerge: Seq[ChangedChatMergeOption]
   ): Unit = {
-    val merger = new ChatHistoryMerger(masterDao, masterDs, slaveDao, slaveDs, chatsToMerge)
-    val analysis = merger.analyze
-    val resolution = ??? // FIXME: Resolution dialog
-    merger.merge(resolution)
+    val merger = new ChatHistoryMerger(masterDao, masterDs, slaveDao, slaveDs)
+    val chatsMergeAnalysis = chatsToMerge.collect {
+      case ChatMergeOption.Combine(mc, sc) => (mc, sc, merger.analyzeMergingChats(mc, sc))
+    }
+    // TODO: Make lazy and async
+    val chatsMergeResolutionsOption: Option[Seq[(Chat, Chat, Map[Mismatch, MismatchResolution])]] =
+      chatsMergeAnalysis.foldLeft(Option(Seq.empty[(Chat, Chat, Map[Mismatch, MismatchResolution])])) {
+        case (None, _) =>
+          // Some selection has been cancelled, ignore everything else
+          None
+        case (Some(acc), (mc, sc, analysis)) if analysis.isEmpty =>
+          // No mismatches, nothing to ask user about
+          Some(acc :+ (mc, sc, Map.empty[Mismatch, MismatchResolution]))
+        case (Some(acc), (mc, sc, analysis)) =>
+          val dialog =
+            new SelectMergeMessagesDialog(masterDao, mc, slaveDao, sc, analysis.toIndexedSeq, htmlKit, msgService)
+          dialog.visible = true
+          dialog.selection map { resolutions =>
+            acc :+ (mc, sc, resolutions)
+          }
+      }
+    chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
+      val newDs = Dataset(
+        uuid       = UUID.randomUUID(),
+        alias      = masterDs.alias,
+        sourceType = masterDs.sourceType
+      )
+      ???
+      // FIXE: Add users, merge users
+      // FIXE: Add chats
+      chatsMergeResolutions foreach {
+        case (mc, sc, resolutions) => merger.mergeChats(newDs, mc, sc, resolutions)
+      }
+    }
   }
 
   def loadDaoFromEDT(dao: ChatHistoryDao): Unit = {

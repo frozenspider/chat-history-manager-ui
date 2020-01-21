@@ -8,6 +8,7 @@ import java.util.UUID
 import org.fs.chm.TestHelper
 import org.fs.chm.loader.H2DataManager
 import org.fs.chm.loader.TelegramDataLoader
+import org.fs.chm.utility.TestUtils
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
 import org.scalatest.BeforeAndAfterAll
@@ -22,13 +23,14 @@ class H2ChatHistoryDaoSpec //
     with BeforeAndAfter
     with BeforeAndAfterAll {
 
+  val manager     = new H2DataManager
   val loader      = new TelegramDataLoader
   val telegramDir = new File(resourcesFolder, "telegram")
 
-  var tgDao:  EagerChatHistoryDao = _
-  var dsUuid: UUID                = _
-  var h2dao:  H2ChatHistoryDao    = _
-  var dir:    File                = _
+  var tgDao:  ChatHistoryDao   = _
+  var dsUuid: UUID             = _
+  var h2dao:  H2ChatHistoryDao = _
+  var dir:    File             = _
 
   override def beforeAll(): Unit = {
     tgDao  = loader.loadData(telegramDir)
@@ -38,8 +40,6 @@ class H2ChatHistoryDaoSpec //
   before {
     dir = Files.createTempDirectory(null).toFile
     log.info(s"Using temp dir $dir")
-
-    val manager = new H2DataManager
     manager.create(dir)
     h2dao = manager.loadData(dir)
 
@@ -48,12 +48,7 @@ class H2ChatHistoryDaoSpec //
   }
 
   after {
-    h2dao.close()
-    def delete(f: File): Unit = {
-      (Option(f.listFiles()) getOrElse Array.empty) foreach delete
-      assert(f.delete(), s"Couldn't delete $f")
-    }
-    delete(dir)
+    freeH2Dao()
   }
 
   test("relevant files are copied") {
@@ -126,17 +121,76 @@ class H2ChatHistoryDaoSpec //
       assert(between1 === allH2)
       assert(between1 === tgDao.messagesBetween(tgChat, allTg.head.id, allTg.last.id))
 
-      val between2 = h2dao.messagesBetween(h2Chat, allH2.tail.head.id, allH2.last.id)
+      val between2 = h2dao.messagesBetween(h2Chat, allH2(1).id, allH2.last.id)
       assert(between2 === allH2.tail)
-      assert(between2 === tgDao.messagesBetween(tgChat, allTg.tail.head.id, allTg.last.id))
+      assert(between2 === tgDao.messagesBetween(tgChat, allTg(1).id, allTg.last.id))
 
       val between3 = h2dao.messagesBetween(h2Chat, allH2.head.id, allH2.dropRight(1).last.id)
       assert(between3 === allH2.dropRight(1))
       assert(between3 === tgDao.messagesBetween(tgChat, allTg.head.id, allTg.dropRight(1).last.id))
 
+      val countBetween1 = h2dao.countMessagesBetween(h2Chat, allH2.head.id, allH2.last.id)
+      assert(countBetween1 === allH2.size - 2)
+      assert(countBetween1 === tgDao.countMessagesBetween(tgChat, allTg.head.id, allTg.last.id))
+
+      if (countBetween1 > 0) {
+        val countBetween2 = h2dao.countMessagesBetween(h2Chat, allH2(1).id, allH2.last.id)
+        assert(countBetween2 === allH2.size - 3)
+        assert(countBetween2 === tgDao.countMessagesBetween(tgChat, allTg(1).id, allTg.last.id))
+
+        val countBetween3 = h2dao.countMessagesBetween(h2Chat, allH2.head.id, allH2.dropRight(1).last.id)
+        assert(countBetween3 === allH2.size - 3)
+        assert(countBetween3 === tgDao.countMessagesBetween(tgChat, allTg.head.id, allTg.dropRight(1).last.id))
+      }
+
       val last = h2dao.lastMessages(h2Chat, numMsgsToTake)
       assert(last === allH2.takeRight(numMsgsToTake))
       assert(last === tgDao.lastMessages(tgChat, numMsgsToTake))
     }
+  }
+
+  test("message fetching corner cases") {
+    freeH2Dao()
+
+    val msgs = (3 to 7) map (TestUtils.createRegularMessage(_, 1))
+    tgDao = TestUtils.createSimpleDao("TG", msgs, 1)
+    dir   = Files.createTempDirectory(null).toFile
+
+    manager.create(dir)
+    h2dao = manager.loadData(dir)
+    h2dao.copyAllFrom(tgDao)
+
+    val dsUuid = tgDao.datasets.head.uuid
+    for {
+      dao  <- Seq(tgDao, h2dao)
+      chat <- dao.chats(dsUuid).sortBy(_.id)
+    } {
+      assert(dao.messagesBefore(chat, 3, 10) === Seq(msgs.head))
+      assert(dao.messagesBefore(chat, 2, 10) === Seq.empty)
+
+      assert(dao.messagesAfter(chat, 7, 10) === Seq(msgs.last))
+      assert(dao.messagesAfter(chat, 8, 10) === Seq.empty)
+
+      assert(dao.messagesBetween(chat, 1, 3) === Seq(msgs.head))
+      assert(dao.messagesBetween(chat, 1, 2) === Seq.empty)
+
+      assert(dao.messagesBetween(chat, 7, 9) === Seq(msgs.last))
+      assert(dao.messagesBetween(chat, 8, 9) === Seq.empty)
+
+      assert(dao.countMessagesBetween(chat, 1, 4) === 1)
+      assert(dao.countMessagesBetween(chat, 1, 3) === 0)
+
+      assert(dao.countMessagesBetween(chat, 6, 9) === 1)
+      assert(dao.countMessagesBetween(chat, 7, 9) === 0)
+    }
+  }
+
+  private def freeH2Dao(): Unit = {
+    h2dao.close()
+    def delete(f: File): Unit = {
+      (Option(f.listFiles()) getOrElse Array.empty) foreach delete
+      assert(f.delete(), s"Couldn't delete $f")
+    }
+    delete(dir)
   }
 }

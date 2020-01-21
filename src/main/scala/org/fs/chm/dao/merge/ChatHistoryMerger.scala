@@ -11,19 +11,11 @@ class ChatHistoryMerger(
     masterDao: MutableChatHistoryDao,
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
-    slaveDs: Dataset,
-    chatsToMerge: Seq[ChangedChatMergeOption]
+    slaveDs: Dataset
 ) {
 
   /** Analyze dataset mergeability, returning the map from slave chat to mismatches in order. */
-  def analyze: Map[Chat, Seq[Mismatch]] = {
-    chatsToMerge.map {
-      case ChatMergeOption.Add(sc)         => (sc, Seq.empty)
-      case ChatMergeOption.Combine(mc, sc) => (sc, analyzeMergingChats(mc, sc))
-    }.toMap
-  }
-
-  protected[merge] def analyzeMergingChats(mc: Chat, sc: Chat): Seq[Mismatch] = {
+  def analyzeMergingChats(mc: Chat, sc: Chat): Seq[Mismatch] = {
     def messagesStream[T <: TaggedMessage](dao: ChatHistoryDao, chat: Chat, offset: Int): Stream[T] = {
       if (offset >= chat.msgCount) {
         Stream.empty
@@ -163,7 +155,12 @@ class ChatHistoryMerger(
     }
   }
 
-  def merge(resolution: Map[Chat, Map[Mismatch, MismatchResolution]]): Dataset = {
+  def mergeChats(
+      newDs: Dataset,
+      masterChat: Chat,
+      slaveChat: Chat,
+      resolutions: Map[Mismatch, MismatchResolution]
+  ): Unit = {
     /*
      * Do the same as analyze, reuse as much as possible
      */
@@ -239,19 +236,34 @@ object ChatHistoryMerger {
     case class Retain(masterChat: Chat)                   extends ChatMergeOption
   }
 
-  sealed trait Mismatch
+  sealed trait Mismatch {
+    def firstMasterMsgId: Long
+    def lastMasterMsgId: Long
+
+    def slaveMsgIds: (Long, Long)
+    def firstSlaveMsgId: Long = slaveMsgIds._1
+    def lastSlaveMsgId:  Long = slaveMsgIds._2
+  }
   object Mismatch {
     case class Addition(
         /** -1 if appended before first */
         prevMasterMsgId: Long,
         /** First and last ID*/
         slaveMsgIds: (Long, Long)
-    ) extends Mismatch
+    ) extends Mismatch {
+      // Since this is an addition and we're sure slave IDs are not actually present in master, we use them as
+      // anchor points
+      override def firstMasterMsgId: Long = slaveMsgIds._1
+      override def lastMasterMsgId:  Long = slaveMsgIds._2
+    }
 
     case class Conflict(
         masterMsgIds: (Long, Long),
         slaveMsgIds: (Long, Long)
-    ) extends Mismatch
+    ) extends Mismatch {
+      override def firstMasterMsgId: Long = masterMsgIds._1
+      override def lastMasterMsgId:  Long = masterMsgIds._2
+    }
   }
 
   sealed trait MismatchResolution

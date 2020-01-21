@@ -45,7 +45,11 @@ object SelectMergesTable {
 
     def renderer: ListItemRenderer[V, _]
 
-    protected def rowDataToResultOption(rd: RowData[V]): Option[R]
+    protected def rowDataToResultOption(rd: RowData[V], isSelected: Boolean): Option[R]
+
+    protected def isInBothSelectable(mv: V, sv: V): Boolean
+    protected def isInSlaveSelectable(sv: V): Boolean
+    protected def isInMasterSelectable(mv: V): Boolean
 
     lazy val (maxItemHeight: Int, maxItemWidth: Int) = {
       val uiItems = for {
@@ -91,23 +95,27 @@ object SelectMergesTable {
 
     lazy val tableModel: TableModel = new DefaultTableModel(Array[AnyRef]("Base", "Apply?", "Added"), 0) {
       allElems.foreachWithIndex { (merge, i) =>
+        def checkboxOrEmpty(isSelectable: Boolean) = if (isSelectable) (true: java.lang.Boolean) else ""
         val row: Array[AnyRef] = merge match {
           case RowData.InBoth(mv, sv) =>
+            val isSelectable = isInBothSelectable(mv, sv)
             Array(
-              ChatRenderable[V](mv, isCombine = true),
-              true: java.lang.Boolean,
-              ChatRenderable[V](sv, isCombine = true)
+              ChatRenderable[V](mv, isSelectable, isCombine = true),
+              checkboxOrEmpty(isSelectable),
+              ChatRenderable[V](sv, isSelectable,isCombine = true)
             )
           case RowData.InSlaveOnly(sv) =>
+            val isSelectable = isInSlaveSelectable(sv)
             Array(
               "",
-              true: java.lang.Boolean,
-              ChatRenderable[V](sv, isAdd = true)
+              checkboxOrEmpty(isSelectable),
+              ChatRenderable[V](sv, isSelectable, isAdd = true)
             )
           case RowData.InMasterOnly(mv) =>
+            val isSelectable = isInMasterSelectable(mv)
             Array(
-              ChatRenderable[V](mv),
-              "",
+              ChatRenderable[V](mv, isSelectable),
+              checkboxOrEmpty(isSelectable),
               ""
             )
         }
@@ -126,10 +134,13 @@ object SelectMergesTable {
 
     def selected: Seq[R] = {
       def isSelected(rowIdx: Int): Boolean = {
-        tableModel.getValueAt(rowIdx, 1).asInstanceOf[java.lang.Boolean].booleanValue
+        tableModel.getValueAt(rowIdx, 1) match {
+          case b: java.lang.Boolean => b.booleanValue
+          case _                    => false
+        }
       }
-      allElems.zipWithIndex.collect {
-        case (rd, rowIdx) if isSelected(rowIdx) => rowDataToResultOption(rd)
+      allElems.zipWithIndex.map {
+        case (rd, rowIdx) => rowDataToResultOption(rd, isSelected(rowIdx))
       }.yieldDefined
     }
   }
@@ -166,5 +177,5 @@ object SelectMergesTable {
     sealed case class InSlaveOnly[V](slaveValue: V)            extends RowData[V]
   }
 
-  case class ChatRenderable[V](v: V, isCombine: Boolean = false, isAdd: Boolean = false)
+  case class ChatRenderable[V](v: V, isSelectable: Boolean, isCombine: Boolean = false, isAdd: Boolean = false)
 }

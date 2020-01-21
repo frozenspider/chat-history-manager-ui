@@ -1,5 +1,6 @@
 package org.fs.chm.ui.swing.general
 
+import java.awt.Color
 import java.awt.Font
 import java.io.File
 
@@ -60,4 +61,17 @@ object SwingUtils extends Logging {
   }
 
   val comfortableScrollSpeed: Int = 10
+
+  object Colors {
+
+    /** Light green */
+    val AdditionBg: Color = Color.decode("#E4FFE0")
+
+    /** Light yellow */
+    val CombineBg: Color = Color.decode("#F8F8CE")
+
+    /** Light red */
+    val ConflictBg: Color = Color.decode("#F8CECE")
+
+  }
 }

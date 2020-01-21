@@ -13,6 +13,7 @@ import org.scalatest.FunSuite
 import org.slf4s.Logging
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao.merge.ChatHistoryMerger._
+import org.fs.chm.utility.TestUtils._
 
 @RunWith(classOf[org.scalatest.junit.JUnitRunner])
 class ChatHistoryMergerSpec //
@@ -21,28 +22,26 @@ class ChatHistoryMergerSpec //
     with Logging
     with BeforeAndAfter {
 
-  val date      = DateTime.parse("2019-01-02T11:15:21")
-  val rnd       = new Random()
   val maxId     = (ChatHistoryMerger.BatchSize * 3)
   val maxUserId = 3
   def rndUserId = 1 + rnd.nextInt(maxUserId)
 
   test("merge chats - same single message") {
-    val msgs     = Seq(createMessage(1, 1))
+    val msgs     = Seq(createRegularMessage(1, 1))
     val helper   = new MergerHelper(msgs, msgs)
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis.isEmpty)
   }
 
   test("merge chats - same multiple messages") {
-    val msgs: Seq[Message] = (1 to maxId) map { i => createMessage(i, rndUserId) }
+    val msgs: Seq[Message] = (1 to maxId) map { i => createRegularMessage(i, rndUserId) }
     val helper   = new MergerHelper(msgs, msgs)
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(analysis.isEmpty)
   }
 
   test("merge chats - added one message in the middle") {
-    val msgs123  = for (i <- 1 to 3) yield createMessage(i, rndUserId)
+    val msgs123  = for (i <- 1 to 3) yield createRegularMessage(i, rndUserId)
     val msgs13   = msgs123.filter(_.id != 2)
     val helper   = new MergerHelper(msgs13, msgs123)
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
@@ -50,7 +49,7 @@ class ChatHistoryMergerSpec //
   }
 
   test("merge chats - changed one message in the middle") {
-    val msgsA    = for (i <- 1 to 3) yield createMessage(i, rndUserId)
+    val msgsA    = for (i <- 1 to 3) yield createRegularMessage(i, rndUserId)
     val msgsB    = changedMessages(msgsA, (_ == 2))
     val helper   = new MergerHelper(msgsA, msgsB)
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
@@ -64,7 +63,7 @@ class ChatHistoryMergerSpec //
    * }}}
    */
   test("merge chats - added multiple message in the beginning") {
-    val msgs     = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
+    val msgs     = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val msgsL    = Seq(msgs.last)
     val helper   = new MergerHelper(msgsL, msgs)
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
@@ -78,7 +77,7 @@ class ChatHistoryMergerSpec //
    * }}}
    */
   test("merge chats - changed multiple message in the beginning") {
-    val msgsA    = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
+    val msgsA    = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val msgsB    = changedMessages(msgsA, (_ < maxId))
     val helper   = new MergerHelper(msgsA, msgsB)
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
@@ -92,7 +91,7 @@ class ChatHistoryMergerSpec //
    * }}}
    */
   test("merge chats - added multiple message in the middle") {
-    val msgs     = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
+    val msgs     = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val msgsFL   = Seq(msgs.head, msgs.last)
     val helper   = new MergerHelper(msgsFL, msgs)
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
@@ -106,7 +105,7 @@ class ChatHistoryMergerSpec //
    * }}}
    */
   test("merge chats - changed multiple message in the middle") {
-    val msgsA    = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
+    val msgsA    = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val msgsB    = changedMessages(msgsA, (id => id > 1 && id < maxId))
     val helper   = new MergerHelper(msgsA, msgsB)
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
@@ -120,7 +119,7 @@ class ChatHistoryMergerSpec //
    * }}}
    */
   test("merge chats - added multiple message in the end") {
-    val msgs     = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
+    val msgs     = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val msgsF    = Seq(msgs.head)
     val helper   = new MergerHelper(msgsF, msgs)
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
@@ -134,7 +133,7 @@ class ChatHistoryMergerSpec //
    * }}}
    */
   test("merge chats - changed multiple message in the end") {
-    val msgsA    = for (i <- 1 to maxId) yield createMessage(i, rndUserId)
+    val msgsA    = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val msgsB    = changedMessages(msgsA, (_ > 1))
     val helper   = new MergerHelper(msgsA, msgsB)
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
@@ -148,7 +147,7 @@ class ChatHistoryMergerSpec //
    * }}}
    */
   test("merge chats - master has messages not present in slave") {
-    val msgs     = for (i <- 1 to 5) yield createMessage(i, rndUserId)
+    val msgs     = for (i <- 1 to 5) yield createRegularMessage(i, rndUserId)
     val msgsA    = msgs
     val msgsB    = msgs.filter(Seq(2, 4) contains _.id)
     val helper   = new MergerHelper(msgsA, msgsB)
@@ -164,7 +163,7 @@ class ChatHistoryMergerSpec //
    * }}}
    */
   test("merge chats - everything") {
-    val msgs  = for (i <- 1 to 12) yield createMessage(i, rndUserId)
+    val msgs  = for (i <- 1 to 12) yield createRegularMessage(i, rndUserId)
     val msgsA = msgs.filter(Seq(1, 2, 5, 6, 7, 8, 9, 10) contains _.id)
     val msgsB = changedMessages(
       msgs.filter((3 to 12) contains _.id),
@@ -187,7 +186,7 @@ class ChatHistoryMergerSpec //
    * }}}
    */
   test("merge chats - everything, roles inverted") {
-    val msgs  = for (i <- 1 to 12) yield createMessage(i, rndUserId)
+    val msgs  = for (i <- 1 to 12) yield createRegularMessage(i, rndUserId)
     val msgsA = msgs.filter((3 to 12) contains _.id)
     val msgsB = changedMessages(
       msgs.filter(Seq(1, 2, 5, 6, 7, 8, 9, 10) contains _.id),
@@ -206,20 +205,6 @@ class ChatHistoryMergerSpec //
   // Helpers
   //
 
-  def createMessage(idx: Int, userId: Int): Message = {
-    Message.Regular(
-      id                     = idx,
-      time                   = date.plusMinutes(idx),
-      editTimeOption         = Some(date.plusMinutes(idx).plusSeconds(5)),
-      fromNameOption         = Some("u" + userId),
-      fromId                 = userId,
-      forwardFromNameOption  = Some("u" + userId),
-      replyToMessageIdOption = Some(rnd.nextInt(idx)), // Any previous message
-      textOption             = Some(RichText(Seq(RichText.Plain(s"Hello there, ${idx}!")))),
-      contentOption          = Some(Content.Poll(s"Hey, ${idx}!"))
-    )
-  }
-
   def changedMessages(msgs: Seq[Message], idCondition: Long => Boolean): Seq[Message] = {
     msgs.collect {
       case m: Message.Regular if idCondition(m.id) =>
@@ -230,57 +215,16 @@ class ChatHistoryMergerSpec //
   }
 
   class MergerHelper(msgs1: Seq[Message], msgs2: Seq[Message]) {
-
-    val (dao1, d1ds, d1users, d1chat) = createDao("One", msgs1)
-    val (dao2, d2ds, d2users, d2chat) = createDao("Two", msgs2)
+    val (dao1, d1ds, d1users, d1chat) = createDaoAndEntities("One", msgs1, maxUserId)
+    val (dao2, d2ds, d2users, d2chat) = createDaoAndEntities("Two", msgs2, maxUserId)
 
     def merger: ChatHistoryMerger =
-      new ChatHistoryMerger(
-        dao1,
-        d1ds,
-        dao2,
-        d2ds,
-        Seq(ChatMergeOption.Combine(d1chat, d2chat))
-      )
+      new ChatHistoryMerger(dao1, d1ds, dao2, d2ds)
 
-    private def createDao(nameSuffix: String, msgs: Seq[Message]) = {
-      val ds = Dataset(
-        uuid       = UUID.randomUUID(),
-        alias      = "Dataset " + nameSuffix,
-        sourceType = "test source"
-      )
-      val chat  = createChat(ds, 1, "One", msgs.size)
-      val users = (1 to maxUserId).map(i => createUser(ds, i))
-      val dao = new EagerChatHistoryDao(
-        name              = "Dao " + nameSuffix,
-        dataPathRoot      = null,
-        dataset           = ds,
-        myself1           = users.head,
-        rawUsers          = users,
-        chatsWithMessages = ListMap(chat -> msgs.toIndexedSeq)
-      ) with MutableChatHistoryDao
-
+    private def createDaoAndEntities(nameSuffix: String, msgs: Seq[Message], numUsers: Int) = {
+      val dao = createSimpleDao(nameSuffix, msgs, numUsers)
+      val (ds, users, chat) = getSimpleDaoEntities(dao)
       (dao, ds, users, chat)
     }
-
-    private def createChat(ds: Dataset, idx: Int, nameSuffix: String, messagesSize: Int): Chat = Chat(
-      dsUuid        = ds.uuid,
-      id            = idx,
-      nameOption    = Some("Chat " + nameSuffix),
-      tpe           = ChatType.Personal,
-      imgPathOption = None,
-      msgCount      = messagesSize
-    )
-
-    private def createUser(ds: Dataset, idx: Int): User = User(
-      dsUuid             = ds.uuid,
-      id                 = idx,
-      firstNameOption    = Some("User"),
-      lastNameOption     = Some(idx.toString),
-      usernameOption     = Some("user" + idx),
-      phoneNumberOption  = Some("xxx xx xx".replaceAll("x", idx.toString)),
-      lastSeenTimeOption = Some(DateTime.now())
-    )
   }
-
 }
