@@ -330,7 +330,8 @@ class MainFrameApp //
               Lock.synchronized {
                 val (viewPos1, viewSize1) = msgAreaContainer.view.posAndSize
                 msgDoc.insert("<div id=\"loading\"><hr><p> Loading... </p><hr></div>", MessageInsertPosition.Leading)
-                val addedMessages = cc.dao.messagesBefore(cc.chat, loadStatus.firstId, MsgBatchLoadSize).get
+                val addedMessages =
+                  cc.dao.messagesBefore(cc.chat, loadStatus.firstId, MsgBatchLoadSize).dropRight(1)
                 updateCache(
                   cc.dao,
                   cc.chat,

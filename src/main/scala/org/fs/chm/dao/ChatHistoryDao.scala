@@ -39,8 +39,14 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
-  /** Return N messages before the given one (exclusive). Returns None if message isn't found */
-  def messagesBefore(chat: Chat, msgId: Long, limit: Int): Option[IndexedSeq[Message]]
+  /** Return N messages before the one with the given ID (inclusive) */
+  def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
+
+  /** Return N messages after the one with the given ID (inclusive) */
+  def messagesAfter(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
+
+  /** Return N messages between the ones with the given IDs (inclusive) */
+  def messagesBetween(chat: Chat, msgId1: Long, msgId2: Long): IndexedSeq[Message]
 
   def messageOption(chat: Chat, id: Long): Option[Message]
 
@@ -58,6 +64,10 @@ trait ChatHistoryDao extends AutoCloseable {
 }
 
 trait MutableChatHistoryDao extends ChatHistoryDao {}
+
+sealed trait WithId {
+  def id: Long
+}
 
 case class Dataset(
     uuid: UUID,
@@ -92,7 +102,7 @@ case class User(
     usernameOption: Option[String],
     phoneNumberOption: Option[String],
     lastSeenTimeOption: Option[DateTime]
-) extends PersonInfo
+) extends PersonInfo with WithId
 
 sealed abstract class ChatType(val name: String)
 object ChatType {
@@ -107,7 +117,7 @@ case class Chat(
     tpe: ChatType,
     imgPathOption: Option[String],
     msgCount: Int
-)
+) extends WithId
 
 trait Searchable {
   def plainSearchableString: String
@@ -188,7 +198,7 @@ object RichText {
  * Same applies to Content.
  */
 
-sealed trait Message extends Searchable {
+sealed trait Message extends Searchable with WithId {
   val id: Long
   val time: DateTime
   val fromNameOption: Option[String]

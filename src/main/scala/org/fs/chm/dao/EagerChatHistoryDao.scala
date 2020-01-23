@@ -78,15 +78,25 @@ class EagerChatHistoryDao(
 
   override def interlocutors(chat: Chat): Seq[User] = interlocutorsMap(chat)
 
-  override def messagesBefore(chat: Chat, msgId: Long, limit: Int): Option[IndexedSeq[Message]] = {
+  override def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
+    val messages   = chatsWithMessages(chat)
+    val idx        = messages.lastIndexWhere(_.id <= msgId)
+    val lowerLimit = (idx - limit + 1) max 0
+    messages.slice(lowerLimit, idx + 1)
+  }
+
+  override def messagesAfter(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
+    val messages   = chatsWithMessages(chat)
+    val idx        = messages.indexWhere(_.id >= msgId)
+    val upperLimit = (idx + limit) min messages.size
+    messages.slice(idx, upperLimit)
+  }
+
+  override def messagesBetween(chat: Chat, msgId1: Long, msgId2: Long): IndexedSeq[Message] = {
     val messages = chatsWithMessages(chat)
-    val idx = messages.indexWhere(_.id == msgId)
-    if (idx < 0) {
-      None
-    } else {
-      val upperLimit = (idx - limit) max 0
-      Some(messages.slice(upperLimit, idx))
-    }
+    val idx1     = messages.indexWhere(_.id >= msgId1)
+    val idx2     = messages.lastIndexWhere(_.id <= msgId2)
+    messages.slice(idx1, idx2 + 1)
   }
 
   override def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message] = {
