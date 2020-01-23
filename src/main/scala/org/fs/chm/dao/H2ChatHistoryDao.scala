@@ -22,7 +22,7 @@ class H2ChatHistoryDao(
     dataPathRoot: File,
     txctr: Transactor.Aux[IO, _],
     closeTransactor: () => Unit
-) extends ChatHistoryDao
+) extends MutableChatHistoryDao
     with Logging {
 
   import org.fs.chm.dao.H2ChatHistoryDao._
@@ -72,7 +72,7 @@ class H2ChatHistoryDao(
     } yield c2) getOrElse Seq.empty
 
   override def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message] = {
-    val raws = queries.rawMessages.selectSlice(chat, offset, limit).transact(txctr).unsafeRunSync().reverse
+    val raws = queries.rawMessages.selectSlice(chat, offset, limit).transact(txctr).unsafeRunSync()
     raws map Raws.toMessage
   }
 
@@ -81,11 +81,19 @@ class H2ChatHistoryDao(
     raws map Raws.toMessage
   }
 
-  override def messagesBefore(chat: Chat, msgId: Long, limit: Int): Option[IndexedSeq[Message]] = {
-    messageOption(chat, msgId) map { m =>
-      val raws = queries.rawMessages.selectBeforeInversed(chat, m, limit).transact(txctr).unsafeRunSync().reverse
-      raws map Raws.toMessage
-    }
+  override def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
+    val raws = queries.rawMessages.selectBeforeInversed(chat, msgId, limit).transact(txctr).unsafeRunSync().reverse
+    raws map Raws.toMessage
+  }
+
+  override def messagesAfter(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
+    val raws = queries.rawMessages.selectAfter(chat, msgId, limit).transact(txctr).unsafeRunSync()
+    raws map Raws.toMessage
+  }
+
+  override def messagesBetween(chat: Chat, msgId1: Long, msgId2: Long): IndexedSeq[Message] = {
+    val raws = queries.rawMessages.selectBetween(chat, msgId1, msgId2).transact(txctr).unsafeRunSync()
+    raws map Raws.toMessage
   }
 
   override def messageOption(chat: Chat, id: Long): Option[Message] = {
@@ -234,8 +242,8 @@ class H2ChatHistoryDao(
     closeTransactor()
   }
 
-  override def isLoaded(f: File): Boolean = {
-    f != null && this.dataPathRoot == f.getParentFile
+  override def isLoaded(dataPathRoot: File): Boolean = {
+    dataPathRoot != null && this.dataPathRoot == dataPathRoot
   }
 
   object queries {
@@ -354,6 +362,8 @@ class H2ChatHistoryDao(
       createQueries.reduce((a, b) => a flatMap (_ => b))
     }
 
+    def withLimit(limit: Int) = fr"LIMIT ${limit}"
+
     def backup(path: String): ConnectionIO[Int] =
       sql"BACKUP TO $path".update.run
 
@@ -405,30 +415,43 @@ class H2ChatHistoryDao(
     }
 
     object rawMessages {
+
       private val colsFr      = Fragment.const(s"""|ds_uuid, chat_id, id, message_type, time, edit_time, from_name,
                                               |from_id, forward_from_name, reply_to_message_id, title, members,
                                               |duration_sec, discard_reason, pinned_message_id,
                                               |path, width, height""".stripMargin)
       private val selectAllFr = fr"SELECT" ++ colsFr ++ fr"FROM messages"
+      private val orderAsc    = fr"ORDER BY time, id"
+      private val orderDesc   = fr"ORDER BY time DESC, id DESC"
 
       private def selectAllByChatFr(dsUuid: UUID, chatId: Long) =
         selectAllFr ++ fr"WHERE ds_uuid = $dsUuid AND chat_id = $chatId"
-
-      private def orderByTimeDescLimit(limit: Int) = fr"ORDER BY time DESC, id DESC LIMIT ${limit}"
 
       def selectOption(chat: Chat, id: Long) =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND id = ${id}").query[RawMessage].option
 
       def selectSlice(chat: Chat, offset: Int, limit: Int) =
-        (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"OFFSET $offset LIMIT ${limit}").query[RawMessage].to[IndexedSeq]
+        (selectAllByChatFr(chat.dsUuid, chat.id)
+          ++ orderAsc ++ withLimit(limit)
+          ++ fr"OFFSET $offset").query[RawMessage].to[IndexedSeq]
 
       def selectLastInversed(chat: Chat, limit: Int) =
-        (selectAllByChatFr(chat.dsUuid, chat.id) ++ orderByTimeDescLimit(limit)).query[RawMessage].to[IndexedSeq]
+        (selectAllByChatFr(chat.dsUuid, chat.id) ++ orderDesc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
 
-      def selectBeforeInversed(chat: Chat, m: Message, limit: Int) =
+      def selectBeforeInversed(chat: Chat, id: Long, limit: Int) =
         (selectAllByChatFr(chat.dsUuid, chat.id)
-          ++ fr"AND time < ${m.time} AND id < ${m.id}"
-          ++ orderByTimeDescLimit(limit)).query[RawMessage].to[IndexedSeq]
+          ++ fr"AND id <= ${id}"
+          ++ orderDesc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
+
+      def selectAfter(chat: Chat, id: Long, limit: Int) =
+        (selectAllByChatFr(chat.dsUuid, chat.id)
+          ++ fr"AND id >= ${id}"
+          ++ orderAsc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
+
+      def selectBetween(chat: Chat, id1: Long, id2: Long) =
+        (selectAllByChatFr(chat.dsUuid, chat.id)
+          ++ fr"AND id >= ${id1} AND id <= ${id2}"
+          ++ orderAsc).query[RawMessage].to[IndexedSeq]
 
       def insert(m: RawMessage): ConnectionIO[Int] =
         (fr"INSERT INTO messages (" ++ colsFr ++ fr") VALUES ("
