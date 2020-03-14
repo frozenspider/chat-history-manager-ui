@@ -130,20 +130,33 @@ class SelectMergeMessagesDialog(
 
     override val renderer = (renderable: ChatRenderable[RenderableMismatch]) => {
       val msgAreaContainer = new MessagesAreaContainer(htmlKit)
+//      msgAreaContainer.textPane.peer.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.box(true))
       val msgDoc           = msgService.createStubDoc
+      msgDoc.doc.getStyleSheet.addRule("#messages { background-color: #FFE0E0; }")
       if (renderable.isSelectable) {
         val color = if (renderable.isAdd) Colors.AdditionBg else Colors.CombineBg
         msgAreaContainer.textPane.background = color
       }
-      for (either <- renderable.v.messageOptions) {
+      val allRendered = for (either <- renderable.v.messageOptions) yield {
         val rendered = either match {
           case Right(msg) => msgService.renderMessageHtml(renderable.v.cwd, msg)
           case Left(num)  => s"<hr>${num} messages<hr><p>"
         }
-        msgDoc.insert(rendered, MessageInsertPosition.Trailing)
+        rendered
       }
+      msgDoc.insert(allRendered.mkString.replaceAll("\n",""), MessageInsertPosition.Trailing)
       msgAreaContainer.document = msgDoc.doc
-      msgAreaContainer.scrollPane
+      val ui = msgAreaContainer.textPane.peer.getUI
+      val rootView = ui.getRootView(null)
+      val view = rootView.getView(0)
+
+      val prefSize = msgAreaContainer.textPane.preferredSize
+      rootView.setSize(prefSize.width, prefSize.height)
+//      val height = view.getPreferredSpan(1).round
+       // = height
+
+//      msgAreaContainer.textPane.preferredHeight = 1639
+      msgAreaContainer.textPane
     }
 
     override protected def isInBothSelectable(mv: RenderableMismatch, sv: RenderableMismatch): Boolean = !mv.isContext
@@ -238,22 +251,29 @@ private object SelectMergeMessagesDialog {
     val msgService    = new MessagesService(htmlKit)
 
     val numUsers = 3
-    val msgs     = (1 to 9) map (id => createRegularMessage(id, (id % numUsers) + 1))
+    val msgs     = (0 to 9) map (id => createRegularMessage(id, (id % numUsers) + 1))
 
     val (mMsgs, sMsgs, mismatches) = {
-      // Addtion before first
+//      // Addtion before first
 //      val mMsgs = msgs filter (Seq(4, 5) contains _.id)
 //      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.id)
 //      val mismatches = IndexedSeq(
 //        Mismatch.Addition(prevMasterMsgId = -1, slaveMsgIds = (1, 3))
 //      )
 
-      // Conflicts
-      val mMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.id)
-      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.id)
+//      // Conflicts
+//      val mMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.id)
+//      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.id)
+//      val mismatches = IndexedSeq(
+//        Mismatch.Conflict(masterMsgIds = (2, 3), slaveMsgIds = (2, 3)),
+//        Mismatch.Conflict(masterMsgIds = (4, 5), slaveMsgIds = (4, 5))
+//      )
+
+      //
+      val mMsgs = msgs filter (Seq() contains _.id)
+      val sMsgs = msgs filter (Seq(0,1,2,3,4,5) contains _.id)
       val mismatches = IndexedSeq(
-        Mismatch.Conflict(masterMsgIds = (2, 3), slaveMsgIds = (2, 3)),
-        Mismatch.Conflict(masterMsgIds = (4, 5), slaveMsgIds = (4, 5))
+        Mismatch.Addition(prevMasterMsgId = -1, slaveMsgIds = (0, 5))
       )
 
       (mMsgs, sMsgs, mismatches)

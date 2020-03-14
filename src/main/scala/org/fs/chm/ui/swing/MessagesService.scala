@@ -20,42 +20,37 @@ class MessagesService(htmlKit: HTMLEditorKit) {
 
   def createStubDoc: MessageDocument = {
     val doc     = htmlKit.createDefaultDocument().asInstanceOf[HTMLDocument]
-    val content = """|<html>
-                     | <body>
-                     |   <div id="messages"></div>
-                     | </body>
-                     |</html>""".stripMargin
+    val content = """<div id="messages"></div>"""
     htmlKit.read(new StringReader(content), doc, 0)
-    val cssRules = Seq(
-      """|body {
-         |  font-family: arial,sans-serif;
-         |}""".stripMargin,
-      """|.title {
-         |  padding-left: 5px;
-         |  padding-bottom: 5px;
-         |  font-size: 105%;
-         |}""".stripMargin,
-      """|.forwarded-from {
-         |  padding-left: 5px;
-         |  padding-bottom: 5px;
-         |  font-size: 105%;
-         |  color: #909090;
-         |}""".stripMargin,
-      """|.title-name {
-         |  font-weight: bold;
-         |}""".stripMargin,
-      """|blockquote {
-         |   border-left: 1px solid #ccc;
-         |   margin: 5px 10px;
-         |   padding: 5px 10px;
-         |}""".stripMargin,
-      """|.system-message {
-         |   border: 1px solid #A0A0A0;
-         |   margin: 5px 10px;
-         |   padding: 5px 10px;
-         |}""".stripMargin
-    )
-    cssRules foreach (doc.getStyleSheet.addRule)
+    val css = """|body {
+                 |  font-family: arial,sans-serif;
+                 |}
+                 |.title {
+                 |  padding-left: 5px;
+                 |  padding-bottom: 5px;
+                 |  font-size: 105%;
+                 |}
+                 |.forwarded-from {
+                 |  padding-left: 5px;
+                 |  padding-bottom: 5px;
+                 |  font-size: 105%;
+                 |  color: #909090;
+                 |}
+                 |.title-name {
+                 |  font-weight: bold;
+                 |}
+                 |blockquote {
+                 |   border-left: 1px solid #ccc;
+                 |   margin: 5px 10px;
+                 |   padding: 5px 10px;
+                 |}
+                 |.system-message {
+                 |   border: 1px solid #A0A0A0;
+                 |   margin: 5px 10px;
+                 |   padding: 5px 10px;
+                 |}""".stripMargin
+    doc.getStyleSheet.addRule(css)
+    doc.getStyleSheet.addRule("W3C_LENGTH_UNITS_ENABLE")
     val msgEl = doc.getElement("messages")
     MessageDocument(doc, msgEl)
   }

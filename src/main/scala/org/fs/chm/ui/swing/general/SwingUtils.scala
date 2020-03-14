@@ -87,7 +87,7 @@ object SwingUtils extends Logging {
     val CombineBg: Color = Color.decode("#F8F8CE")
 
     /** Light red */
-    val ConflictBg: Color = Color.decode("#F8CECE")
+    val ConflictBg: Color = Color.decode("#FFF0F0")
 
     val CyclingStrings = Seq(
       // User

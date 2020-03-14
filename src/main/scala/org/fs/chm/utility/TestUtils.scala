@@ -46,7 +46,7 @@ object TestUtils {
       editTimeOption         = Some(baseDate.plusMinutes(idx).plusSeconds(5)),
       fromId                 = userId,
       forwardFromNameOption  = Some("u" + userId),
-      replyToMessageIdOption = Some(rnd.nextInt(idx)), // Any previous message
+      replyToMessageIdOption = if (idx > 0) Some(rnd.nextInt(idx)) else None, // Any previous message
       textOption             = Some(RichText(Seq(RichText.Plain(s"Hello there, ${idx}!")))),
       contentOption          = Some(Content.Poll(s"Hey, ${idx}!"))
     )
