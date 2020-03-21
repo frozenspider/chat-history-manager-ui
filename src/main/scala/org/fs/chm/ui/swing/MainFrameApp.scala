@@ -16,8 +16,7 @@ import com.github.nscala_time.time.Imports._
 import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
-import org.fs.chm.loader.H2DataManager
-import org.fs.chm.loader.TelegramDataLoader
+import org.fs.chm.loader._
 import org.fs.chm.ui.swing.MessagesService._
 import org.fs.chm.ui.swing.chatlist.ChatListSelectionCallbacks
 import org.fs.chm.ui.swing.chatlist.DaoItem
@@ -252,10 +251,10 @@ class MainFrameApp //
             msgDoc.insert(msgService.renderMessageHtml(cc, m), MessageInsertPosition.Trailing)
           }
           val loadStatus = LoadStatus(
-            firstId = messages.headOption map (_.id) getOrElse (-1),
-            lastId = messages.lastOption map (_.id) getOrElse (-1),
+            firstId      = messages.headOption map (_.id) getOrElse (-1),
+            lastId       = messages.lastOption map (_.id) getOrElse (-1),
             beginReached = messages.size < MsgBatchLoadSize,
-            endReached = true
+            endReached   = true
           )
           updateCache(cc.dao, cc.chat, ChatCache(Some(msgDoc), Some(loadStatus)))
       }
@@ -278,7 +277,7 @@ class MainFrameApp //
       case Some(cc) =>
         Lock.synchronized {
           msgAreaContainer.caretUpdatesEnabled = false
-          val cache = loadedDaos(cc.dao)(cc.chat)
+          val cache      = loadedDaos(cc.dao)(cc.chat)
           val loadStatus = cache.loadStatusOption.get
           if (!loadStatus.beginReached) {
             changeChatsClickable(false)
@@ -295,7 +294,7 @@ class MainFrameApp //
                   cc.chat,
                   cache.copy(loadStatusOption = Some {
                     loadStatus.copy(
-                      firstId = addedMessages.headOption map (_.id) getOrElse (-1),
+                      firstId      = addedMessages.headOption map (_.id) getOrElse (-1),
                       beginReached = addedMessages.size < MsgBatchLoadSize
                     )
                   })
@@ -344,21 +343,27 @@ class MainFrameApp //
   private object DataLoaders {
     val LastFileKey = "last_database_file"
 
-    private val h2 = new H2DataManager
-    private val tg = new TelegramDataLoader
+    private val h2      = new H2DataManager
+    private val tg      = new TelegramDataLoader
+    private val gts5610 = new GTS5610DataLoader
 
-    private val h2ff = easyFileFilter(s"${BuildInfo.name} database (*${H2DataManager.DefaultExt})") { f =>
-      f.getName endsWith H2DataManager.DefaultExt
-    }
+    private val h2ff = easyFileFilter(
+      s"${BuildInfo.name} database (*.${H2DataManager.DefaultExt})"
+    )(_.getName endsWith ("." + H2DataManager.DefaultExt))
 
-    private val tgFf = easyFileFilter("Telegram export JSON database (result.json)") { f =>
-      f.getName == "result.json"
-    }
+    private val tgFf = easyFileFilter(
+      "Telegram export JSON database (result.json)"
+    )(_.getName == "result.json")
+
+    private val gts5610Ff = easyFileFilter(
+      s"Samsung GT-S5610 export vMessage files [choose any in folder] (*.${GTS5610DataLoader.DefaultExt})"
+    ) { _.getName endsWith ("." + GTS5610DataLoader.DefaultExt) }
 
     val openChooser = new FileChooser(null) {
       title = "Select a database to open"
       peer.addChoosableFileFilter(h2ff)
       peer.addChoosableFileFilter(tgFf)
+      peer.addChoosableFileFilter(gts5610Ff)
     }
 
     def load(file: File): ChatHistoryDao = {
@@ -366,13 +371,15 @@ class MainFrameApp //
         h2.loadData(file.getParentFile)
       } else if (tgFf.accept(file)) {
         tg.loadData(file.getParentFile)
+      } else if (gts5610Ff.accept(file)) {
+        gts5610.loadData(file.getParentFile)
       } else {
         throw new IllegalStateException("Unknown file type!")
       }
     }
 
     val saveAsChooser = new FileChooser(null) {
-      title = "Choose a directory where the new database will be stored"
+      title             = "Choose a directory where the new database will be stored"
       fileSelectionMode = FileChooser.SelectionMode.DirectoriesOnly
       peer.setAcceptAllFileFilterUsed(false)
     }
