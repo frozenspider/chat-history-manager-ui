@@ -21,11 +21,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     val resultJsonFile: File = new File(path, "result.json")
     if (!resultJsonFile.exists()) throw new FileNotFoundException("result.json not found in " + path.getAbsolutePath)
 
-    val dataset = Dataset(
-      uuid       = UUID.randomUUID(),
-      alias      = "Telegram data loaded @ " + DateTime.now().toString("yyyy-MM-dd"),
-      sourceType = "telegram"
-    )
+    val dataset = Dataset.createDefault("Telegram", "telegram")
 
     val parsed = JsonMethods.parse(resultJsonFile)
     val myself = parseMyself(getRawField(parsed, "personal_information", true), dataset.uuid)
