@@ -7,6 +7,7 @@ import java.util.UUID
 import javax.swing.text.Element
 import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
+import org.apache.commons.lang3.StringEscapeUtils
 import org.fs.chm.dao.Message.Service
 import org.fs.chm.dao._
 import org.fs.chm.ui.swing.general.ChatWithDao
@@ -84,6 +85,8 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     md.doc
   }
 
+  val unnamed = StringEscapeUtils.escapeHtml4("<Unnamed>")
+
   //
   // Renderers and helpers
   //
@@ -121,7 +124,11 @@ class MessagesService(htmlKit: HTMLEditorKit) {
       if (idx1 != -1) idx1 else idx2
     }
     val color = if (idx >= 0) NameColors(idx % NameColors.length) else "#000000"
-    s"""<span class="title-name" style="color: $color;">${nameOption getOrElse "<Unnamed>"}</span>"""
+    val resolvedName = nameOption getOrElse {
+      idOption flatMap (id => intl.find(_.id == id)) map (_.prettyName) getOrElse unnamed
+    }
+
+    s"""<span class="title-name" style="color: $color;">${resolvedName}</span>"""
   }
 
   private def renderTextOption(textOption: Option[RichText]): Option[String] =

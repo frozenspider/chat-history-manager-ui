@@ -81,6 +81,14 @@ case class Dataset(
   override def hashCode: Int = this.uuid.hashCode
 }
 
+object Dataset {
+  def createDefault(srcAlias: String, srcType: String) = Dataset(
+    uuid       = UUID.randomUUID(),
+    alias      = s"${srcAlias} data loaded @ " + DateTime.now().toString("yyyy-MM-dd"),
+    sourceType = srcType
+  )
+}
+
 sealed trait PersonInfo {
   val firstNameOption: Option[String]
   val lastNameOption: Option[String]

@@ -17,7 +17,7 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
 
   private implicit val cs = IO.contextShift(ExecutionContext.global)
 
-  private val dataFileName = "data" + DefaultExt
+  private val dataFileName = "data." + DefaultExt
 
   private val options = Seq(
     //"TRACE_LEVEL_FILE=2",
@@ -47,7 +47,7 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
   }
 
   private def dbUrl(path: File): String = {
-    val innerPath = path.getAbsolutePath.replaceAll(DefaultExt.replace(".", "\\.") + "$", "").replace("\\", "/")
+    val innerPath = path.getAbsolutePath.replaceAll("\\." + DefaultExt + "$", "").replace("\\", "/")
     "jdbc:h2:" + innerPath + optionsString
   }
 
@@ -62,5 +62,5 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
 }
 
 object H2DataManager {
-  val DefaultExt   = ".mv.db"
+  val DefaultExt   = "mv.db"
 }
