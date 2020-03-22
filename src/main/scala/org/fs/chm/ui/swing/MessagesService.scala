@@ -99,7 +99,7 @@ class MessagesService(htmlKit: HTMLEditorKit) {
       case sm: Message.Service =>
         ServiceMessageHtmlRenderer.render(cc, sm)
     }
-    val titleNameHtml = renderTitleName(cc, Some(m.fromId), m.fromNameOption)
+    val titleNameHtml = renderTitleName(cc, Some(m.fromId), None)
     val titleHtml =
       s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})"""
     s"""

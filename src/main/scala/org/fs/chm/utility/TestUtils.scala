@@ -44,7 +44,6 @@ object TestUtils {
       id                     = idx,
       time                   = baseDate.plusMinutes(idx),
       editTimeOption         = Some(baseDate.plusMinutes(idx).plusSeconds(5)),
-      fromNameOption         = Some("u" + userId),
       fromId                 = userId,
       forwardFromNameOption  = Some("u" + userId),
       replyToMessageIdOption = Some(rnd.nextInt(idx)), // Any previous message
@@ -68,7 +67,7 @@ object TestUtils {
       dataPathRoot      = dataPathRoot,
       dataset           = ds,
       myself1           = users.head,
-      rawUsers          = users,
+      users1            = users,
       chatsWithMessages = ListMap(chat -> msgs.toIndexedSeq)
     ) with EagerMutableDaoTrait
   }

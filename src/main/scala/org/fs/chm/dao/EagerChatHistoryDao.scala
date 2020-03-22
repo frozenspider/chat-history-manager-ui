@@ -11,8 +11,7 @@ class EagerChatHistoryDao(
     dataPathRoot: File,
     dataset: Dataset,
     myself1: User,
-    /** IDs might be 0 */
-    rawUsers: Seq[User],
+    users1: Seq[User],
     chatsWithMessages: ListMap[Chat, IndexedSeq[Message]]
 ) extends ChatHistoryDao {
 
@@ -27,51 +26,15 @@ class EagerChatHistoryDao(
     case (c, ms) => (c, TreeMap(ms.map(m => (m.id, m)): _*))
   }
 
-  val users1: Seq[User] = {
-    val allUsersFromIdName =
-      chatsWithMessages.values.flatten.toSet.map((m: Message) => (m.fromId, m.fromNameOption))
-    ({
-      require(allUsersFromIdName.forall(_._1 > 0), "All user IDs in messages must be positive!")
-      val result = allUsersFromIdName.toSeq.map {
-        case (fromId, _) if fromId == myself1.id =>
-          myself1
-        case (fromId, fromNameOption) =>
-          rawUsers
-            .find(_.id == fromId)
-            .orElse(rawUsers.find(u => fromNameOption contains u.prettyName))
-            .getOrElse(
-              User(
-                dsUuid             = dataset.uuid,
-                id                 = fromId,
-                firstNameOption    = fromNameOption,
-                lastNameOption     = None,
-                usernameOption     = None,
-                phoneNumberOption  = None,
-                lastSeenTimeOption = None
-              ))
-            .copy(id = fromId)
-      }
-      // Append myself if not encountered in messages
-      if (result contains myself1) result else (result :+ myself1)
-    }).sortBy(c => (c.id, c.prettyName))
-  }
-
   override def users(dsUuid: UUID): Seq[User] = users1
+
+  override def userOption(dsUuid: UUID, id: Long): Option[User] = users1.find(_.id == id)
 
   val interlocutorsMap: Map[Chat, Seq[User]] = chatsWithMessages map {
     case (c, ms) =>
       val usersWithoutMe: Seq[User] =
-        ms.toSet
-          .map((m: Message) => (m.fromId, m.fromNameOption))
-          .toSeq
-          .filter(_._1 != myself1.id)
-          .map {
-            case (fromId, fromNameOption) =>
-              users1
-                .find(_.id == fromId)
-                .orElse(users1.find(u => fromNameOption contains u.prettyName))
-                .get
-          }
+        (ms.toSet.map((_: Message).fromId) - myself1.id).toSeq
+          .map(fromId => users1.find(_.id == fromId).get)
 
       (c, myself1 +: usersWithoutMe.sortBy(c => (c.id, c.prettyName)))
   }
@@ -80,7 +43,7 @@ class EagerChatHistoryDao(
 
   override def chats(dsUuid: UUID) = chats1
 
-  override def chatOption(dsUuid: UUID, chatId: Long): Option[Chat] = chats1 find (_.id == chatId)
+  override def chatOption(dsUuid: UUID, id: Long): Option[Chat] = chats1 find (_.id == id)
 
   override def interlocutors(chat: Chat): Seq[User] = interlocutorsMap(chat)
 
