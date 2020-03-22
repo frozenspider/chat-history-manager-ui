@@ -12,7 +12,6 @@ import scala.concurrent.Future
 import scala.swing._
 
 import com.github.nscala_time.time.Imports._
-import javax.swing.JComponent
 import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
@@ -90,7 +89,7 @@ class MainFrameApp //
         contents += saveAsMenuRoot
       }
       contents += new Menu("Edit") {
-        contents += menuItem("Edit users")(showEditUsersDialog())
+        contents += menuItem("Users")(showUsersDialog())
         contents += menuItem("Merge Datasets")(showSelectDatasetsToMergeDialog())
       }
     } -> saveAsMenuRoot
@@ -206,7 +205,7 @@ class MainFrameApp //
     }
   }
 
-  def showEditUsersDialog(): Unit = {
+  def showUsersDialog(): Unit = {
     val userList = new DaoList(dao =>
       new DaoItem(dao, None, { ds =>
         dao.users(ds.uuid) map { u =>
@@ -214,22 +213,12 @@ class MainFrameApp //
         }
       }))
     userList.replaceWith(loadedDaos.keys.toSeq)
+    userList.panel.preferredWidth = DaoItem.PanelWidth
 
     val outerPanel = new BorderPanel {
       import scala.swing.BorderPanel.Position._
 
-      val panel2 = new BorderPanel {
-        layout(userList.panel) = North
-        layout {
-          // That's the only solution I came up with that worked to set a minimum width of an empty chat list
-          // (setting minimum size doesn't work, setting preferred size screws up scrollbar)
-          new BorderPanel {
-            this.preferredWidth = DaoItem.PanelWidth
-          }
-        } = South
-      }
-
-      layout(new ScrollPane(panel2) {
+      layout(new ScrollPane(userList.panel) {
         verticalScrollBar.unitIncrement = ComfortableScrollSpeed
 
         verticalScrollBarPolicy   = ScrollPane.BarPolicy.Always

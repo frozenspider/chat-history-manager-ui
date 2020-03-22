@@ -36,26 +36,26 @@ class UserDetailsPane(
     )
 
     val c = new Constraints
-    c.fill  = Fill.None
     c.ipadx = 10
     c.ipady = 3
 
     // Labels column
     c.gridx  = 0
     c.anchor = Anchor.NorthEast
-    for (((t, _), idx) <- data.zipWithIndex) {
-      c.gridy = idx
-      add(new Label(t) {
+    c.fill   = Fill.None
+    for ((t, _) <- data) {
+      layout(new Label(t) {
         this.fontSize = 15
-      }, c)
+      }) = c
     }
 
     // Data column
-    c.gridx  = 1
-    c.anchor = Anchor.NorthWest
-    for (((_, v), idx) <- data.zipWithIndex) {
-      c.gridy = idx
-      add(v, c)
+    c.gridx   = 1
+    c.anchor  = Anchor.NorthWest
+    c.weightx = 1
+    c.fill    = Fill.Horizontal
+    for ((_, v) <- data) {
+      layout(v) = c
     }
 
     border = new MatteBorder(0, 0, 1, 0, Color.GRAY)

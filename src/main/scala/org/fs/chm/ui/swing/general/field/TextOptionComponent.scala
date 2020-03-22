@@ -1,6 +1,6 @@
 package org.fs.chm.ui.swing.general.field
 
-import scala.swing.TextArea
+import scala.swing.TextField
 
 import org.fs.chm.ui.swing.general.SwingUtils._
 
@@ -11,27 +11,27 @@ class TextOptionComponent(
 
   def this(mutable: Boolean) = this(None, mutable)
 
-  private val ta = new TextArea
+  private val tc = new TextField
 
   {
     import scala.swing.BorderPanel.Position._
-    ta.text     = initialValue getOrElse ""
-    ta.fontSize = 15
+    tc.text     = initialValue getOrElse ""
+    tc.fontSize = 15
 
     if (!mutable) {
-      ta.editable   = false
-      ta.background = null
-      ta.border     = null
+      tc.editable   = false
+      tc.background = null
+      tc.border     = null
     }
 
-    layout(ta) = Center
+    layout(tc) = Center
   }
 
   override def value_=(v: Option[String]): Unit =
-    ta.text = v getOrElse ""
+    tc.text = v getOrElse ""
 
   override def value: Option[String] = {
-    val v = ta.text.trim
+    val v = tc.text.trim
     if (v.isEmpty) None else Some(v)
   }
 }

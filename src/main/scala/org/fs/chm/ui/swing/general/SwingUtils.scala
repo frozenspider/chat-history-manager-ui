@@ -67,6 +67,13 @@ object SwingUtils extends Logging {
 
   val ComfortableScrollSpeed: Int = 10
 
+  def verticalListConstraint(p: GridBagPanel): p.Constraints =
+    new p.Constraints {
+      fill    = GridBagPanel.Fill.Horizontal
+      weightx = 1
+      gridx   = 0
+    }
+
   def checkEdt() = {
     require(EventQueue.isDispatchThread, "Should be called from EDT")
   }

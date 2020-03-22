@@ -46,16 +46,10 @@ class DatasetItem(
   val items: Seq[Panel] = getInnerItems(ds)
 
   {
-    val c = new Constraints
-    c.fill  = Fill.Horizontal
-    c.gridx = 0
-    c.gridy = 0
-
-    add(header, c)
-
-    items.foreachWithIndex { (item, idx) =>
-      c.gridy = idx + 1
-      add(item, c)
+    val c = verticalListConstraint(this)
+    layout(header) = c
+    items foreach { item =>
+      layout(item) = c
     }
   }
 
