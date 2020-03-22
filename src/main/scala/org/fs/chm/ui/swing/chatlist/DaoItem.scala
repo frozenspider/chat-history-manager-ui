@@ -10,6 +10,7 @@ import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.utility.Imports._
 
 class DaoItem(
+    itemSelectionGroup: ChatListItemSelectionGroup,
     callbacks: ChatListSelectionCallbacks,
     dao: ChatHistoryDao
 ) extends GridBagPanel {
@@ -23,7 +24,7 @@ class DaoItem(
   }
 
   val items: Seq[DatasetItem] =
-    dao.datasets map (ds => new DatasetItem(ds, callbacks, dao))
+    dao.datasets map (ds => new DatasetItem(ds, itemSelectionGroup, callbacks, dao))
 
   {
     val c = new Constraints

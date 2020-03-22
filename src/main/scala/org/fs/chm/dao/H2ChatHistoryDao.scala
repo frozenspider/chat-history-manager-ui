@@ -92,8 +92,14 @@ class H2ChatHistoryDao(
   }
 
   override def messagesBetween(chat: Chat, msgId1: Long, msgId2: Long): IndexedSeq[Message] = {
+    require(msgId1 <= msgId2)
     val raws = queries.rawMessages.selectBetween(chat, msgId1, msgId2).transact(txctr).unsafeRunSync()
     raws map Raws.toMessage
+  }
+
+  override def countMessagesBetween(chat: Chat, msgId1: Long, msgId2: Long): Int = {
+    require(msgId1 <= msgId2)
+    queries.rawMessages.countBetween(chat, msgId1, msgId2).transact(txctr).unsafeRunSync()
   }
 
   override def messageOption(chat: Chat, id: Long): Option[Message] = {
@@ -441,8 +447,11 @@ class H2ChatHistoryDao(
       private val orderAsc    = fr"ORDER BY time, id"
       private val orderDesc   = fr"ORDER BY time DESC, id DESC"
 
+      private def whereDsAndChatFr(dsUuid: UUID, chatId: Long) =
+        fr"WHERE ds_uuid = $dsUuid AND chat_id = $chatId"
+
       private def selectAllByChatFr(dsUuid: UUID, chatId: Long) =
-        selectAllFr ++ fr"WHERE ds_uuid = $dsUuid AND chat_id = $chatId"
+        selectAllFr ++ whereDsAndChatFr(dsUuid, chatId)
 
       def selectOption(chat: Chat, id: Long) =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND id = ${id}").query[RawMessage].option
@@ -469,6 +478,10 @@ class H2ChatHistoryDao(
         (selectAllByChatFr(chat.dsUuid, chat.id)
           ++ fr"AND id >= ${id1} AND id <= ${id2}"
           ++ orderAsc).query[RawMessage].to[IndexedSeq]
+
+      def countBetween(chat: Chat, id1: Long, id2: Long) =
+        (fr"SELECT COUNT(*) FROM messages" ++ whereDsAndChatFr(chat.dsUuid, chat.id)
+          ++ fr"AND id > ${id1} AND id < ${id2}").query[Int].unique
 
       def insert(m: RawMessage): ConnectionIO[Int] =
         (fr"INSERT INTO messages (" ++ colsFr ++ fr") VALUES ("

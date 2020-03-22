@@ -37,16 +37,22 @@ trait ChatHistoryDao extends AutoCloseable {
   /** Return N messages after skipping first M of them. Trivial pagination in a nutshell. */
   def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message]
 
+  def firstMessages(chat: Chat, limit: Int): IndexedSeq[Message] =
+    scrollMessages(chat, 0, limit)
+
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
-  /** Return N messages before the one with the given ID (inclusive) */
+  /** Return N messages before the one with the given ID (inclusive). Message might not exist. */
   def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
 
-  /** Return N messages after the one with the given ID (inclusive) */
+  /** Return N messages after the one with the given ID (inclusive). Message might not exist. */
   def messagesAfter(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
 
-  /** Return N messages between the ones with the given IDs (inclusive) */
+  /** Return N messages between the ones with the given IDs (inclusive). Message might not exist. */
   def messagesBetween(chat: Chat, msgId1: Long, msgId2: Long): IndexedSeq[Message]
+
+  /** Count messages between the ones with the given IDs (exclusive, unlike messagesBetween) */
+  def countMessagesBetween(chat: Chat, msgId1: Long, msgId2: Long): Int
 
   def messageOption(chat: Chat, id: Long): Option[Message]
 

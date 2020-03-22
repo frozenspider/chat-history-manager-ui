@@ -1,17 +1,21 @@
 package org.fs.chm.ui.swing.general
 
+import java.awt.Color
 import java.awt.EventQueue
 import java.awt.Font
 import java.io.File
 
 import scala.swing.Action
+import scala.swing.Dialog
 import scala.swing.Dimension
+import scala.swing.Font.Style
 import scala.swing.MenuItem
 import scala.swing.UIElement
 
 import javax.swing.filechooser.FileFilter
+import org.slf4s.Logging
 
-object SwingUtils {
+object SwingUtils extends Logging {
   implicit class RichUIElement(el: UIElement) {
     def width            = el.size.width
     def width_=(w: Int)  = el.peer.setSize(w, el.size.height)
@@ -33,9 +37,10 @@ object SwingUtils {
     def maximumHeight           = el.maximumSize.height
     def maximumHeight_=(h: Int) = el.maximumSize = new Dimension(el.maximumSize.width, h)
 
-    def fontSize = el.font.getSize
-
-    def fontSize_=(s: Int) = el.font = new Font(el.font.getName, el.font.getStyle, s)
+    def fontSize                    = el.font.getSize
+    def fontSize_=(s: Int)          = el.font = new Font(el.font.getName, el.font.getStyle, s)
+    def fontStyle                   = Style.values.find(_.id == el.font.getStyle).get
+    def fontStyle_=(s: Style.Value) = el.font = new Font(el.font.getName, s.id, el.font.getSize)
   }
 
   def menuItem(title: String, enabled: Boolean = true)(action: => Any): MenuItem = {
@@ -51,7 +56,32 @@ object SwingUtils {
       override def getDescription:  String  = desc
     }
 
+  def showWarning(msg: String): Unit = {
+    log.warn(msg)
+    Dialog.showMessage(title = "Warining", message = msg, messageType = Dialog.Message.Warning)
+  }
+
+  def showError(msg: String): Unit = {
+    log.error(msg)
+    Dialog.showMessage(title = "Error", message = msg, messageType = Dialog.Message.Error)
+  }
+
+  val comfortableScrollSpeed: Int = 10
+
   def checkEdt() = {
     require(EventQueue.isDispatchThread, "Should be called from EDT")
+  }
+
+  object Colors {
+
+    /** Light green */
+    val AdditionBg: Color = Color.decode("#E4FFE0")
+
+    /** Light yellow */
+    val CombineBg: Color = Color.decode("#F8F8CE")
+
+    /** Light red */
+    val ConflictBg: Color = Color.decode("#F8CECE")
+
   }
 }

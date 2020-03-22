@@ -1,11 +1,8 @@
 package org.fs.chm.ui.swing.chatlist
 
-import scala.swing.GridBagPanel
+import scala.swing._
 import scala.swing.GridBagPanel.Anchor
 import scala.swing.GridBagPanel.Fill
-import scala.swing.Label
-import scala.swing.TextArea
-import scala.swing.TextField
 
 import org.fs.chm.dao.ChatType
 import org.fs.chm.ui.swing.general.ChatWithDao
