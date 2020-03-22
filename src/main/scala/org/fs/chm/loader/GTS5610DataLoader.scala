@@ -53,7 +53,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
           val head = vmsgs.head
           val user = User(
             dsUuid             = dataset.uuid,
-            id                 = (head.name + head.phoneOption.getOrElse("")).hashCode,
+            id                 = (head.name + head.phoneOption.getOrElse("")).hashCode.abs,
             firstNameOption    = Some(head.name),
             lastNameOption     = None,
             usernameOption     = None,
@@ -111,6 +111,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
   private def parseVTagsRecursive(lines: Seq[String], acc: Seq[VTag]): Seq[VTag] =
     if (lines.isEmpty) acc
     else {
+      require(!lines.head.startsWith("="), "Broken parser!")
       // According to RFC 2045 spec, encoded lines might span across multiple lines (ending with =)
       val softBreakLines = lines.takeWhile(_.endsWith("="))
       val line           = (softBreakLines.map(_.dropRight(1)) :+ lines.drop(softBreakLines.size).head).mkString
