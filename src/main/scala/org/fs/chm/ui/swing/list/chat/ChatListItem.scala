@@ -1,4 +1,4 @@
-package org.fs.chm.ui.swing.chatlist
+package org.fs.chm.ui.swing.list.chat
 
 import java.awt.Color
 import java.awt.{ Container => AwtContainer }
@@ -14,6 +14,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.fs.chm.dao.ChatType._
 import org.fs.chm.dao.Content
 import org.fs.chm.dao.Message
+import org.fs.chm.ui.swing.list.DaoItem
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
 

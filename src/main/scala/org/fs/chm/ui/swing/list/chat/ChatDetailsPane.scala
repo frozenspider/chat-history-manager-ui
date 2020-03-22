@@ -1,13 +1,13 @@
-package org.fs.chm.ui.swing.chatlist
+package org.fs.chm.ui.swing.list.chat
 
-import scala.swing._
 import scala.swing.GridBagPanel.Anchor
 import scala.swing.GridBagPanel.Fill
+import scala.swing._
 
 import org.fs.chm.dao.ChatType
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
-import org.fs.utility.Imports._
+import org.fs.chm.ui.swing.general.field.TextComponent
 
 class ChatDetailsPane(
     cc: ChatWithDao
@@ -35,12 +35,12 @@ class ChatDetailsPane(
     }
 
     val c = new Constraints
-    c.fill = Fill.None
+    c.fill  = Fill.None
     c.ipadx = 10
     c.ipady = 3
 
     // Labels column
-    c.gridx = 0
+    c.gridx  = 0
     c.anchor = Anchor.NorthEast
     for (((t, _), idx) <- data.zipWithIndex) {
       c.gridy = idx
@@ -50,16 +50,11 @@ class ChatDetailsPane(
     }
 
     // Data column
-    c.gridx = 1
+    c.gridx  = 1
     c.anchor = Anchor.NorthWest
     for (((_, v), idx) <- data.zipWithIndex) {
       c.gridy = idx
-      add(new TextArea(v) {
-        this.fontSize = 15
-        this.editable = false
-        this.background = null
-        this.border = null
-      }, c)
+      add(new TextComponent(v, false), c)
     }
   }
 }

@@ -1,25 +1,22 @@
-package org.fs.chm.ui.swing.chatlist
+package org.fs.chm.ui.swing.list
 
-import scala.swing.Alignment
-import scala.swing.Dialog
 import scala.swing.GridBagPanel
 import scala.swing.GridBagPanel._
-import scala.swing.Label
-import scala.swing.PopupMenu
+import scala.swing._
 import scala.swing.event.MouseReleased
 
 import javax.swing.SwingUtilities
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Dataset
-import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.ui.swing.list.chat.ChatListSelectionCallbacks
 import org.fs.utility.Imports._
 
 class DatasetItem(
     ds: Dataset,
-    itemSelectionGroup: ChatListItemSelectionGroup,
     callbacks: ChatListSelectionCallbacks,
-    dao: ChatHistoryDao
+    dao: ChatHistoryDao,
+    getInnerItems: Dataset => Seq[Panel]
 ) extends GridBagPanel {
 
   val header: Label = new Label {
@@ -41,8 +38,7 @@ class DatasetItem(
     contents += menuItem("Rename", enabled = dao.isMutable)(rename())
   }
 
-  val items: Seq[ChatListItem] =
-    dao.chats(ds.uuid) map (c => new ChatListItem(ChatWithDao(c, dao), Some(itemSelectionGroup), Some(callbacks)))
+  val items: Seq[Panel] = getInnerItems(ds)
 
   {
     val c = new Constraints

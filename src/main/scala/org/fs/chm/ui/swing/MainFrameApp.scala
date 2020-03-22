@@ -1,7 +1,6 @@
 package org.fs.chm.ui.swing
 
 import java.awt.Desktop
-import java.awt.EventQueue
 import java.awt.event.AdjustmentEvent
 import java.io.File
 import java.util.UUID
@@ -20,17 +19,19 @@ import org.fs.chm.dao.merge.ChatHistoryMerger
 import org.fs.chm.dao.merge.ChatHistoryMerger._
 import org.fs.chm.loader._
 import org.fs.chm.ui.swing.MessagesService._
-import org.fs.chm.ui.swing.chatlist.ChatListItemSelectionGroup
-import org.fs.chm.ui.swing.chatlist.ChatListSelectionCallbacks
-import org.fs.chm.ui.swing.chatlist.DaoItem
+import org.fs.chm.ui.swing.list.DaoItem
+import org.fs.chm.ui.swing.list.chat.ChatListItemSelectionGroup
+import org.fs.chm.ui.swing.list.chat.ChatListSelectionCallbacks
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.ui.swing.list.chat.ChatListItem
+import org.fs.chm.ui.swing.list.chat.ChatListItemSelectionGroup
+import org.fs.chm.ui.swing.list.chat.ChatListSelectionCallbacks
 import org.fs.chm.ui.swing.merge._
 import org.fs.chm.ui.swing.webp.Webp
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.SimpleConfigAware
-import org.fs.utility.Imports._
 import org.slf4s.Logging
 
 class MainFrameApp //
@@ -86,6 +87,7 @@ class MainFrameApp //
         contents += saveAsMenuRoot
       }
       contents += new Menu("Edit") {
+        contents += menuItem("Edit users")(showEditUsersDialog())
         contents += menuItem("Merge Datasets")(showSelectDatasetsToMergeDialog())
       }
     } -> saveAsMenuRoot
@@ -200,6 +202,10 @@ class MainFrameApp //
     }
   }
 
+  def showEditUsersDialog(): Unit = {
+    ???
+  }
+
   def showSelectDatasetsToMergeDialog(): Unit = {
     if (loadedDaos.isEmpty) {
       showWarning("Load a database first!")
@@ -273,7 +279,7 @@ class MainFrameApp //
     checkEdt()
     Lock.synchronized {
       loadedDaos = loadedDaos + (dao -> Map.empty) // TODO: Reverse?
-      chatsListContents += new DaoItem(chatSelGroup, this, dao)
+      chatsListContents += new ChatDaoItem(dao)
     }
     daoListChanged()
     changeChatsClickable(true)
@@ -303,7 +309,7 @@ class MainFrameApp //
     }
   }
 
-  override def alterUser(user: User, dao: ChatHistoryDao): Unit = {
+  def alterUser(user: User, dao: ChatHistoryDao): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     changeChatsClickable(false)
@@ -420,9 +426,18 @@ class MainFrameApp //
     checkEdt()
     chatsListContents.clear()
     for (dao <- loadedDaos.keys) {
-      chatsListContents += new DaoItem(chatSelGroup, this, dao)
+      chatsListContents += new ChatDaoItem(dao)
     }
   }
+
+  private class ChatDaoItem(dao: ChatHistoryDao)
+      extends DaoItem(
+        callbacks = this,
+        dao       = dao,
+        getInnerItems = { ds =>
+          dao.chats(ds.uuid) map (c => new ChatListItem(ChatWithDao(c, dao), Some(chatSelGroup), Some(this)))
+        }
+      )
 
   private case class ChatCache(
       msgDocOption: Option[MessageDocument],

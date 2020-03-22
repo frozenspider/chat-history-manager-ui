@@ -1,18 +1,21 @@
-package org.fs.chm.ui.swing.chatlist
+package org.fs.chm.ui.swing.list
 
 import scala.swing.Alignment
 import scala.swing.GridBagPanel
 import scala.swing.GridBagPanel._
 import scala.swing.Label
+import scala.swing.Panel
 
 import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.Dataset
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.ui.swing.list.chat.ChatListSelectionCallbacks
 import org.fs.utility.Imports._
 
 class DaoItem(
-    itemSelectionGroup: ChatListItemSelectionGroup,
     callbacks: ChatListSelectionCallbacks,
-    dao: ChatHistoryDao
+    dao: ChatHistoryDao,
+    getInnerItems: Dataset => Seq[Panel]
 ) extends GridBagPanel {
 
   val header: Label = new Label {
@@ -24,7 +27,7 @@ class DaoItem(
   }
 
   val items: Seq[DatasetItem] =
-    dao.datasets map (ds => new DatasetItem(ds, itemSelectionGroup, callbacks, dao))
+    dao.datasets map (ds => new DatasetItem(ds, callbacks, dao, getInnerItems))
 
   {
     val c = new Constraints

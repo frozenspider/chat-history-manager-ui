@@ -8,6 +8,14 @@ import javax.swing.WindowConstants
 /**
  * Custom dialog that has an OK button which performs validation of user choices.
  * OK button will close the dialog once user selection passes validation.
+ *
+ * Usage:
+ *
+ * ```
+ * val dialog = new MyCustomDialog()
+ * dialog.visible = true
+ * dialog.selection foreach (result => ???)
+ * ```
  */
 abstract class CustomDialog[A] extends Dialog {
 
@@ -40,7 +48,7 @@ abstract class CustomDialog[A] extends Dialog {
 
   def selection: Option[A] = _selected
 
-  /** Construct a component to be placed in a dialog. Will be called once. */
+  /** Construct a component to be placed in a dialog. Will only be called once. */
   protected def dialogComponent(): Component
 
   /**

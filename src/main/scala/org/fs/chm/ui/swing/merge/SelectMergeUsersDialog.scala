@@ -7,9 +7,9 @@ import scala.collection.immutable.ListMap
 import scala.swing._
 
 import org.fs.chm.dao._
-import org.fs.chm.ui.swing.chatlist.UserDetailsPane
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.ui.swing.user.UserDetailsPane
 import org.fs.chm.utility.EntityUtils._
 import org.fs.utility.Imports._
 
@@ -27,7 +27,7 @@ class SelectMergeUsersDialog(
     new Models(masterDao.users(masterDs.uuid), slaveDao.users(slaveDs.uuid))
   )
 
-  override protected def dialogComponent(): Component = {
+  override protected val dialogComponent: Component = {
     new BorderPanel {
       import BorderPanel.Position._
       layout(new Label("Note: New users will me merged regardless")) = North
@@ -77,7 +77,7 @@ class SelectMergeUsersDialog(
     }
 
     override val renderer = (renderable: ChatRenderable[User]) => {
-      val r = new UserDetailsPane(renderable.v)
+      val r = new UserDetailsPane(renderable.v, false)
       if (!renderable.isSelectable) {
         r.background = Color.WHITE
       } else if (renderable.isCombine) {

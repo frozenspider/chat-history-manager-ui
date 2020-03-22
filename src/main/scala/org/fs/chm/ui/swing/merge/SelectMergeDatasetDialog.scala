@@ -47,7 +47,7 @@ class SelectMergeDatasetDialog(
     }
   }
 
-  override def dialogComponent(): Panel =
+  override val dialogComponent: Panel =
     new GridBagPanel {
       val c = new Constraints
       c.fill  = Fill.Both

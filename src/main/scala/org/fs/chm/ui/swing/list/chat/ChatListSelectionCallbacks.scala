@@ -1,4 +1,4 @@
-package org.fs.chm.ui.swing.chatlist
+package org.fs.chm.ui.swing.list.chat
 
 import java.util.UUID
 
@@ -9,6 +9,4 @@ trait ChatListSelectionCallbacks {
   def chatSelected(cc: ChatWithDao): Unit
 
   def renameDataset(dsUuid: UUID, newName: String, dao: ChatHistoryDao): Unit
-
-  def alterUser(user: User, dao: ChatHistoryDao): Unit
 }

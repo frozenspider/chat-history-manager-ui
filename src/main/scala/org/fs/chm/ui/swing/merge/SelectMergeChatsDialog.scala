@@ -6,10 +6,10 @@ import scala.swing._
 
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.ChatHistoryMerger._
-import org.fs.chm.ui.swing.chatlist.ChatListItem
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.ui.swing.list.chat.ChatListItem
 import org.fs.chm.utility.EntityUtils._
 import org.fs.utility.Imports._
 
@@ -27,7 +27,7 @@ class SelectMergeChatsDialog(
     new Models(masterDao.chats(masterDs.uuid), slaveDao.chats(slaveDs.uuid))
   )
 
-  override protected def dialogComponent(): Component = {
+  override protected val dialogComponent: Component = {
     table.wrapInScrollpane()
   }
 
