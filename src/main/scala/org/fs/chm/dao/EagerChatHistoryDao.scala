@@ -29,8 +29,8 @@ class EagerChatHistoryDao(
   val users1: Seq[User] = {
     val allUsersFromIdName =
       chatsWithMessages.values.flatten.toSet.map((m: Message) => (m.fromId, m.fromNameOption))
-    allUsersFromIdName.toSeq
-      .map({
+    ({
+      val result = allUsersFromIdName.toSeq.map {
         case (fromId, _) if fromId == myself1.id =>
           myself1
         case (fromId, fromNameOption) =>
@@ -48,8 +48,10 @@ class EagerChatHistoryDao(
                 lastSeenTimeOption = None
               ))
             .copy(id = fromId)
-      })
-      .sortBy(c => (c.id, c.prettyName))
+      }
+      // Append myself if not encountered in messages
+      if (result contains myself1) result else (result :+ myself1)
+    }).sortBy(c => (c.id, c.prettyName))
   }
 
   override def users(dsUuid: UUID): Seq[User] = users1

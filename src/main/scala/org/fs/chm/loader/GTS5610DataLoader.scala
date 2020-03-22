@@ -50,10 +50,11 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
       .mapValues(_.sortBy(_.dateTime))
       .map {
         case (_, vmsgs) =>
-          val head = vmsgs.head
+          val head   = vmsgs.head
+          val userId = (head.name + head.phoneOption.getOrElse("")).hashCode.abs
           val user = User(
             dsUuid             = dataset.uuid,
-            id                 = (head.name + head.phoneOption.getOrElse("")).hashCode.abs,
+            id                 = userId,
             firstNameOption    = Some(head.name),
             lastNameOption     = None,
             usernameOption     = None,
@@ -69,7 +70,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
               time                   = vmsg.dateTime,
               editTimeOption         = None,
               fromNameOption         = user.firstNameOption,
-              fromId                 = user.id,
+              fromId                 = userId,
               forwardFromNameOption  = None,
               replyToMessageIdOption = None,
               textOption             = Some(RichText(Seq(RichText.Plain(vmsg.text)))),
@@ -78,7 +79,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
           }
           val chat = Chat(
             dsUuid        = dataset.uuid,
-            id            = user.id,
+            id            = userId,
             nameOption    = user.firstNameOption,
             tpe           = ChatType.Personal,
             imgPathOption = None,
@@ -87,13 +88,16 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
           user -> (chat, msgs)
       }
 
+    // Ordering by descending last message
+    val chatsWithMessages = ListMap(userToChatWithMsgsMap.values.toSeq.sortBy(_._2.last.time).reverse: _*)
+
     new EagerChatHistoryDao(
       name              = "GT-S5610 export data from " + path.getName,
       dataPathRoot      = path,
       dataset           = dataset,
       myself1           = myself,
       rawUsers          = userToChatWithMsgsMap.keys.toSeq,
-      chatsWithMessages = ListMap(userToChatWithMsgsMap.values.toSeq: _*)
+      chatsWithMessages = chatsWithMessages
     )
   }
 
@@ -163,5 +167,5 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
 }
 
 object GTS5610DataLoader {
-  val DefaultExt   = "vmg"
+  val DefaultExt = "vmg"
 }

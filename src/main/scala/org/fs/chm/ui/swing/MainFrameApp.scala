@@ -185,6 +185,7 @@ class MainFrameApp //
         config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
         Future { // To release UI lock
           Swing.onEDT {
+            // TODO: Intercept and show errors, e.g. "file already exists"
             val dstDao = DataLoaders.saveAs(srcDao, chooser.selectedFile)
             // TODO: Unload srcDao
             loadDaoFromEDT(dstDao)

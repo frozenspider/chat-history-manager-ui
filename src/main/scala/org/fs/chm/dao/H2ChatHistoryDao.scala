@@ -304,8 +304,8 @@ class H2ChatHistoryDao(
           height              INT,
           PRIMARY KEY (ds_uuid, chat_id, id),
           FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
-          FOREIGN KEY (chat_id) REFERENCES chats (id),
-          FOREIGN KEY (from_id) REFERENCES users (id)
+          FOREIGN KEY (ds_uuid, chat_id) REFERENCES chats (ds_uuid, id),
+          FOREIGN KEY (ds_uuid, from_id) REFERENCES users (ds_uuid, id)
         );
         """,
         sql"""
@@ -321,8 +321,8 @@ class H2ChatHistoryDao(
           language            VARCHAR(4095),
           PRIMARY KEY (id),
           FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
-          FOREIGN KEY (chat_id) REFERENCES chats (id),
-          FOREIGN KEY (message_id) REFERENCES messages (id)
+          FOREIGN KEY (ds_uuid, chat_id) REFERENCES chats (ds_uuid, id),
+          FOREIGN KEY (ds_uuid, chat_id, message_id) REFERENCES messages (ds_uuid, chat_id, id)
         );
         """,
         sql"""
@@ -352,10 +352,9 @@ class H2ChatHistoryDao(
           phone_number        VARCHAR(20),
           vcard_path          VARCHAR(4095),
           PRIMARY KEY (id),
-          UNIQUE      (ds_uuid, chat_id, message_id),
           FOREIGN KEY (ds_uuid) REFERENCES datasets (uuid),
-          FOREIGN KEY (chat_id) REFERENCES chats (id),
-          FOREIGN KEY (message_id) REFERENCES messages (id)
+          FOREIGN KEY (ds_uuid, chat_id) REFERENCES chats (ds_uuid, id),
+          FOREIGN KEY (ds_uuid, chat_id, message_id) REFERENCES messages (ds_uuid, chat_id, id)
         );
       """
       ) map (_.update.run)
