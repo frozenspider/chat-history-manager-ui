@@ -12,6 +12,7 @@ import scala.concurrent.Future
 import scala.swing._
 
 import com.github.nscala_time.time.Imports._
+import javax.swing.JComponent
 import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
@@ -19,16 +20,17 @@ import org.fs.chm.dao.merge.ChatHistoryMerger
 import org.fs.chm.dao.merge.ChatHistoryMerger._
 import org.fs.chm.loader._
 import org.fs.chm.ui.swing.MessagesService._
-import org.fs.chm.ui.swing.list.DaoItem
-import org.fs.chm.ui.swing.list.chat.ChatListItemSelectionGroup
-import org.fs.chm.ui.swing.list.chat.ChatListSelectionCallbacks
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.ui.swing.list.DaoDatasetSelectionCallbacks
+import org.fs.chm.ui.swing.list.DaoItem
+import org.fs.chm.ui.swing.list.DaoList
 import org.fs.chm.ui.swing.list.chat.ChatListItem
 import org.fs.chm.ui.swing.list.chat.ChatListItemSelectionGroup
 import org.fs.chm.ui.swing.list.chat.ChatListSelectionCallbacks
 import org.fs.chm.ui.swing.merge._
+import org.fs.chm.ui.swing.user.UserDetailsPane
 import org.fs.chm.ui.swing.webp.Webp
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.SimpleConfigAware
@@ -36,6 +38,7 @@ import org.slf4s.Logging
 
 class MainFrameApp //
     extends SimpleSwingApplication
+    with DaoDatasetSelectionCallbacks
     with ChatListSelectionCallbacks
     with SimpleConfigAware
     with Logging { app =>
@@ -93,14 +96,14 @@ class MainFrameApp //
     } -> saveAsMenuRoot
   }
 
-  lazy val (chatsOuterPanel, chatsListContents) = {
-    val panel = new BoxPanel(Orientation.Vertical)
+  lazy val chatList = new DaoList(dao => new DaoChatItem(dao))
 
+  lazy val chatsOuterPanel = {
     new BorderPanel {
       import scala.swing.BorderPanel.Position._
 
       val panel2 = new BorderPanel {
-        layout(panel) = North
+        layout(chatList.panel) = North
         layout {
           // That's the only solution I came up with that worked to set a minimum width of an empty chat list
           // (setting minimum size doesn't work, setting preferred size screws up scrollbar)
@@ -116,7 +119,7 @@ class MainFrameApp //
         verticalScrollBarPolicy   = ScrollPane.BarPolicy.Always
         horizontalScrollBarPolicy = ScrollPane.BarPolicy.Never
       }) = Center
-    } -> panel.contents
+    }
   }
 
   lazy val msgAreaContainer: MessagesAreaContainer = {
@@ -142,8 +145,9 @@ class MainFrameApp //
   def changeChatsClickable(enabled: Boolean): Unit = {
     chatsOuterPanel.enabled = enabled
     def changeClickableRecursive(c: Component): Unit = c match {
-      case i: DaoItem   => i.enabled = enabled
-      case c: Container => c.contents foreach changeClickableRecursive
+      case i: DaoItem         => i.enabled = enabled
+      case c: Container       => c.contents foreach changeClickableRecursive
+      case f: FillerComponent => // NOOP
     }
     changeClickableRecursive(chatsOuterPanel)
   }
@@ -203,7 +207,39 @@ class MainFrameApp //
   }
 
   def showEditUsersDialog(): Unit = {
-    ???
+    val userList = new DaoList(dao =>
+      new DaoItem(dao, None, { ds =>
+        dao.users(ds.uuid) map { u =>
+          new UserDetailsPane(u, true)
+        }
+      }))
+    userList.replaceWith(loadedDaos.keys.toSeq)
+
+    val outerPanel = new BorderPanel {
+      import scala.swing.BorderPanel.Position._
+
+      val panel2 = new BorderPanel {
+        layout(userList.panel) = North
+        layout {
+          // That's the only solution I came up with that worked to set a minimum width of an empty chat list
+          // (setting minimum size doesn't work, setting preferred size screws up scrollbar)
+          new BorderPanel {
+            this.preferredWidth = DaoItem.PanelWidth
+          }
+        } = South
+      }
+
+      layout(new ScrollPane(panel2) {
+        verticalScrollBar.unitIncrement = ComfortableScrollSpeed
+
+        verticalScrollBarPolicy   = ScrollPane.BarPolicy.Always
+        horizontalScrollBarPolicy = ScrollPane.BarPolicy.Never
+      }) = Center
+    }
+
+    outerPanel.preferredHeight = 500
+
+    Dialog.showMessage(message = outerPanel.peer)
   }
 
   def showSelectDatasetsToMergeDialog(): Unit = {
@@ -279,7 +315,7 @@ class MainFrameApp //
     checkEdt()
     Lock.synchronized {
       loadedDaos = loadedDaos + (dao -> Map.empty) // TODO: Reverse?
-      chatsListContents += new ChatDaoItem(dao)
+      chatList.append(dao)
     }
     daoListChanged()
     changeChatsClickable(true)
@@ -301,7 +337,7 @@ class MainFrameApp //
     Swing.onEDT { // To release UI lock
       Lock.synchronized {
         dao.mutable.renameDataset(dsUuid, newName)
-        refreshChatsListContents()
+        chatList.replaceWith(loadedDaos.keys.toSeq)
       }
       chatsOuterPanel.revalidate()
       chatsOuterPanel.repaint()
@@ -316,7 +352,7 @@ class MainFrameApp //
     Swing.onEDT { // To release UI lock
       Lock.synchronized {
         dao.mutable.alterUser(user)
-        refreshChatsListContents()
+        chatList.replaceWith(loadedDaos.keys.toSeq)
       }
       chatsOuterPanel.revalidate()
       chatsOuterPanel.repaint()
@@ -422,18 +458,10 @@ class MainFrameApp //
       loadedDaos = loadedDaos + (dao -> (loadedDaos(dao) + (chat -> cache)))
     }
 
-  private def refreshChatsListContents() = {
-    checkEdt()
-    chatsListContents.clear()
-    for (dao <- loadedDaos.keys) {
-      chatsListContents += new ChatDaoItem(dao)
-    }
-  }
-
-  private class ChatDaoItem(dao: ChatHistoryDao)
+  private class DaoChatItem(dao: ChatHistoryDao)
       extends DaoItem(
-        callbacks = this,
-        dao       = dao,
+        dao             = dao,
+        callbacksOption = Some(this),
         getInnerItems = { ds =>
           dao.chats(ds.uuid) map (c => new ChatListItem(ChatWithDao(c, dao), Some(chatSelGroup), Some(this)))
         }

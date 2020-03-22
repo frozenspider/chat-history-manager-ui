@@ -1,9 +1,12 @@
 package org.fs.chm.ui.swing.user
 
+import java.awt.Color
+
 import scala.swing.GridBagPanel.Anchor
 import scala.swing.GridBagPanel.Fill
 import scala.swing._
 
+import javax.swing.border.MatteBorder
 import org.fs.chm.dao.User
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.general.field.TextComponent
@@ -54,5 +57,7 @@ class UserDetailsPane(
       c.gridy = idx
       add(v, c)
     }
+
+    border = new MatteBorder(0, 0, 1, 0, Color.GRAY)
   }
 }

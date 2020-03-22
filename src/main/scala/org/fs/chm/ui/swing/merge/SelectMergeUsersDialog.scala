@@ -27,7 +27,7 @@ class SelectMergeUsersDialog(
     new Models(masterDao.users(masterDs.uuid), slaveDao.users(slaveDs.uuid))
   )
 
-  override protected val dialogComponent: Component = {
+  override protected lazy val dialogComponent: Component = {
     new BorderPanel {
       import BorderPanel.Position._
       layout(new Label("Note: New users will me merged regardless")) = North

@@ -13,7 +13,7 @@ class UserDetailsDialog(
     title = user.prettyName
   }
 
-  override protected val dialogComponent: UserDetailsPane = {
+  override protected lazy val dialogComponent: UserDetailsPane = {
     new UserDetailsPane(user, true)
   }
 

@@ -1,17 +1,16 @@
 package org.fs.chm.ui.swing.general
 
 import java.awt.Color
+import java.awt.Dimension
 import java.awt.EventQueue
 import java.awt.Font
 import java.io.File
 
-import scala.swing.Action
-import scala.swing.Dialog
-import scala.swing.Dimension
+import scala.swing._
 import scala.swing.Font.Style
-import scala.swing.MenuItem
-import scala.swing.UIElement
 
+import javax.swing.JComponent
+import javax.swing.{ Box => JBox }
 import javax.swing.filechooser.FileFilter
 import org.slf4s.Logging
 
@@ -83,5 +82,13 @@ object SwingUtils extends Logging {
     /** Light red */
     val ConflictBg: Color = Color.decode("#F8CECE")
 
+  }
+
+  class FillerComponent(val horizontal: Boolean, val dim: Int) extends Component {
+    override lazy val peer =
+      if (horizontal)
+        JBox.createHorizontalStrut(dim).asInstanceOf[JComponent]
+      else
+        JBox.createVerticalStrut(dim).asInstanceOf[JComponent]
   }
 }

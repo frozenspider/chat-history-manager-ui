@@ -1,30 +1,39 @@
 package org.fs.chm.ui.swing.list
 
+import java.awt.Color
+
 import scala.swing.GridBagPanel
 import scala.swing.GridBagPanel._
 import scala.swing._
 import scala.swing.event.MouseReleased
 
 import javax.swing.SwingUtilities
+import javax.swing.border.MatteBorder
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Dataset
 import org.fs.chm.ui.swing.general.SwingUtils._
-import org.fs.chm.ui.swing.list.chat.ChatListSelectionCallbacks
 import org.fs.utility.Imports._
 
 class DatasetItem(
     ds: Dataset,
-    callbacks: ChatListSelectionCallbacks,
     dao: ChatHistoryDao,
+    callbacksOption: Option[DaoDatasetSelectionCallbacks],
     getInnerItems: Dataset => Seq[Panel]
 ) extends GridBagPanel {
 
+  val headerPopupMenu = new PopupMenu {
+    callbacksOption foreach { _ =>
+      contents += menuItem("Rename", enabled = dao.isMutable)(rename())
+    }
+  }
+
   val header: Label = new Label {
-    text                = ds.alias
-    horizontalAlignment = Alignment.Center
-    tooltip             = ds.alias
-    this.fontSize       = this.fontSize + 2
-    this.preferredWidth = DaoItem.PanelWidth
+    this.text                = ds.alias
+    this.horizontalAlignment = Alignment.Center
+    this.tooltip             = ds.alias
+    this.fontSize            = this.fontSize + 2
+    this.preferredWidth      = DaoItem.PanelWidth
+    this.border              = new MatteBorder(0, 0, 1, 0, Color.GRAY)
 
     // Reactions
     listenTo(this, mouse.clicks)
@@ -32,10 +41,6 @@ class DatasetItem(
       case e @ MouseReleased(src, pt, _, _, _) if SwingUtilities.isRightMouseButton(e.peer) && enabled =>
         headerPopupMenu.show(this, pt.x, pt.y)
     }
-  }
-
-  val headerPopupMenu = new PopupMenu {
-    contents += menuItem("Rename", enabled = dao.isMutable)(rename())
   }
 
   val items: Seq[Panel] = getInnerItems(ds)
@@ -60,7 +65,7 @@ class DatasetItem(
       message = "Choose a new name",
       title   = "Rename dataset",
       initial = ds.alias
-    ) foreach (newAlias => callbacks.renameDataset(ds.uuid, newAlias, dao))
+    ) foreach (newAlias => callbacksOption.get.renameDataset(ds.uuid, newAlias, dao))
   }
 
   override def enabled_=(b: Boolean): Unit = {

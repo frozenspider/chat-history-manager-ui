@@ -1,33 +1,36 @@
 package org.fs.chm.ui.swing.list
 
+import java.awt.Color
+
 import scala.swing.Alignment
 import scala.swing.GridBagPanel
 import scala.swing.GridBagPanel._
 import scala.swing.Label
 import scala.swing.Panel
 
+import javax.swing.border.MatteBorder
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Dataset
 import org.fs.chm.ui.swing.general.SwingUtils._
-import org.fs.chm.ui.swing.list.chat.ChatListSelectionCallbacks
 import org.fs.utility.Imports._
 
 class DaoItem(
-    callbacks: ChatListSelectionCallbacks,
     dao: ChatHistoryDao,
+    callbacksOption: Option[DaoDatasetSelectionCallbacks],
     getInnerItems: Dataset => Seq[Panel]
 ) extends GridBagPanel {
 
   val header: Label = new Label {
-    text                = dao.name
-    horizontalAlignment = Alignment.Center
-    tooltip             = dao.name
-    this.fontSize       = this.fontSize + 5
-    this.preferredWidth = DaoItem.PanelWidth
+    this.text                = dao.name
+    this.horizontalAlignment = Alignment.Center
+    this.tooltip             = dao.name
+    this.fontSize            = this.fontSize + 5
+    this.preferredWidth      = DaoItem.PanelWidth
+    this.border              = new MatteBorder(0, 0, 1, 0, Color.GRAY)
   }
 
   val items: Seq[DatasetItem] =
-    dao.datasets map (ds => new DatasetItem(ds, callbacks, dao, getInnerItems))
+    dao.datasets map (ds => new DatasetItem(ds, dao, callbacksOption, getInnerItems))
 
   {
     val c = new Constraints
@@ -38,7 +41,7 @@ class DaoItem(
     add(header, c)
 
     items.foreachWithIndex { (item, idx) =>
-      c.gridy = idx + 1
+      c.gridy  = idx + 1
       add(item, c)
     }
   }

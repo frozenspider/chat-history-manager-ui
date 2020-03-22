@@ -27,7 +27,7 @@ class SelectMergeChatsDialog(
     new Models(masterDao.chats(masterDs.uuid), slaveDao.chats(slaveDs.uuid))
   )
 
-  override protected val dialogComponent: Component = {
+  override protected lazy val dialogComponent: Component = {
     table.wrapInScrollpane()
   }
 
