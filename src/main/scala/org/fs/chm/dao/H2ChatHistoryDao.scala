@@ -27,6 +27,10 @@ class H2ChatHistoryDao(
 
   import org.fs.chm.dao.H2ChatHistoryDao._
 
+  private val Lock = new Object
+
+  private var _interlocutorsCacheOption: Option[Map[UUID, Map[Chat, Seq[User]]]] = None
+
   override def name: String = s"${dataPathRoot.getName} database"
 
   override def datasets: Seq[Dataset] = {
@@ -50,19 +54,22 @@ class H2ChatHistoryDao(
     queries.chats.selectAll(dsUuid).transact(txctr).unsafeRunSync()
   }
 
-  private lazy val interlocutorsCache: Map[UUID, Map[Chat, Seq[User]]] = {
-    (for {
-      ds      <- datasets.par
-      myself1 = myself(ds.uuid)
-      users1  = users(ds.uuid)
-    } yield {
-      val chatInterlocutors = chats(ds.uuid).map { c =>
-        val ids: Seq[Long] = queries.users.selectInterlocutorIds(c.id).transact(txctr).unsafeRunSync()
-        val usersWithoutMe = users1.filter(u => u != myself1 && ids.contains(u.id))
-        (c, myself1 +: usersWithoutMe.sortBy(u => (u.id, u.prettyName)))
-      }.toMap
-      (ds.uuid, chatInterlocutors)
-    }).seq.toMap
+  private def interlocutorsCache: Map[UUID, Map[Chat, Seq[User]]] = Lock.synchronized {
+    if (_interlocutorsCacheOption.isEmpty) {
+      _interlocutorsCacheOption = Some((for {
+        ds      <- datasets.par
+        myself1 = myself(ds.uuid)
+        users1  = users(ds.uuid)
+      } yield {
+        val chatInterlocutors = chats(ds.uuid).map { c =>
+          val ids: Seq[Long] = queries.users.selectInterlocutorIds(ds.uuid, c.id).transact(txctr).unsafeRunSync()
+          val usersWithoutMe = users1.filter(u => u != myself1 && ids.contains(u.id))
+          (c, myself1 +: usersWithoutMe.sortBy(u => (u.id, u.prettyName)))
+        }.toMap
+        (ds.uuid, chatInterlocutors)
+      }).seq.toMap)
+    }
+    _interlocutorsCacheOption.get
   }
 
   override def interlocutors(chat: Chat): Seq[User] =
@@ -223,10 +230,14 @@ class H2ChatHistoryDao(
     datasets.find(_.uuid == dsUuid).get
   }
 
-  override def alterUser(user: User): Unit = {
+  override def updateUser(user: User): Unit = {
     backup()
-    val rowsNum = queries.users.alter(user).transact(txctr).unsafeRunSync()
-    require(rowsNum == 1, s"Altering user affected ${rowsNum} rows!")
+    val rowsNum = queries.users.update(user).transact(txctr).unsafeRunSync()
+    require(rowsNum == 1, s"Updating user affected ${rowsNum} rows!")
+    queries.chats.updateRenameUser(user).transact(txctr).unsafeRunSync()
+    Lock.synchronized {
+      _interlocutorsCacheOption = None
+    }
   }
 
   override def delete(chat: Chat): Unit = {
@@ -406,8 +417,10 @@ class H2ChatHistoryDao(
       def selectMyself(dsUuid: UUID) =
         (selectFr(dsUuid) ++ fr"AND is_myself = true").query[User].unique
 
-      def selectInterlocutorIds(chatId: Long) =
-        sql"SELECT DISTINCT from_id FROM messages WHERE chat_id = $chatId ORDER BY from_id".query[Long].to[Seq]
+      def selectInterlocutorIds(dsUuid: UUID, chatId: Long) =
+        sql"SELECT DISTINCT from_id FROM messages WHERE ds_uuid = $dsUuid AND chat_id = $chatId ORDER BY from_id"
+          .query[Long]
+          .to[Seq]
 
       def insert(u: User, isMyself: Boolean) =
         (fr"INSERT INTO users (" ++ colsFr ++ fr", is_myself) VALUES ("
@@ -415,7 +428,7 @@ class H2ChatHistoryDao(
           ++ fr"${u.phoneNumberOption}, ${u.lastSeenTimeOption}, ${isMyself}"
           ++ fr")").update.run
 
-      def alter(u: User) =
+      def update(u: User) =
         (fr"UPDATE users SET"
           ++ fr"first_name = ${u.firstNameOption},"
           ++ fr"last_name = ${u.lastNameOption},"
@@ -434,6 +447,16 @@ class H2ChatHistoryDao(
       def insert(c: Chat) =
         (fr"INSERT INTO chats (" ++ colsFr ++ fr") VALUES ("
           ++ fr"${c.dsUuid}, ${c.id}, ${c.nameOption}, ${c.tpe}, ${c.imgPathOption}"
+          ++ fr")").update.run
+
+      /** After changing user, rename private chat(s) with him accordingly */
+      def updateRenameUser(u: User) =
+        (fr"UPDATE chats c SET c.name = ${u.prettyNameOption}"
+          ++ fr"WHERE c.ds_uuid = ${u.dsUuid}"
+          ++ fr"AND c.type = ${ChatType.Personal: ChatType}"
+          ++ fr"AND EXISTS("
+          ++ fr"SELECT m.from_id FROM messages m"
+          ++ fr"WHERE m.ds_uuid = c.ds_uuid AND m.chat_id = c.id AND m.from_id = ${u.id}"
           ++ fr")").update.run
     }
 

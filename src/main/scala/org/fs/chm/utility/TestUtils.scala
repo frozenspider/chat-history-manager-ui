@@ -81,12 +81,12 @@ object TestUtils {
   }
 
   private trait EagerMutableDaoTrait extends MutableChatHistoryDao {
-    def renameDataset(dsUuid: UUID, newName: String): Dataset = ???
+    override def renameDataset(dsUuid: UUID, newName: String): Dataset = ???
 
-    def alterUser(user: User): Unit = ???
+    override def updateUser(user: User): Unit = ???
 
-    def delete(chat: Chat): Unit = ???
+    override def delete(chat: Chat): Unit = ???
 
-    protected def backup(): Unit = ???
+    override protected def backup(): Unit = ???
   }
 }

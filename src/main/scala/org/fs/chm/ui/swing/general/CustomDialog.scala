@@ -21,8 +21,10 @@ abstract class CustomDialog[A] extends Dialog {
 
   private var _selected: Option[A] = None
 
+  protected def okButtonText = "OK"
+
   {
-    val okBtn = new Button("OK")
+    val okBtn = new Button(okButtonText)
 
     contents = new BorderPanel {
       import scala.swing.BorderPanel.Position._

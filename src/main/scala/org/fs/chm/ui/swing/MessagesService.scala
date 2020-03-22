@@ -11,6 +11,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.fs.chm.dao.Message.Service
 import org.fs.chm.dao._
 import org.fs.chm.ui.swing.general.ChatWithDao
+import org.fs.chm.utility.EntityUtils
 import org.fs.utility.Imports._
 
 class MessagesService(htmlKit: HTMLEditorKit) {
@@ -81,8 +82,6 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     md.doc
   }
 
-  val unnamed = StringEscapeUtils.escapeHtml4("<Unnamed>")
-
   //
   // Renderers and helpers
   //
@@ -121,7 +120,7 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     }
     val color = if (idx >= 0) NameColors(idx % NameColors.length) else "#000000"
     val resolvedName = nameOption getOrElse {
-      idOption flatMap (id => intl.find(_.id == id)) map (_.prettyName) getOrElse unnamed
+      EntityUtils.getOrUnnamed(idOption flatMap (id => intl.find(_.id == id)) map (_.prettyName))
     }
 
     s"""<span class="title-name" style="color: $color;">${resolvedName}</span>"""

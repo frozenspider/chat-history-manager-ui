@@ -1,7 +1,7 @@
 package org.fs.chm.ui.swing.list.chat
 
 import java.awt.Color
-import java.awt.{ Container => AwtContainer }
+import java.awt.{Container => AwtContainer}
 
 import scala.swing.BorderPanel.Position._
 import scala.swing._
@@ -17,6 +17,7 @@ import org.fs.chm.dao.Message
 import org.fs.chm.ui.swing.list.DaoItem
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.utility.EntityUtils
 
 class ChatListItem(
     cc: ChatWithDao,
@@ -41,7 +42,7 @@ class ChatListItem(
 
     layout(new BorderPanel {
       // Name
-      val nameString = cc.chat.nameOption getOrElse "<Unnamed>"
+      val nameString = EntityUtils.getOrUnnamed(cc.chat.nameOption)
       val nameLabel = new Label(
         s"""<html><p style="text-align: left; width: ${labelPreferredWidth}px;">"""
           + StringEscapeUtils.escapeHtml4(nameString)
@@ -132,7 +133,7 @@ class ChatListItem(
   private def simpleRenderMsg(msg: Message): String = {
     val prefix =
       if (interlocutors.size == 2 && msg.fromId == interlocutors(1).id) ""
-      else (msg.fromNameOption.getOrElse("<Unnamed>") + ": ")
+      else (EntityUtils.getOrUnnamed(msg.fromNameOption) + ": ")
     val text = msg match {
       case msg: Message.Regular =>
         (msg.textOption, msg.contentOption) match {

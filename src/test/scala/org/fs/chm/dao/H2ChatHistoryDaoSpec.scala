@@ -149,18 +149,26 @@ class H2ChatHistoryDaoSpec //
     }
   }
 
-  test("alter user") {
+  test("update user") {
     val users = h2dao.users(dsUuid)
     val user1 = users.head
+    assert(chatByUser(user1).isDefined, "Chat for user not found, broken test!")
 
-    def doAlter(u: User): Unit = {
-      h2dao.alterUser(u)
+    def chatByUser(u: User): Option[Chat] =
+      h2dao.chats(dsUuid) find { c =>
+        c.tpe == ChatType.Personal && h2dao.interlocutors(c).contains(u)
+      }
+
+    def doUpdate(u: User): Unit = {
+      h2dao.updateUser(u)
       val usersA = h2dao.users(dsUuid)
       assert(usersA.find(_.id == user1.id).get === u)
       assert(usersA === (u +: users.tail))
+      val chatA = chatByUser(u) getOrElse fail("Chat not found after updating!")
+      assert(chatA.nameOption === u.prettyNameOption)
     }
 
-    doAlter(
+    doUpdate(
       user1.copy(
         firstNameOption   = Some("fn"),
         lastNameOption    = Some("ln"),
@@ -169,7 +177,7 @@ class H2ChatHistoryDaoSpec //
       )
     )
 
-    doAlter(
+    doUpdate(
       user1.copy(
         firstNameOption   = None,
         lastNameOption    = None,

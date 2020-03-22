@@ -23,7 +23,7 @@ class SelectMergeUsersDialog(
     title = "Select users to merge"
   }
 
-  private lazy val table = new SelectMergesTable[User, (User, User)](
+  private lazy val table = new SelectMergesTable[UserWithDao, (User, User)](
     new Models(masterDao.users(masterDs.uuid), slaveDao.users(slaveDs.uuid))
   )
 
@@ -41,34 +41,34 @@ class SelectMergeUsersDialog(
 
   import org.fs.chm.ui.swing.merge.SelectMergesTable._
 
-  private class Models(masterUsers: Seq[User], slaveUsers: Seq[User]) extends MergeModels[User, (User, User)] {
+  private class Models(masterUsers: Seq[User], slaveUsers: Seq[User]) extends MergeModels[UserWithDao, (User, User)] {
 
-    override val allElems: Seq[RowData[User]] = {
+    override val allElems: Seq[RowData[UserWithDao]] = {
       val masterUsersMap = groupById(masterUsers)
 
-      val merges: Seq[RowData[User]] =
+      val merges: Seq[RowData[UserWithDao]] =
         for (su <- slaveUsers) yield {
           masterUsersMap.get(su.id) match {
-            case None     => RowData.InSlaveOnly(su)
-            case Some(mu) => RowData.InBoth(mu, su)
+            case None     => RowData.InSlaveOnly(UserWithDao(su, slaveDao))
+            case Some(mu) => RowData.InBoth(UserWithDao(mu, masterDao), UserWithDao(su, slaveDao))
           }
         }
 
-      var mergesAcc: Seq[RowData[User]] = Seq.empty
+      var mergesAcc: Seq[RowData[UserWithDao]] = Seq.empty
 
       // 1) Combined and unchanged chats
-      val combinesMasterToDataMap: Map[User, RowData.InBoth[User]] =
-        merges.collect { case rd @ RowData.InBoth(mu, su) => (mu, rd) }.toMap
+      val combinesMasterToDataMap: Map[User, RowData.InBoth[UserWithDao]] =
+        merges.collect { case rd @ RowData.InBoth(mu, su) => (mu.user, rd) }.toMap
       for (mu <- masterUsers) {
         combinesMasterToDataMap.get(mu) match {
           case Some(rd) => mergesAcc = mergesAcc :+ rd
-          case None     => mergesAcc = mergesAcc :+ RowData.InMasterOnly(mu)
+          case None     => mergesAcc = mergesAcc :+ RowData.InMasterOnly(UserWithDao(mu, masterDao))
         }
       }
 
       // 2) Added chats
-      val additionsSlaveToDataMap: Map[User, RowData.InSlaveOnly[User]] =
-        merges.collect { case rd @ RowData.InSlaveOnly(su) => (su, rd) }.toMap
+      val additionsSlaveToDataMap: Map[User, RowData.InSlaveOnly[UserWithDao]] =
+        merges.collect { case rd @ RowData.InSlaveOnly(su) => (su.user, rd) }.toMap
       for (su <- slaveUsers if additionsSlaveToDataMap.contains(su)) {
         mergesAcc = mergesAcc :+ additionsSlaveToDataMap(su)
       }
@@ -76,8 +76,8 @@ class SelectMergeUsersDialog(
       mergesAcc
     }
 
-    override val renderer = (renderable: ChatRenderable[User]) => {
-      val r = new UserDetailsPane(renderable.v, false)
+    override val renderer = (renderable: ChatRenderable[UserWithDao]) => {
+      val r = new UserDetailsPane(renderable.v.user, renderable.v.dao, false, None)
       if (!renderable.isSelectable) {
         r.background = Color.WHITE
       } else if (renderable.isCombine) {
@@ -94,20 +94,23 @@ class SelectMergeUsersDialog(
     }
 
     /** Only selectable if user content differs */
-    override protected def isInBothSelectable(mu: User, su: User): Boolean = mu != su.copy(dsUuid = mu.dsUuid)
-    override protected def isInSlaveSelectable(su: User):          Boolean = false
-    override protected def isInMasterSelectable(mu: User):         Boolean = false
+    override protected def isInBothSelectable(mu: UserWithDao, su: UserWithDao): Boolean =
+      mu.user != su.user.copy(dsUuid = mu.user.dsUuid)
+    override protected def isInSlaveSelectable(su: UserWithDao):  Boolean = false
+    override protected def isInMasterSelectable(mu: UserWithDao): Boolean = false
 
     override protected def rowDataToResultOption(
-        rd: RowData[User],
+        rd: RowData[UserWithDao],
         isSelected: Boolean
     ): Option[(User, User)] = {
       rd match {
         case _ if !isSelected        => None
-        case RowData.InBoth(mu, su)  => Some(mu -> su)
+        case RowData.InBoth(mu, su)  => Some(mu.user -> su.user)
         case RowData.InSlaveOnly(_)  => None
         case RowData.InMasterOnly(_) => None
       }
     }
   }
+
+  private case class UserWithDao(user: User, dao: ChatHistoryDao)
 }

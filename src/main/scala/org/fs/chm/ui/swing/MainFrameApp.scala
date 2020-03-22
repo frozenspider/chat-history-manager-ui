@@ -29,6 +29,7 @@ import org.fs.chm.ui.swing.list.chat.ChatListItem
 import org.fs.chm.ui.swing.list.chat.ChatListItemSelectionGroup
 import org.fs.chm.ui.swing.list.chat.ChatListSelectionCallbacks
 import org.fs.chm.ui.swing.merge._
+import org.fs.chm.ui.swing.user.UserDetailsMenuCallbacks
 import org.fs.chm.ui.swing.user.UserDetailsPane
 import org.fs.chm.ui.swing.webp.Webp
 import org.fs.chm.utility.IoUtils._
@@ -37,10 +38,11 @@ import org.slf4s.Logging
 
 class MainFrameApp //
     extends SimpleSwingApplication
+    with SimpleConfigAware
+    with Logging
     with DaoDatasetSelectionCallbacks
     with ChatListSelectionCallbacks
-    with SimpleConfigAware
-    with Logging { app =>
+    with UserDetailsMenuCallbacks { app =>
   private val Lock             = new Object
   private val MsgBatchLoadSize = 100
 
@@ -209,7 +211,7 @@ class MainFrameApp //
     val userList = new DaoList(dao =>
       new DaoItem(dao, None, { ds =>
         dao.users(ds.uuid) map { u =>
-          new UserDetailsPane(u, true)
+          new UserDetailsPane(u, dao, false, Some(this))
         }
       }))
     userList.replaceWith(loadedDaos.keys.toSeq)
@@ -228,7 +230,7 @@ class MainFrameApp //
 
     outerPanel.preferredHeight = 500
 
-    Dialog.showMessage(message = outerPanel.peer)
+    Dialog.showMessage(title = "Users", message = outerPanel.peer, messageType = Dialog.Message.Plain)
   }
 
   def showSelectDatasetsToMergeDialog(): Unit = {
@@ -334,13 +336,13 @@ class MainFrameApp //
     }
   }
 
-  def alterUser(user: User, dao: ChatHistoryDao): Unit = {
+  override def userEdited(user: User, dao: ChatHistoryDao): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     changeChatsClickable(false)
     Swing.onEDT { // To release UI lock
       Lock.synchronized {
-        dao.mutable.alterUser(user)
+        dao.mutable.updateUser(user)
         chatList.replaceWith(loadedDaos.keys.toSeq)
       }
       chatsOuterPanel.revalidate()

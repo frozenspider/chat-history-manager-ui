@@ -69,7 +69,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
               id                     = msgId,
               time                   = vmsg.dateTime,
               editTimeOption         = None,
-              fromNameOption         = user.firstNameOption,
+              fromNameOption         = None,
               fromId                 = userId,
               forwardFromNameOption  = None,
               replyToMessageIdOption = None,

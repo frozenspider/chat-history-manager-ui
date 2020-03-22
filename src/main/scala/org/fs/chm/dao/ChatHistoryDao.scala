@@ -70,11 +70,15 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
   def renameDataset(dsUuid: UUID, newName: String): Dataset
 
   /** Sets the data (names and phone only) for a user with the given `id` and `dsUuid` to the given state */
-  def alterUser(user: User): Unit
+  def updateUser(user: User): Unit
 
   def delete(chat: Chat): Unit
 
   protected def backup(): Unit
+}
+
+object ChatHistoryDao {
+  val Unnamed = "[unnamed]"
 }
 
 sealed trait WithId {
@@ -106,10 +110,13 @@ sealed trait PersonInfo {
   val lastNameOption: Option[String]
   val phoneNumberOption: Option[String]
 
-  lazy val prettyName: String = {
+  lazy val prettyNameOption: Option[String] = {
     val parts = Seq(firstNameOption, lastNameOption).yieldDefined
-    if (parts.isEmpty) "[nameless]" else parts.mkString(" ").trim
+    if (parts.isEmpty) None else Some(parts.mkString(" ").trim)
   }
+
+  lazy val prettyName: String =
+    prettyNameOption getOrElse ChatHistoryDao.Unnamed
 }
 
 case class User(

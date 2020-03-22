@@ -8,13 +8,14 @@ import org.fs.chm.dao.ChatType
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.general.field.TextComponent
+import org.fs.chm.utility.EntityUtils
 
 class ChatDetailsPane(
     cc: ChatWithDao
 ) extends GridBagPanel {
   {
     val data: Seq[(String, String)] = Seq(
-      ("Name:", Some(cc.chat.nameOption getOrElse "<Unnamed>")),
+      ("Name:", Some(EntityUtils.getOrUnnamed(cc.chat.nameOption))),
       ("Type:", Some(cc.chat.tpe match {
         case ChatType.Personal     => "Personal"
         case ChatType.PrivateGroup => "Private Group"
