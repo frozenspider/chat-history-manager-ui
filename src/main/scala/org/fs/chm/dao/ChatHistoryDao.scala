@@ -23,7 +23,7 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def myself(dsUuid: UUID): User
 
-  /** Contains myself as well */
+  /** Contains myself as well. Order must be stable. */
   def users(dsUuid: UUID): Seq[User]
 
   def chats(dsUuid: UUID): Seq[Chat]
@@ -50,12 +50,9 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def messageOption(chat: Chat, id: Long): Option[Message]
 
-  /** Whether the following methods can be called */
-  def isMutable: Boolean
+  def isMutable: Boolean = this.isInstanceOf[MutableChatHistoryDao]
 
-  def renameDataset(dsUuid: UUID, newName: String): Dataset
-
-  def delete(chat: Chat): Unit
+  def mutable = this.asInstanceOf[MutableChatHistoryDao]
 
   override def close(): Unit = {}
 
@@ -63,7 +60,16 @@ trait ChatHistoryDao extends AutoCloseable {
   def isLoaded(dataPathRoot: File): Boolean
 }
 
-trait MutableChatHistoryDao extends ChatHistoryDao {}
+trait MutableChatHistoryDao extends ChatHistoryDao {
+  def renameDataset(dsUuid: UUID, newName: String): Dataset
+
+  /** Sets the data (names and phone only) for a user with the given `id` and `dsUuid` to the given state */
+  def alterUser(user: User): Unit
+
+  def delete(chat: Chat): Unit
+
+  protected def backup(): Unit
+}
 
 sealed trait WithId {
   def id: Long

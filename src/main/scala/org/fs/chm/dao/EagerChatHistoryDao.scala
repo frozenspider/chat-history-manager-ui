@@ -112,14 +112,6 @@ class EagerChatHistoryDao(
   override def messageOption(chat: Chat, id: Long): Option[Message] =
     messagesMap.get(chat) flatMap (_ get id)
 
-  override def isMutable: Boolean = false
-
-  override def renameDataset(dsUuid: UUID, newName: String): Dataset =
-    throw new UnsupportedOperationException("DAO is immutable!")
-
-  override def delete(chat: Chat): Unit =
-    throw new UnsupportedOperationException("DAO is immutable!")
-
   override def toString: String = {
     Seq(
       "EagerChatHistoryDao(",

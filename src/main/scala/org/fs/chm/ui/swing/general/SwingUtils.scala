@@ -1,5 +1,6 @@
 package org.fs.chm.ui.swing.general
 
+import java.awt.EventQueue
 import java.awt.Font
 import java.io.File
 
@@ -49,4 +50,8 @@ object SwingUtils {
       override def accept(f: File): Boolean = f.isDirectory || filter(f)
       override def getDescription:  String  = desc
     }
+
+  def checkEdt() = {
+    require(EventQueue.isDispatchThread, "Should be called from EDT")
+  }
 }

@@ -214,12 +214,18 @@ class H2ChatHistoryDao(
     datasets.find(_.uuid == dsUuid).get
   }
 
+  override def alterUser(user: User): Unit = {
+    backup()
+    val rowsNum = queries.users.alter(user).transact(txctr).unsafeRunSync()
+    require(rowsNum == 1, s"Altering user affected ${rowsNum} rows!")
+  }
+
   override def delete(chat: Chat): Unit = {
     backup()
     ???
   }
 
-  private def backup(): Unit = {
+  override protected def backup(): Unit = {
     val backupDir = new File(dataPathRoot, H2ChatHistoryDao.BackupsDir)
     backupDir.mkdir()
     val backups =
@@ -383,21 +389,30 @@ class H2ChatHistoryDao(
       private val colsFr                 = fr"ds_uuid, id, first_name, last_name, username, phone_number, last_seen_time"
       private val selectAllFr            = fr"SELECT" ++ colsFr ++ fr"FROM users"
       private def selectFr(dsUuid: UUID) = selectAllFr ++ fr"WHERE ds_uuid = $dsUuid"
+      private val defaultOrder           = fr"ORDER BY id, first_name, last_name, username, phone_number"
 
       def selectAll(dsUuid: UUID) =
-        selectFr(dsUuid).query[User].to[Seq]
+        (selectFr(dsUuid) ++ defaultOrder).query[User].to[Seq]
 
       def selectMyself(dsUuid: UUID) =
         (selectFr(dsUuid) ++ fr"AND is_myself = true").query[User].unique
 
       def selectInterlocutorIds(chatId: Long) =
-        sql"SELECT DISTINCT from_id FROM messages WHERE chat_id = $chatId".query[Long].to[Seq]
+        sql"SELECT DISTINCT from_id FROM messages WHERE chat_id = $chatId ORDER BY from_id".query[Long].to[Seq]
 
       def insert(u: User, isMyself: Boolean) =
         (fr"INSERT INTO users (" ++ colsFr ++ fr", is_myself) VALUES ("
           ++ fr"${u.dsUuid}, ${u.id}, ${u.firstNameOption}, ${u.lastNameOption}, ${u.usernameOption},"
           ++ fr"${u.phoneNumberOption}, ${u.lastSeenTimeOption}, ${isMyself}"
           ++ fr")").update.run
+
+      def alter(u: User) =
+        (fr"UPDATE users SET"
+          ++ fr"first_name = ${u.firstNameOption},"
+          ++ fr"last_name = ${u.lastNameOption},"
+          ++ fr"username = ${u.usernameOption},"
+          ++ fr"phone_number = ${u.phoneNumberOption}"
+          ++ fr"WHERE ds_uuid = ${u.dsUuid} AND id = ${u.id}").update.run
     }
 
     object chats {

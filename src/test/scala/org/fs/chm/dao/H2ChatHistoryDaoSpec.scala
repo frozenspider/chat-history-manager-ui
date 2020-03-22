@@ -139,4 +139,34 @@ class H2ChatHistoryDaoSpec //
       assert(last === tgDao.lastMessages(tgChat, numMsgsToTake))
     }
   }
+
+  test("alter user") {
+    val users = h2dao.users(dsUuid)
+    val user1 = users.head
+
+    def doAlter(u: User): Unit = {
+      h2dao.alterUser(u)
+      val usersA = h2dao.users(dsUuid)
+      assert(usersA.find(_.id == user1.id).get === u)
+      assert(usersA === (u +: users.tail))
+    }
+
+    doAlter(
+      user1.copy(
+        firstNameOption   = Some("fn"),
+        lastNameOption    = Some("ln"),
+        usernameOption    = Some("un"),
+        phoneNumberOption = Some("+123")
+      )
+    )
+
+    doAlter(
+      user1.copy(
+        firstNameOption   = None,
+        lastNameOption    = None,
+        usernameOption    = None,
+        phoneNumberOption = None
+      )
+    )
+  }
 }

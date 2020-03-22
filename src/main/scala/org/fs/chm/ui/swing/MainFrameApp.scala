@@ -195,7 +195,7 @@ class MainFrameApp //
   }
 
   def loadDaoFromEDT(dao: ChatHistoryDao): Unit = {
-    require(EventQueue.isDispatchThread, "Should be called from EDT")
+    checkEdt()
     Lock.synchronized {
       loadedDaos = loadedDaos + (dao -> Map.empty) // TODO: Reverse?
       chatsListContents += new DaoItem(this, dao)
@@ -214,15 +214,28 @@ class MainFrameApp //
   }
 
   override def renameDataset(dsUuid: UUID, newName: String, dao: ChatHistoryDao): Unit = {
-    require(EventQueue.isDispatchThread, "Should be called from EDT")
+    checkEdt()
+    require(dao.isMutable, "DAO is immutable!")
     changeChatsClickable(false)
     Swing.onEDT { // To release UI lock
       Lock.synchronized {
-        dao.renameDataset(dsUuid, newName)
-        chatsListContents.clear()
-        for (dao <- loadedDaos.keys) {
-          chatsListContents += new DaoItem(this, dao)
-        }
+        dao.mutable.renameDataset(dsUuid, newName)
+        refreshChatsListContents()
+      }
+      chatsOuterPanel.revalidate()
+      chatsOuterPanel.repaint()
+      changeChatsClickable(true)
+    }
+  }
+
+  override def alterUser(user: User, dao: ChatHistoryDao): Unit = {
+    checkEdt()
+    require(dao.isMutable, "DAO is immutable!")
+    changeChatsClickable(false)
+    Swing.onEDT { // To release UI lock
+      Lock.synchronized {
+        dao.mutable.alterUser(user)
+        refreshChatsListContents()
       }
       chatsOuterPanel.revalidate()
       chatsOuterPanel.repaint()
@@ -327,6 +340,14 @@ class MainFrameApp //
     Lock.synchronized {
       loadedDaos = loadedDaos + (dao -> (loadedDaos(dao) + (chat -> cache)))
     }
+
+  private def refreshChatsListContents() = {
+    checkEdt()
+    chatsListContents.clear()
+    for (dao <- loadedDaos.keys) {
+      chatsListContents += new DaoItem(this, dao)
+    }
+  }
 
   private case class ChatCache(
       msgDocOption: Option[MessageDocument],
