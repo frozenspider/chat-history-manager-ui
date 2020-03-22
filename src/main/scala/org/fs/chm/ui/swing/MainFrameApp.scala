@@ -347,7 +347,22 @@ class MainFrameApp //
       }
       chatsOuterPanel.revalidate()
       chatsOuterPanel.repaint()
-      changeChatsClickable(true)
+      Lock.synchronized {
+        // Reloading current chat from DAO (if needed)
+        val cwdToReload =
+          currentChatOption
+            .filter(cc => cc.dao.interlocutors(cc.chat).exists(_.id == user.id))
+            .flatMap(cwd => cwd.dao.chatOption(cwd.chat.dsUuid, cwd.chat.id) map (c => ChatWithDao(c, cwd.dao)))
+        cwdToReload match {
+          case Some(cwd) =>
+            // Redo current chat layout
+            evictFromCache(cwd.dao, cwd.chat)
+            chatSelected(ChatWithDao(cwd.chat, cwd.dao))
+          case None =>
+            // No need to do anything
+            changeChatsClickable(true)
+        }
+      }
     }
   }
 
@@ -447,6 +462,13 @@ class MainFrameApp //
   def updateCache(dao: ChatHistoryDao, chat: Chat, cache: ChatCache): Unit =
     Lock.synchronized {
       loadedDaos = loadedDaos + (dao -> (loadedDaos(dao) + (chat -> cache)))
+    }
+
+  def evictFromCache(dao: ChatHistoryDao, chat: Chat): Unit =
+    Lock.synchronized {
+      if (loadedDaos.contains(dao)) {
+        loadedDaos = loadedDaos + (dao -> (loadedDaos(dao) - chat))
+      }
     }
 
   private class DaoChatItem(dao: ChatHistoryDao)

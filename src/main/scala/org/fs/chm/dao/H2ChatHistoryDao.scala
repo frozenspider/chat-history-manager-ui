@@ -27,9 +27,11 @@ class H2ChatHistoryDao(
 
   import org.fs.chm.dao.H2ChatHistoryDao._
 
+  private type ChatId = Long
+
   private val Lock = new Object
 
-  private var _interlocutorsCacheOption: Option[Map[UUID, Map[Chat, Seq[User]]]] = None
+  private var _interlocutorsCacheOption: Option[Map[UUID, Map[ChatId, Seq[User]]]] = None
 
   override def name: String = s"${dataPathRoot.getName} database"
 
@@ -54,7 +56,11 @@ class H2ChatHistoryDao(
     queries.chats.selectAll(dsUuid).transact(txctr).unsafeRunSync()
   }
 
-  private def interlocutorsCache: Map[UUID, Map[Chat, Seq[User]]] = Lock.synchronized {
+  override def chatOption(dsUuid: UUID, chatId: Long): Option[Chat] = {
+    queries.chats.select(dsUuid, chatId).transact(txctr).unsafeRunSync()
+  }
+
+  private def interlocutorsCache: Map[UUID, Map[ChatId, Seq[User]]] = Lock.synchronized {
     if (_interlocutorsCacheOption.isEmpty) {
       _interlocutorsCacheOption = Some((for {
         ds      <- datasets.par
@@ -64,7 +70,7 @@ class H2ChatHistoryDao(
         val chatInterlocutors = chats(ds.uuid).map { c =>
           val ids: Seq[Long] = queries.users.selectInterlocutorIds(ds.uuid, c.id).transact(txctr).unsafeRunSync()
           val usersWithoutMe = users1.filter(u => u != myself1 && ids.contains(u.id))
-          (c, myself1 +: usersWithoutMe.sortBy(u => (u.id, u.prettyName)))
+          (c.id, myself1 +: usersWithoutMe.sortBy(u => (u.id, u.prettyName)))
         }.toMap
         (ds.uuid, chatInterlocutors)
       }).seq.toMap)
@@ -75,7 +81,7 @@ class H2ChatHistoryDao(
   override def interlocutors(chat: Chat): Seq[User] =
     (for {
       c1 <- interlocutorsCache.get(chat.dsUuid)
-      c2 <- c1.get(chat)
+      c2 <- c1.get(chat.id)
     } yield c2) getOrElse Seq.empty
 
   override def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message] = {
@@ -441,8 +447,14 @@ class H2ChatHistoryDao(
       private val colsFr     = fr"ds_uuid, id, name, type, img_path"
       private val msgCountFr = fr"(SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id) AS msg_count"
 
+      private def selectFr(dsUuid: UUID) =
+        fr"SELECT" ++ colsFr ++ fr"," ++ msgCountFr ++ fr"FROM chats c WHERE c.ds_uuid = $dsUuid"
+
       def selectAll(dsUuid: UUID) =
-        (fr"SELECT" ++ colsFr ++ fr"," ++ msgCountFr ++ fr"FROM chats c WHERE c.ds_uuid = $dsUuid").query[Chat].to[Seq]
+        selectFr(dsUuid).query[Chat].to[Seq]
+
+      def select(dsUuid: UUID, id: Long) =
+        (selectFr(dsUuid) ++ fr"AND c.id = ${id}").query[Chat].option
 
       def insert(c: Chat) =
         (fr"INSERT INTO chats (" ++ colsFr ++ fr") VALUES ("

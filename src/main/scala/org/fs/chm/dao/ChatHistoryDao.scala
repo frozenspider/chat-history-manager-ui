@@ -28,6 +28,8 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def chats(dsUuid: UUID): Seq[Chat]
 
+  def chatOption(dsUuid: UUID, chatId: Long): Option[Chat]
+
   /**
    * First returned element MUST be myself, the rest should be in some fixed order.
    * This method should be fast.

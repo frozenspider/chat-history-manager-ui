@@ -80,6 +80,8 @@ class EagerChatHistoryDao(
 
   override def chats(dsUuid: UUID) = chats1
 
+  override def chatOption(dsUuid: UUID, chatId: Long): Option[Chat] = chats1 find (_.id == chatId)
+
   override def interlocutors(chat: Chat): Seq[User] = interlocutorsMap(chat)
 
   override def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message] = {
