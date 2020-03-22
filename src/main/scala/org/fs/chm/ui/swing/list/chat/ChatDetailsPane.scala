@@ -1,23 +1,21 @@
-package org.fs.chm.ui.swing.chatlist
+package org.fs.chm.ui.swing.list.chat
 
-import scala.swing.GridBagPanel
 import scala.swing.GridBagPanel.Anchor
 import scala.swing.GridBagPanel.Fill
-import scala.swing.Label
-import scala.swing.TextArea
-import scala.swing.TextField
+import scala.swing._
 
 import org.fs.chm.dao.ChatType
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
-import org.fs.utility.Imports._
+import org.fs.chm.ui.swing.general.field.TextComponent
+import org.fs.chm.utility.EntityUtils
 
 class ChatDetailsPane(
     cc: ChatWithDao
 ) extends GridBagPanel {
   {
     val data: Seq[(String, String)] = Seq(
-      ("Name:", Some(cc.chat.nameOption getOrElse "<Unnamed>")),
+      ("Name:", Some(EntityUtils.getOrUnnamed(cc.chat.nameOption))),
       ("Type:", Some(cc.chat.tpe match {
         case ChatType.Personal     => "Personal"
         case ChatType.PrivateGroup => "Private Group"
@@ -38,12 +36,12 @@ class ChatDetailsPane(
     }
 
     val c = new Constraints
-    c.fill = Fill.None
+    c.fill  = Fill.None
     c.ipadx = 10
     c.ipady = 3
 
     // Labels column
-    c.gridx = 0
+    c.gridx  = 0
     c.anchor = Anchor.NorthEast
     for (((t, _), idx) <- data.zipWithIndex) {
       c.gridy = idx
@@ -53,16 +51,11 @@ class ChatDetailsPane(
     }
 
     // Data column
-    c.gridx = 1
+    c.gridx  = 1
     c.anchor = Anchor.NorthWest
     for (((_, v), idx) <- data.zipWithIndex) {
       c.gridy = idx
-      add(new TextArea(v) {
-        this.fontSize = 15
-        this.editable = false
-        this.background = null
-        this.border = null
-      }, c)
+      add(new TextComponent(v, false), c)
     }
   }
 }

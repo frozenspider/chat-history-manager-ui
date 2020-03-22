@@ -1,7 +1,7 @@
-package org.fs.chm.ui.swing.chatlist
+package org.fs.chm.ui.swing.list.chat
 
 import java.awt.Color
-import java.awt.{ Container => AwtContainer }
+import java.awt.{Container => AwtContainer}
 
 import scala.swing.BorderPanel.Position._
 import scala.swing._
@@ -14,29 +14,37 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.fs.chm.dao.ChatType._
 import org.fs.chm.dao.Content
 import org.fs.chm.dao.Message
+import org.fs.chm.ui.swing.list.DaoItem
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.utility.EntityUtils
 
 class ChatListItem(
     cc: ChatWithDao,
-    callbacks: ChatListSelectionCallbacks,
-) extends BorderPanel {
+    selectionGroupOption: Option[ChatListItemSelectionGroup],
+    callbacksOption: Option[ChatListSelectionCallbacks]
+) extends BorderPanel { self =>
   private val labelPreferredWidth = DaoItem.PanelWidth - 100 // TODO: Remove
 
-  val labelBorderWidth = 3
+  val chat = cc.chat
 
-  val interlocutors = cc.dao.interlocutors(cc.chat)
+  private val labelBorderWidth = 3
 
-  val popupMenu = new PopupMenu {
+  private val interlocutors = cc.dao.interlocutors(cc.chat)
+
+  private val popupMenu = new PopupMenu {
     contents += menuItem("Details")(showDetailsPopup())
   }
+
+  private var _activeColor:   Color = Color.LIGHT_GRAY
+  private var _inactiveColor: Color = Color.WHITE
 
   {
     val emptyBorder = new EmptyBorder(labelBorderWidth, labelBorderWidth, labelBorderWidth, labelBorderWidth)
 
     layout(new BorderPanel {
       // Name
-      val nameString = cc.chat.nameOption getOrElse "<Unnamed>"
+      val nameString = EntityUtils.getOrUnnamed(cc.chat.nameOption)
       val nameLabel = new Label(
         s"""<html><p style="text-align: left; width: ${labelPreferredWidth}px;">"""
           + StringEscapeUtils.escapeHtml4(nameString)
@@ -51,9 +59,9 @@ class ChatListItem(
       }
       val msgLabel = new Label(lastMsgString)
       msgLabel.horizontalAlignment = Alignment.Left
-      msgLabel.foreground = new Color(0, 0, 0, 100)
-      msgLabel.preferredWidth = labelPreferredWidth
-      msgLabel.border = emptyBorder
+      msgLabel.foreground          = new Color(0, 0, 0, 100)
+      msgLabel.preferredWidth      = labelPreferredWidth
+      msgLabel.border              = emptyBorder
       layout(msgLabel) = Center
 
       opaque = false
@@ -65,7 +73,7 @@ class ChatListItem(
       case PrivateGroup => "(" + interlocutors.size + ")"
     }
     val tpeLabel = new Label(tpeString)
-    tpeLabel.preferredWidth = 30
+    tpeLabel.preferredWidth    = 30
     tpeLabel.verticalAlignment = Alignment.Center
     layout(tpeLabel) = East
 
@@ -80,21 +88,34 @@ class ChatListItem(
 
     maximumSize = new Dimension(Int.MaxValue, preferredSize.height)
     markDeselected()
+    selectionGroupOption foreach (_.add(this))
   }
 
-  private def select(): Unit = {
-    ChatListItem.Lock.synchronized {
-      ChatListItem.SelectedOption foreach (_.markDeselected())
-      ChatListItem.SelectedOption = Some(this)
-      markSelected()
-    }
-    callbacks.chatSelected(cc)
+  def activeColor:               Color = _activeColor
+  def activeColor_=(c: Color):   Unit  = { _activeColor = c; }
+  def inactiveColor:             Color = _inactiveColor
+  def inactiveColor_=(c: Color): Unit  = _inactiveColor = c
+
+  def select(): Unit = {
+    markSelected()
+    selectionGroupOption foreach (_.deselectOthers(this))
+    callbacksOption foreach (_.chatSelected(cc))
+  }
+
+  def markSelected(): Unit = {
+    border     = new LineBorder(Color.BLACK, 1)
+    background = _activeColor
+  }
+
+  def markDeselected(): Unit = {
+    border     = new LineBorder(Color.GRAY, 1)
+    background = _inactiveColor
   }
 
   private def showDetailsPopup(): Unit = {
     Dialog.showMessage(
-      message = new ChatDetailsPane(cc).peer,
-      title = "Chat Details",
+      message     = new ChatDetailsPane(cc).peer,
+      title       = "Chat Details",
       messageType = Dialog.Message.Plain
     )
   }
@@ -114,7 +135,7 @@ class ChatListItem(
   private def simpleRenderMsg(msg: Message): String = {
     val prefix =
       if (interlocutors.size == 2 && msg.fromId == interlocutors(1).id) ""
-      else (msg.fromNameOption.getOrElse("<Unnamed>") + ": ")
+      else (EntityUtils.getOrUnnamed(msg.fromNameOption) + ": ")
     val text = msg match {
       case msg: Message.Regular =>
         (msg.textOption, msg.contentOption) match {
@@ -140,19 +161,28 @@ class ChatListItem(
     }
     prefix + text.take(50)
   }
-
-  private def markSelected(): Unit = {
-    border = new LineBorder(Color.BLACK, 1)
-    background = Color.LIGHT_GRAY
-  }
-
-  private def markDeselected(): Unit = {
-    border = new LineBorder(Color.GRAY, 1)
-    background = Color.WHITE
-  }
 }
 
-private object ChatListItem {
-  private val Lock = new Object
-  private var SelectedOption: Option[ChatListItem] = None
+class ChatListItemSelectionGroup {
+  private val lock:           AnyRef               = new AnyRef
+  private var selectedOption: Option[ChatListItem] = None
+  private var items:          Seq[ChatListItem]    = Seq.empty
+
+  def add(item: ChatListItem): Unit = {
+    items = items :+ item
+  }
+
+  def deselectOthers(item: ChatListItem): Unit =
+    lock.synchronized {
+      selectedOption = Some(item)
+      for (item2 <- items if item2 != item) {
+        item2.markDeselected()
+      }
+    }
+
+  def deselectAll(): Unit =
+    lock.synchronized {
+      selectedOption = None
+      items map (_.markDeselected())
+    }
 }

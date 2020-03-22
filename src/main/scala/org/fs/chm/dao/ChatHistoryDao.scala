@@ -23,10 +23,12 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def myself(dsUuid: UUID): User
 
-  /** Contains myself as well */
+  /** Contains myself as well. Order must be stable. */
   def users(dsUuid: UUID): Seq[User]
 
   def chats(dsUuid: UUID): Seq[Chat]
+
+  def chatOption(dsUuid: UUID, chatId: Long): Option[Chat]
 
   /**
    * First returned element MUST be myself, the rest should be in some fixed order.
@@ -37,25 +39,28 @@ trait ChatHistoryDao extends AutoCloseable {
   /** Return N messages after skipping first M of them. Trivial pagination in a nutshell. */
   def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message]
 
+  def firstMessages(chat: Chat, limit: Int): IndexedSeq[Message] =
+    scrollMessages(chat, 0, limit)
+
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
-  /** Return N messages before the one with the given ID (inclusive) */
+  /** Return N messages before the one with the given ID (inclusive). Message might not exist. */
   def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
 
-  /** Return N messages after the one with the given ID (inclusive) */
+  /** Return N messages after the one with the given ID (inclusive). Message might not exist. */
   def messagesAfter(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
 
-  /** Return N messages between the ones with the given IDs (inclusive) */
+  /** Return N messages between the ones with the given IDs (inclusive). Message might not exist. */
   def messagesBetween(chat: Chat, msgId1: Long, msgId2: Long): IndexedSeq[Message]
+
+  /** Count messages between the ones with the given IDs (exclusive, unlike messagesBetween) */
+  def countMessagesBetween(chat: Chat, msgId1: Long, msgId2: Long): Int
 
   def messageOption(chat: Chat, id: Long): Option[Message]
 
-  /** Whether the following methods can be called */
-  def isMutable: Boolean
+  def isMutable: Boolean = this.isInstanceOf[MutableChatHistoryDao]
 
-  def renameDataset(dsUuid: UUID, newName: String): Dataset
-
-  def delete(chat: Chat): Unit
+  def mutable = this.asInstanceOf[MutableChatHistoryDao]
 
   override def close(): Unit = {}
 
@@ -63,7 +68,20 @@ trait ChatHistoryDao extends AutoCloseable {
   def isLoaded(dataPathRoot: File): Boolean
 }
 
-trait MutableChatHistoryDao extends ChatHistoryDao {}
+trait MutableChatHistoryDao extends ChatHistoryDao {
+  def renameDataset(dsUuid: UUID, newName: String): Dataset
+
+  /** Sets the data (names and phone only) for a user with the given `id` and `dsUuid` to the given state */
+  def updateUser(user: User): Unit
+
+  def delete(chat: Chat): Unit
+
+  protected def backup(): Unit
+}
+
+object ChatHistoryDao {
+  val Unnamed = "[unnamed]"
+}
 
 sealed trait WithId {
   def id: Long
@@ -94,15 +112,18 @@ sealed trait PersonInfo {
   val lastNameOption: Option[String]
   val phoneNumberOption: Option[String]
 
-  lazy val prettyName: String = {
+  lazy val prettyNameOption: Option[String] = {
     val parts = Seq(firstNameOption, lastNameOption).yieldDefined
-    if (parts.isEmpty) "[nameless]" else parts.mkString(" ").trim
+    if (parts.isEmpty) None else Some(parts.mkString(" ").trim)
   }
+
+  lazy val prettyName: String =
+    prettyNameOption getOrElse ChatHistoryDao.Unnamed
 }
 
 case class User(
     dsUuid: UUID,
-    /** Might be 0, otherwise - is presumed to be unique */
+    /** Unique within a dataset */
     id: Long,
     /** If there's no first/last name separation, everything will be in first name */
     firstNameOption: Option[String],
@@ -120,6 +141,7 @@ object ChatType {
 
 case class Chat(
     dsUuid: UUID,
+    /** Unique within a dataset */
     id: Long,
     nameOption: Option[String],
     tpe: ChatType,
@@ -207,6 +229,7 @@ object RichText {
  */
 
 sealed trait Message extends Searchable with WithId {
+  /** Unique within a chat */
   val id: Long
   val time: DateTime
   val fromNameOption: Option[String]

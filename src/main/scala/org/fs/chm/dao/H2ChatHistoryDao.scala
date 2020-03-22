@@ -27,6 +27,12 @@ class H2ChatHistoryDao(
 
   import org.fs.chm.dao.H2ChatHistoryDao._
 
+  private type ChatId = Long
+
+  private val Lock = new Object
+
+  private var _interlocutorsCacheOption: Option[Map[UUID, Map[ChatId, Seq[User]]]] = None
+
   override def name: String = s"${dataPathRoot.getName} database"
 
   override def datasets: Seq[Dataset] = {
@@ -50,25 +56,32 @@ class H2ChatHistoryDao(
     queries.chats.selectAll(dsUuid).transact(txctr).unsafeRunSync()
   }
 
-  private lazy val interlocutorsCache: Map[UUID, Map[Chat, Seq[User]]] = {
-    (for {
-      ds      <- datasets.par
-      myself1 = myself(ds.uuid)
-      users1  = users(ds.uuid)
-    } yield {
-      val chatInterlocutors = chats(ds.uuid).map { c =>
-        val ids: Seq[Long] = queries.users.selectInterlocutorIds(c.id).transact(txctr).unsafeRunSync()
-        val usersWithoutMe = users1.filter(u => u != myself1 && ids.contains(u.id))
-        (c, myself1 +: usersWithoutMe.sortBy(u => (u.id, u.prettyName)))
-      }.toMap
-      (ds.uuid, chatInterlocutors)
-    }).seq.toMap
+  override def chatOption(dsUuid: UUID, chatId: Long): Option[Chat] = {
+    queries.chats.select(dsUuid, chatId).transact(txctr).unsafeRunSync()
+  }
+
+  private def interlocutorsCache: Map[UUID, Map[ChatId, Seq[User]]] = Lock.synchronized {
+    if (_interlocutorsCacheOption.isEmpty) {
+      _interlocutorsCacheOption = Some((for {
+        ds      <- datasets.par
+        myself1 = myself(ds.uuid)
+        users1  = users(ds.uuid)
+      } yield {
+        val chatInterlocutors = chats(ds.uuid).map { c =>
+          val ids: Seq[Long] = queries.users.selectInterlocutorIds(ds.uuid, c.id).transact(txctr).unsafeRunSync()
+          val usersWithoutMe = users1.filter(u => u != myself1 && ids.contains(u.id))
+          (c.id, myself1 +: usersWithoutMe.sortBy(u => (u.id, u.prettyName)))
+        }.toMap
+        (ds.uuid, chatInterlocutors)
+      }).seq.toMap)
+    }
+    _interlocutorsCacheOption.get
   }
 
   override def interlocutors(chat: Chat): Seq[User] =
     (for {
       c1 <- interlocutorsCache.get(chat.dsUuid)
-      c2 <- c1.get(chat)
+      c2 <- c1.get(chat.id)
     } yield c2) getOrElse Seq.empty
 
   override def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message] = {
@@ -92,8 +105,14 @@ class H2ChatHistoryDao(
   }
 
   override def messagesBetween(chat: Chat, msgId1: Long, msgId2: Long): IndexedSeq[Message] = {
+    require(msgId1 <= msgId2)
     val raws = queries.rawMessages.selectBetween(chat, msgId1, msgId2).transact(txctr).unsafeRunSync()
     raws map Raws.toMessage
+  }
+
+  override def countMessagesBetween(chat: Chat, msgId1: Long, msgId2: Long): Int = {
+    require(msgId1 <= msgId2)
+    queries.rawMessages.countBetween(chat, msgId1, msgId2).transact(txctr).unsafeRunSync()
   }
 
   override def messageOption(chat: Chat, id: Long): Option[Message] = {
@@ -115,10 +134,12 @@ class H2ChatHistoryDao(
           var query: ConnectionIO[_] = queries.datasets.insert(ds)
 
           for (u <- dao.users(ds.uuid)) {
+            require(u.id > 0, "IDs should be positive!")
             query = query flatMap (_ => queries.users.insert(u, u == myself1))
           }
 
           for (c <- dao.chats(ds.uuid)) {
+            require(c.id > 0, "IDs should be positive!")
             query = query flatMap (_ => queries.chats.insert(c))
 
             val batchSize = 1000
@@ -134,6 +155,7 @@ class H2ChatHistoryDao(
               batch <- batchStream(0)
               m     <- batch
             } {
+              require(m.id > 0, "IDs should be positive!")
               val (rm, rcOption, rrtEls) = Raws.fromMessage(ds.uuid, c.id, m)
               query = query flatMap (_ => queries.rawMessages.insert(rm))
 
@@ -214,12 +236,22 @@ class H2ChatHistoryDao(
     datasets.find(_.uuid == dsUuid).get
   }
 
+  override def updateUser(user: User): Unit = {
+    backup()
+    val rowsNum = queries.users.update(user).transact(txctr).unsafeRunSync()
+    require(rowsNum == 1, s"Updating user affected ${rowsNum} rows!")
+    queries.chats.updateRenameUser(user).transact(txctr).unsafeRunSync()
+    Lock.synchronized {
+      _interlocutorsCacheOption = None
+    }
+  }
+
   override def delete(chat: Chat): Unit = {
     backup()
     ???
   }
 
-  private def backup(): Unit = {
+  override protected def backup(): Unit = {
     val backupDir = new File(dataPathRoot, H2ChatHistoryDao.BackupsDir)
     backupDir.mkdir()
     val backups =
@@ -383,33 +415,60 @@ class H2ChatHistoryDao(
       private val colsFr                 = fr"ds_uuid, id, first_name, last_name, username, phone_number, last_seen_time"
       private val selectAllFr            = fr"SELECT" ++ colsFr ++ fr"FROM users"
       private def selectFr(dsUuid: UUID) = selectAllFr ++ fr"WHERE ds_uuid = $dsUuid"
+      private val defaultOrder           = fr"ORDER BY id, first_name, last_name, username, phone_number"
 
       def selectAll(dsUuid: UUID) =
-        selectFr(dsUuid).query[User].to[Seq]
+        (selectFr(dsUuid) ++ defaultOrder).query[User].to[Seq]
 
       def selectMyself(dsUuid: UUID) =
         (selectFr(dsUuid) ++ fr"AND is_myself = true").query[User].unique
 
-      def selectInterlocutorIds(chatId: Long) =
-        sql"SELECT DISTINCT from_id FROM messages WHERE chat_id = $chatId".query[Long].to[Seq]
+      def selectInterlocutorIds(dsUuid: UUID, chatId: Long) =
+        sql"SELECT DISTINCT from_id FROM messages WHERE ds_uuid = $dsUuid AND chat_id = $chatId ORDER BY from_id"
+          .query[Long]
+          .to[Seq]
 
       def insert(u: User, isMyself: Boolean) =
         (fr"INSERT INTO users (" ++ colsFr ++ fr", is_myself) VALUES ("
           ++ fr"${u.dsUuid}, ${u.id}, ${u.firstNameOption}, ${u.lastNameOption}, ${u.usernameOption},"
           ++ fr"${u.phoneNumberOption}, ${u.lastSeenTimeOption}, ${isMyself}"
           ++ fr")").update.run
+
+      def update(u: User) =
+        (fr"UPDATE users SET"
+          ++ fr"first_name = ${u.firstNameOption},"
+          ++ fr"last_name = ${u.lastNameOption},"
+          ++ fr"username = ${u.usernameOption},"
+          ++ fr"phone_number = ${u.phoneNumberOption}"
+          ++ fr"WHERE ds_uuid = ${u.dsUuid} AND id = ${u.id}").update.run
     }
 
     object chats {
       private val colsFr     = fr"ds_uuid, id, name, type, img_path"
       private val msgCountFr = fr"(SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id) AS msg_count"
 
+      private def selectFr(dsUuid: UUID) =
+        fr"SELECT" ++ colsFr ++ fr"," ++ msgCountFr ++ fr"FROM chats c WHERE c.ds_uuid = $dsUuid"
+
       def selectAll(dsUuid: UUID) =
-        (fr"SELECT" ++ colsFr ++ fr"," ++ msgCountFr ++ fr"FROM chats c WHERE c.ds_uuid = $dsUuid").query[Chat].to[Seq]
+        selectFr(dsUuid).query[Chat].to[Seq]
+
+      def select(dsUuid: UUID, id: Long) =
+        (selectFr(dsUuid) ++ fr"AND c.id = ${id}").query[Chat].option
 
       def insert(c: Chat) =
         (fr"INSERT INTO chats (" ++ colsFr ++ fr") VALUES ("
           ++ fr"${c.dsUuid}, ${c.id}, ${c.nameOption}, ${c.tpe}, ${c.imgPathOption}"
+          ++ fr")").update.run
+
+      /** After changing user, rename private chat(s) with him accordingly */
+      def updateRenameUser(u: User) =
+        (fr"UPDATE chats c SET c.name = ${u.prettyNameOption}"
+          ++ fr"WHERE c.ds_uuid = ${u.dsUuid}"
+          ++ fr"AND c.type = ${ChatType.Personal: ChatType}"
+          ++ fr"AND EXISTS("
+          ++ fr"SELECT m.from_id FROM messages m"
+          ++ fr"WHERE m.ds_uuid = c.ds_uuid AND m.chat_id = c.id AND m.from_id = ${u.id}"
           ++ fr")").update.run
     }
 
@@ -423,8 +482,11 @@ class H2ChatHistoryDao(
       private val orderAsc    = fr"ORDER BY time, id"
       private val orderDesc   = fr"ORDER BY time DESC, id DESC"
 
+      private def whereDsAndChatFr(dsUuid: UUID, chatId: Long) =
+        fr"WHERE ds_uuid = $dsUuid AND chat_id = $chatId"
+
       private def selectAllByChatFr(dsUuid: UUID, chatId: Long) =
-        selectAllFr ++ fr"WHERE ds_uuid = $dsUuid AND chat_id = $chatId"
+        selectAllFr ++ whereDsAndChatFr(dsUuid, chatId)
 
       def selectOption(chat: Chat, id: Long) =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND id = ${id}").query[RawMessage].option
@@ -451,6 +513,10 @@ class H2ChatHistoryDao(
         (selectAllByChatFr(chat.dsUuid, chat.id)
           ++ fr"AND id >= ${id1} AND id <= ${id2}"
           ++ orderAsc).query[RawMessage].to[IndexedSeq]
+
+      def countBetween(chat: Chat, id1: Long, id2: Long) =
+        (fr"SELECT COUNT(*) FROM messages" ++ whereDsAndChatFr(chat.dsUuid, chat.id)
+          ++ fr"AND id > ${id1} AND id < ${id2}").query[Int].unique
 
       def insert(m: RawMessage): ConnectionIO[Int] =
         (fr"INSERT INTO messages (" ++ colsFr ++ fr") VALUES ("

@@ -1,16 +1,20 @@
 package org.fs.chm.ui.swing.general
 
+import java.awt.Color
+import java.awt.Dimension
+import java.awt.EventQueue
 import java.awt.Font
 import java.io.File
 
-import scala.swing.Action
-import scala.swing.Dimension
-import scala.swing.MenuItem
-import scala.swing.UIElement
+import scala.swing._
+import scala.swing.Font.Style
 
+import javax.swing.JComponent
+import javax.swing.{ Box => JBox }
 import javax.swing.filechooser.FileFilter
+import org.slf4s.Logging
 
-object SwingUtils {
+object SwingUtils extends Logging {
   implicit class RichUIElement(el: UIElement) {
     def width            = el.size.width
     def width_=(w: Int)  = el.peer.setSize(w, el.size.height)
@@ -32,9 +36,10 @@ object SwingUtils {
     def maximumHeight           = el.maximumSize.height
     def maximumHeight_=(h: Int) = el.maximumSize = new Dimension(el.maximumSize.width, h)
 
-    def fontSize = el.font.getSize
-
-    def fontSize_=(s: Int) = el.font = new Font(el.font.getName, el.font.getStyle, s)
+    def fontSize                    = el.font.getSize
+    def fontSize_=(s: Int)          = el.font = new Font(el.font.getName, el.font.getStyle, s)
+    def fontStyle                   = Style.values.find(_.id == el.font.getStyle).get
+    def fontStyle_=(s: Style.Value) = el.font = new Font(el.font.getName, s.id, el.font.getSize)
   }
 
   def menuItem(title: String, enabled: Boolean = true)(action: => Any): MenuItem = {
@@ -49,4 +54,48 @@ object SwingUtils {
       override def accept(f: File): Boolean = f.isDirectory || filter(f)
       override def getDescription:  String  = desc
     }
+
+  def showWarning(msg: String): Unit = {
+    log.warn(msg)
+    Dialog.showMessage(title = "Warining", message = msg, messageType = Dialog.Message.Warning)
+  }
+
+  def showError(msg: String): Unit = {
+    log.error(msg)
+    Dialog.showMessage(title = "Error", message = msg, messageType = Dialog.Message.Error)
+  }
+
+  val ComfortableScrollSpeed: Int = 10
+
+  def verticalListConstraint(p: GridBagPanel): p.Constraints =
+    new p.Constraints {
+      fill    = GridBagPanel.Fill.Horizontal
+      weightx = 1
+      gridx   = 0
+    }
+
+  def checkEdt() = {
+    require(EventQueue.isDispatchThread, "Should be called from EDT")
+  }
+
+  object Colors {
+
+    /** Light green */
+    val AdditionBg: Color = Color.decode("#E4FFE0")
+
+    /** Light yellow */
+    val CombineBg: Color = Color.decode("#F8F8CE")
+
+    /** Light red */
+    val ConflictBg: Color = Color.decode("#F8CECE")
+
+  }
+
+  class FillerComponent(val horizontal: Boolean, val dim: Int) extends Component {
+    override lazy val peer =
+      if (horizontal)
+        JBox.createHorizontalStrut(dim).asInstanceOf[JComponent]
+      else
+        JBox.createVerticalStrut(dim).asInstanceOf[JComponent]
+  }
 }
