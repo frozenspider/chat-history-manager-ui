@@ -27,6 +27,11 @@ object SwingUtils {
     def minimumHeight           = el.minimumSize.height
     def minimumHeight_=(h: Int) = el.minimumSize = new Dimension(el.minimumSize.width, h)
 
+    def maximumWidth            = el.maximumSize.width
+    def maximumWidth_=(w: Int)  = el.maximumSize = new Dimension(w, el.maximumSize.height)
+    def maximumHeight           = el.maximumSize.height
+    def maximumHeight_=(h: Int) = el.maximumSize = new Dimension(el.maximumSize.width, h)
+
     def fontSize = el.font.getSize
 
     def fontSize_=(s: Int) = el.font = new Font(el.font.getName, el.font.getStyle, s)

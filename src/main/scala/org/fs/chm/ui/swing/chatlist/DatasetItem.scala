@@ -22,10 +22,11 @@ class DatasetItem(
 ) extends GridBagPanel {
 
   val header: Label = new Label {
-    text = ds.alias
+    text                = ds.alias
     horizontalAlignment = Alignment.Center
-    tooltip = ds.alias
-    this.fontSize = this.fontSize + 2
+    tooltip             = ds.alias
+    this.fontSize       = this.fontSize + 2
+    this.preferredWidth = DaoItem.PanelWidth
 
     // Reactions
     listenTo(this, mouse.clicks)

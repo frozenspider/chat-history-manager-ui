@@ -85,8 +85,6 @@ class MainFrameApp //
   }
 
   lazy val (chatsOuterPanel, chatsListContents) = {
-    val panePreferredWidth = 300
-
     val panel = new BoxPanel(Orientation.Vertical)
 
     new BorderPanel {
@@ -98,14 +96,15 @@ class MainFrameApp //
           // That's the only solution I came up with that worked to set a minimum width of an empty chat list
           // (setting minimum size doesn't work, setting preferred size screws up scrollbar)
           new BorderPanel {
-            this.preferredWidth = panePreferredWidth
+            this.preferredWidth = DaoItem.PanelWidth
           }
         } = South
       }
 
       layout(new ScrollPane(panel2) {
         verticalScrollBar.unitIncrement = 10
-        verticalScrollBarPolicy = ScrollPane.BarPolicy.Always
+
+        verticalScrollBarPolicy   = ScrollPane.BarPolicy.Always
         horizontalScrollBarPolicy = ScrollPane.BarPolicy.Never
       }) = Center
     } -> panel.contents

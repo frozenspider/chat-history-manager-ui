@@ -21,8 +21,9 @@ class ChatListItem(
     cc: ChatWithDao,
     callbacks: ChatListSelectionCallbacks,
 ) extends BorderPanel {
-  val labelPreferredWidth = 200 // TODO: Remove
-  val labelBorderWidth    = 3
+  private val labelPreferredWidth = DaoItem.PanelWidth - 100 // TODO: Remove
+
+  val labelBorderWidth = 3
 
   val interlocutors = cc.dao.interlocutors(cc.chat)
 
