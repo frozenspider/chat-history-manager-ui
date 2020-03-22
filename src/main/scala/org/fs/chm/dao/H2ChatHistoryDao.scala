@@ -115,10 +115,12 @@ class H2ChatHistoryDao(
           var query: ConnectionIO[_] = queries.datasets.insert(ds)
 
           for (u <- dao.users(ds.uuid)) {
+            require(u.id > 0, "IDs should be positive!")
             query = query flatMap (_ => queries.users.insert(u, u == myself1))
           }
 
           for (c <- dao.chats(ds.uuid)) {
+            require(c.id > 0, "IDs should be positive!")
             query = query flatMap (_ => queries.chats.insert(c))
 
             val batchSize = 1000
@@ -134,6 +136,7 @@ class H2ChatHistoryDao(
               batch <- batchStream(0)
               m     <- batch
             } {
+              require(m.id > 0, "IDs should be positive!")
               val (rm, rcOption, rrtEls) = Raws.fromMessage(ds.uuid, c.id, m)
               query = query flatMap (_ => queries.rawMessages.insert(rm))
 

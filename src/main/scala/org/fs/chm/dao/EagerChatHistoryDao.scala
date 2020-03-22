@@ -11,6 +11,7 @@ class EagerChatHistoryDao(
     dataPathRoot: File,
     dataset: Dataset,
     myself1: User,
+    /** IDs might be 0 */
     rawUsers: Seq[User],
     chatsWithMessages: ListMap[Chat, IndexedSeq[Message]]
 ) extends ChatHistoryDao {
@@ -30,6 +31,7 @@ class EagerChatHistoryDao(
     val allUsersFromIdName =
       chatsWithMessages.values.flatten.toSet.map((m: Message) => (m.fromId, m.fromNameOption))
     ({
+      require(allUsersFromIdName.forall(_._1 > 0), "All user IDs in messages must be positive!")
       val result = allUsersFromIdName.toSeq.map {
         case (fromId, _) if fromId == myself1.id =>
           myself1

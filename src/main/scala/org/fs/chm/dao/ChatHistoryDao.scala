@@ -108,7 +108,7 @@ sealed trait PersonInfo {
 
 case class User(
     dsUuid: UUID,
-    /** Might be 0, otherwise - is presumed to be unique */
+    /** Unique within a dataset */
     id: Long,
     /** If there's no first/last name separation, everything will be in first name */
     firstNameOption: Option[String],
@@ -126,6 +126,7 @@ object ChatType {
 
 case class Chat(
     dsUuid: UUID,
+    /** Unique within a dataset */
     id: Long,
     nameOption: Option[String],
     tpe: ChatType,
@@ -213,6 +214,7 @@ object RichText {
  */
 
 sealed trait Message extends Searchable with WithId {
+  /** Unique within a chat */
   val id: Long
   val time: DateTime
   val fromNameOption: Option[String]
