@@ -109,7 +109,7 @@ class MainFrameApp //
       }
 
       layout(new ScrollPane(panel2) {
-        verticalScrollBar.unitIncrement = comfortableScrollSpeed
+        verticalScrollBar.unitIncrement = ComfortableScrollSpeed
 
         verticalScrollBarPolicy   = ScrollPane.BarPolicy.Always
         horizontalScrollBarPolicy = ScrollPane.BarPolicy.Never

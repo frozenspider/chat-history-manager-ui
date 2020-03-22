@@ -7,6 +7,7 @@ import scala.collection.immutable.ListMap
 import scala.util.Random
 
 import com.github.nscala_time.time.Imports._
+import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao._
 
 /**
@@ -15,7 +16,7 @@ import org.fs.chm.dao._
 object TestUtils {
 
   val baseDate = DateTime.parse("2019-01-02T11:15:21")
-  val rnd       = new Random()
+  val rnd      = new Random()
 
   def createUser(ds: Dataset, idx: Int): User =
     User(
@@ -69,7 +70,7 @@ object TestUtils {
       myself1           = users.head,
       rawUsers          = users,
       chatsWithMessages = ListMap(chat -> msgs.toIndexedSeq)
-    ) with MutableChatHistoryDao
+    ) with EagerMutableDaoTrait
   }
 
   def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, Seq[User], Chat) = {
@@ -77,5 +78,15 @@ object TestUtils {
     val users = dao.users(ds.uuid)
     val chat  = dao.chats(ds.uuid).head
     (ds, users, chat)
+  }
+
+  private trait EagerMutableDaoTrait extends MutableChatHistoryDao {
+    def renameDataset(dsUuid: UUID, newName: String): Dataset = ???
+
+    def alterUser(user: User): Unit = ???
+
+    def delete(chat: Chat): Unit = ???
+
+    protected def backup(): Unit = ???
   }
 }

@@ -66,7 +66,7 @@ object SwingUtils extends Logging {
     Dialog.showMessage(title = "Error", message = msg, messageType = Dialog.Message.Error)
   }
 
-  val comfortableScrollSpeed: Int = 10
+  val ComfortableScrollSpeed: Int = 10
 
   def checkEdt() = {
     require(EventQueue.isDispatchThread, "Should be called from EDT")
