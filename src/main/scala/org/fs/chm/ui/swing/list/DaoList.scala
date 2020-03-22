@@ -3,11 +3,12 @@ package org.fs.chm.ui.swing.list
 import scala.swing.BufferWrapper
 import scala.swing.Component
 import scala.swing.GridBagPanel
+import scala.swing.Panel
 
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.ui.swing.general.SwingUtils._
 
-class DaoList(createItem: ChatHistoryDao => DaoItem) {
+class DaoList[I <: Panel](createItem: ChatHistoryDao => DaoItem[I]) {
   // GridBagPanel is a much better fit than BoxPanel for a vertical list that enforces children's width
   val panel = new GridBagPanel()
 
@@ -31,5 +32,13 @@ class DaoList(createItem: ChatHistoryDao => DaoItem) {
     checkEdt()
     clear()
     daos foreach append
+  }
+
+  def innerItems: Seq[I] = {
+    for {
+      daoItem   <- panel.contents if daoItem.isInstanceOf[DaoItem[I]]
+      dsItem    <- daoItem.asInstanceOf[DaoItem[I]].items
+      innerItem <- dsItem.items
+    } yield innerItem
   }
 }

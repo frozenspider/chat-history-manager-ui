@@ -26,11 +26,13 @@ class ChatListItem(
 ) extends BorderPanel { self =>
   private val labelPreferredWidth = DaoItem.PanelWidth - 100 // TODO: Remove
 
-  val labelBorderWidth = 3
+  val chat = cc.chat
 
-  val interlocutors = cc.dao.interlocutors(cc.chat)
+  private val labelBorderWidth = 3
 
-  val popupMenu = new PopupMenu {
+  private val interlocutors = cc.dao.interlocutors(cc.chat)
+
+  private val popupMenu = new PopupMenu {
     contents += menuItem("Details")(showDetailsPopup())
   }
 

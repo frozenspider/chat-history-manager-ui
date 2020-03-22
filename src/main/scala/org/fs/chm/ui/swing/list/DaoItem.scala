@@ -4,7 +4,6 @@ import java.awt.Color
 
 import scala.swing.Alignment
 import scala.swing.GridBagPanel
-import scala.swing.GridBagPanel._
 import scala.swing.Label
 import scala.swing.Panel
 
@@ -12,12 +11,11 @@ import javax.swing.border.MatteBorder
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Dataset
 import org.fs.chm.ui.swing.general.SwingUtils._
-import org.fs.utility.Imports._
 
-class DaoItem(
+class DaoItem[I <: Panel](
     dao: ChatHistoryDao,
     callbacksOption: Option[DaoDatasetSelectionCallbacks],
-    getInnerItems: Dataset => Seq[Panel]
+    getInnerItems: Dataset => Seq[I]
 ) extends GridBagPanel {
 
   val header: Label = new Label {
@@ -29,7 +27,7 @@ class DaoItem(
     this.border              = new MatteBorder(0, 0, 1, 0, Color.GRAY)
   }
 
-  val items: Seq[DatasetItem] =
+  val items: Seq[DatasetItem[I]] =
     dao.datasets map (ds => new DatasetItem(ds, dao, callbacksOption, getInnerItems))
 
   {

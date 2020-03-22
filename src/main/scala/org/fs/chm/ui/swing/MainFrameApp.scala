@@ -146,7 +146,7 @@ class MainFrameApp //
   def changeChatsClickable(enabled: Boolean): Unit = {
     chatsOuterPanel.enabled = enabled
     def changeClickableRecursive(c: Component): Unit = c match {
-      case i: DaoItem         => i.enabled = enabled
+      case i: DaoItem[_]      => i.enabled = enabled
       case c: Container       => c.contents foreach changeClickableRecursive
       case f: FillerComponent => // NOOP
     }
@@ -348,16 +348,23 @@ class MainFrameApp //
       chatsOuterPanel.revalidate()
       chatsOuterPanel.repaint()
       Lock.synchronized {
-        // Reloading current chat from DAO (if needed)
-        val cwdToReload =
-          currentChatOption
-            .filter(cc => cc.dao.interlocutors(cc.chat).exists(_.id == user.id))
-            .flatMap(cwd => cwd.dao.chatOption(cwd.chat.dsUuid, cwd.chat.id) map (c => ChatWithDao(c, cwd.dao)))
-        cwdToReload match {
-          case Some(cwd) =>
+        // Evict chats containing edited user from cache
+        val chatsToEvict = for {
+          (chat, _) <- loadedDaos(dao)
+          if dao.interlocutors(chat) exists (_.id == user.id)
+        } yield chat
+        chatsToEvict foreach(c => evictFromCache(dao, c))
+
+        // Reload currently selected chat
+        val chatItemToReload = for {
+          cwd  <- currentChatOption
+          item <- chatList.innerItems.find(_.chat.id == cwd.chat.id)
+        } yield item
+
+        chatItemToReload match {
+          case Some(chatItem) =>
             // Redo current chat layout
-            evictFromCache(cwd.dao, cwd.chat)
-            chatSelected(ChatWithDao(cwd.chat, cwd.dao))
+            chatItem.select()
           case None =>
             // No need to do anything
             changeChatsClickable(true)

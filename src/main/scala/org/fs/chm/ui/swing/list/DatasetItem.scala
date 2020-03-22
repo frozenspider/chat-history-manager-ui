@@ -3,7 +3,6 @@ package org.fs.chm.ui.swing.list
 import java.awt.Color
 
 import scala.swing.GridBagPanel
-import scala.swing.GridBagPanel._
 import scala.swing._
 import scala.swing.event.MouseReleased
 
@@ -12,13 +11,12 @@ import javax.swing.border.MatteBorder
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Dataset
 import org.fs.chm.ui.swing.general.SwingUtils._
-import org.fs.utility.Imports._
 
-class DatasetItem(
+class DatasetItem[I <: Panel](
     ds: Dataset,
     dao: ChatHistoryDao,
     callbacksOption: Option[DaoDatasetSelectionCallbacks],
-    getInnerItems: Dataset => Seq[Panel]
+    getInnerItems: Dataset => Seq[I]
 ) extends GridBagPanel {
 
   val headerPopupMenu = new PopupMenu {
@@ -43,7 +41,7 @@ class DatasetItem(
     }
   }
 
-  val items: Seq[Panel] = getInnerItems(ds)
+  val items: Seq[I] = getInnerItems(ds)
 
   {
     val c = verticalListConstraint(this)
