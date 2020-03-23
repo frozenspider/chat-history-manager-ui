@@ -358,7 +358,7 @@ class MainFrameApp //
         // Reload currently selected chat
         val chatItemToReload = for {
           cwd  <- currentChatOption
-          item <- chatList.innerItems.find(_.chat.id == cwd.chat.id)
+          item <- chatList.innerItems.find(i => i.chat.id == cwd.chat.id && i.chat.dsUuid == cwd.dsUuid)
         } yield item
 
         chatItemToReload match {
