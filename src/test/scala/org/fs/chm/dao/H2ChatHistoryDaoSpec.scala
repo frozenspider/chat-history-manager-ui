@@ -150,21 +150,24 @@ class H2ChatHistoryDaoSpec //
   }
 
   test("update user") {
-    val users = h2dao.users(dsUuid)
-    val user1 = users.head
-    assert(chatByUser(user1).isDefined, "Chat for user not found, broken test!")
+    val myself = h2dao.myself(dsUuid)
 
-    def chatByUser(u: User): Option[Chat] =
+    def personalChatWith(u: User): Option[Chat] =
       h2dao.chats(dsUuid) find { c =>
-        c.tpe == ChatType.Personal && h2dao.interlocutors(c).contains(u)
+        c.tpe == ChatType.Personal &&
+        h2dao.interlocutors(c).exists(_.id == u.id) &&
+        h2dao.firstMessages(c, 99999).exists(_.fromId == myself.id)
       }
+
+    val users = h2dao.users(dsUuid)
+    val user1 = users.find(u => u != myself && personalChatWith(u).isDefined).get
 
     def doUpdate(u: User): Unit = {
       h2dao.updateUser(u)
       val usersA = h2dao.users(dsUuid)
       assert(usersA.find(_.id == user1.id).get === u)
-      assert(usersA === (u +: users.tail))
-      val chatA = chatByUser(u) getOrElse fail("Chat not found after updating!")
+
+      val chatA = personalChatWith(u) getOrElse fail("Chat not found after updating!")
       assert(chatA.nameOption === u.prettyNameOption)
     }
 
@@ -185,6 +188,19 @@ class H2ChatHistoryDaoSpec //
         phoneNumberOption = None
       )
     )
+
+    // Renaming self should not affect private chats
+    {
+      val chat1Before = personalChatWith(user1) getOrElse fail("Chat not found before updating!")
+      h2dao.updateUser(
+        myself.copy(
+          firstNameOption = Some("My New"),
+          lastNameOption  = Some("Name"),
+        )
+      )
+      val chat1After = personalChatWith(user1) getOrElse fail("Chat not found after updating!")
+      assert(chat1After.nameOption === chat1Before.nameOption)
+    }
   }
 
   test("message fetching corner cases") {

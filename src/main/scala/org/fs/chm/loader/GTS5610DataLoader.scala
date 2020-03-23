@@ -69,7 +69,6 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
               id                     = msgId,
               time                   = vmsg.dateTime,
               editTimeOption         = None,
-              fromNameOption         = None,
               fromId                 = userId,
               forwardFromNameOption  = None,
               replyToMessageIdOption = None,
@@ -96,7 +95,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
       dataPathRoot      = path,
       dataset           = dataset,
       myself1           = myself,
-      rawUsers          = userToChatWithMsgsMap.keys.toSeq,
+      users1            = userToChatWithMsgsMap.keys.toSeq sortBy (u => (u.id, u.prettyName)),
       chatsWithMessages = chatsWithMessages
     )
   }

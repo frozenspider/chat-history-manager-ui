@@ -26,9 +26,11 @@ trait ChatHistoryDao extends AutoCloseable {
   /** Contains myself as well. Order must be stable. */
   def users(dsUuid: UUID): Seq[User]
 
+  def userOption(dsUuid: UUID, id: Long): Option[User]
+
   def chats(dsUuid: UUID): Seq[Chat]
 
-  def chatOption(dsUuid: UUID, chatId: Long): Option[Chat]
+  def chatOption(dsUuid: UUID, id: Long): Option[Chat]
 
   /**
    * First returned element MUST be myself, the rest should be in some fixed order.
@@ -232,7 +234,6 @@ sealed trait Message extends Searchable with WithId {
   /** Unique within a chat */
   val id: Long
   val time: DateTime
-  val fromNameOption: Option[String]
   val fromId: Long
   val textOption: Option[RichText]
 
@@ -248,7 +249,6 @@ object Message {
       id: Long,
       time: DateTime,
       editTimeOption: Option[DateTime],
-      fromNameOption: Option[String],
       fromId: Long,
       forwardFromNameOption: Option[String],
       replyToMessageIdOption: Option[Long],
@@ -266,7 +266,6 @@ object Message {
     case class PhoneCall(
         id: Long,
         time: DateTime,
-        fromNameOption: Option[String],
         fromId: Long,
         textOption: Option[RichText],
         durationSecOption: Option[Int],
@@ -276,7 +275,6 @@ object Message {
     case class PinMessage(
         id: Long,
         time: DateTime,
-        fromNameOption: Option[String],
         fromId: Long,
         textOption: Option[RichText],
         messageId: Long
@@ -286,7 +284,6 @@ object Message {
     case class ClearHistory(
         id: Long,
         time: DateTime,
-        fromNameOption: Option[String],
         fromId: Long,
         textOption: Option[RichText]
     ) extends Service
@@ -294,7 +291,6 @@ object Message {
     case class EditPhoto(
         id: Long,
         time: DateTime,
-        fromNameOption: Option[String],
         fromId: Long,
         textOption: Option[RichText],
         pathOption: Option[String],
@@ -306,7 +302,6 @@ object Message {
       case class Create(
           id: Long,
           time: DateTime,
-          fromNameOption: Option[String],
           fromId: Long,
           textOption: Option[RichText],
           title: String,
@@ -319,7 +314,6 @@ object Message {
       case class InviteMembers(
           id: Long,
           time: DateTime,
-          fromNameOption: Option[String],
           fromId: Long,
           textOption: Option[RichText],
           members: Seq[String]
@@ -331,7 +325,6 @@ object Message {
       case class RemoveMembers(
           id: Long,
           time: DateTime,
-          fromNameOption: Option[String],
           fromId: Long,
           textOption: Option[RichText],
           members: Seq[String]

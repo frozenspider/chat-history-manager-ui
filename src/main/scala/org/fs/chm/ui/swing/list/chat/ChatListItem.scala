@@ -1,7 +1,7 @@
 package org.fs.chm.ui.swing.list.chat
 
 import java.awt.Color
-import java.awt.{Container => AwtContainer}
+import java.awt.{ Container => AwtContainer }
 
 import scala.swing.BorderPanel.Position._
 import scala.swing._
@@ -135,7 +135,14 @@ class ChatListItem(
   private def simpleRenderMsg(msg: Message): String = {
     val prefix =
       if (interlocutors.size == 2 && msg.fromId == interlocutors(1).id) ""
-      else (EntityUtils.getOrUnnamed(msg.fromNameOption) + ": ")
+      else {
+        // Avoid querying DB if possible
+        val fromNameOption =
+          (interlocutors find (_.id == msg.fromId))
+            .orElse(cc.dao.userOption(cc.dsUuid, msg.fromId))
+            .flatMap(_.prettyNameOption)
+        (EntityUtils.getOrUnnamed(fromNameOption) + ": ")
+      }
     val text = msg match {
       case msg: Message.Regular =>
         (msg.textOption, msg.contentOption) match {

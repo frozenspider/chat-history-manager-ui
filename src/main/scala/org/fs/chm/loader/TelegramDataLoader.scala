@@ -25,9 +25,48 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
 
     val parsed = JsonMethods.parse(resultJsonFile)
     val myself = parseMyself(getRawField(parsed, "personal_information", true), dataset.uuid)
-    val users = for {
-      contact <- getCheckedField[Seq[JValue]](parsed, "contacts", "list")
-    } yield parseUser(contact, dataset.uuid)
+
+    val users = {
+      val contactUsers = for {
+        contact <- getCheckedField[Seq[JValue]](parsed, "contacts", "list")
+      } yield parseUser(contact, dataset.uuid)
+
+      // Doing additional pass over messages to fetch all users
+      val messageUsers = (
+        for {
+          chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
+          if (getCheckedField[String](chat, "type") != "saved_messages")
+          message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
+        } yield parseShortUserFromMessage(message)
+      ).toSet
+
+      require(messageUsers.forall(_.id > 0), "All user IDs in messages must be positive!")
+      val combinedUsers = messageUsers.map {
+        case ShortUser(id, _) if id == myself.id =>
+          myself
+        case ShortUser(id, fullNameOption) => //
+          {
+            contactUsers find (_.id == id)
+          }.orElse {
+            contactUsers find (fullNameOption contains _.prettyName)
+          }.getOrElse {
+            User(
+              dsUuid             = dataset.uuid,
+              id                 = id,
+              firstNameOption    = fullNameOption,
+              lastNameOption     = None,
+              usernameOption     = None,
+              phoneNumberOption  = None,
+              lastSeenTimeOption = None
+            )
+          }.copy(id = id)
+      }
+
+      // Append myself if not encountered in messages
+      val combinedUsers2 = if (combinedUsers contains myself) combinedUsers else (combinedUsers + myself)
+
+      combinedUsers2.toSeq sortBy (u => (u.id, u.prettyName))
+    }
 
     val chatsWithMessages = for {
       chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
@@ -47,7 +86,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
       dataPathRoot      = path,
       dataset           = dataset,
       myself1           = myself,
-      rawUsers          = users,
+      users1            = users,
       chatsWithMessages = chatsWithMessagesLM
     )
   }
@@ -87,6 +126,26 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     }
   }
 
+  private def parseShortUserFromMessage(jv: JValue): ShortUser = {
+    implicit val dummyTracker = new FieldUsageTracker
+    getCheckedField[String](jv, "type") match {
+      case "message" =>
+        ShortUser(
+          id             = getCheckedField[Long](jv, "from_id"),
+          fullNameOption = getStringOpt(jv, "from", true)
+        )
+      case "service" =>
+        ShortUser(
+          id             = getCheckedField[Long](jv, "actor_id"),
+          fullNameOption = getStringOpt(jv, "actor", true)
+        )
+      case other =>
+        throw new IllegalArgumentException(
+          s"Don't know how to parse message of type '$other' for ${jv.toString.take(500)}")
+    }
+
+  }
+
   private object MessageParser {
     def parseMessageOption(jv: JValue): Option[Message] = {
       implicit val tracker = new FieldUsageTracker
@@ -103,11 +162,11 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     }
 
     private def parseRegular(jv: JValue)(implicit tracker: FieldUsageTracker): Message.Regular = {
+      tracker.markUsed("from") // Sending user name has been parsed during a separate pass
       Message.Regular(
         id                     = getCheckedField[Long](jv, "id"),
         time                   = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
         editTimeOption         = stringToDateTimeOpt(getCheckedField[String](jv, "edited")),
-        fromNameOption         = getStringOpt(jv, "from", true),
         fromId                 = getCheckedField[Long](jv, "from_id"),
         forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
         replyToMessageIdOption = getFieldOpt[Long](jv, "reply_to_message_id", false),
@@ -118,12 +177,12 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
 
     private def parseService(jv: JValue)(implicit tracker: FieldUsageTracker): Message.Service = {
       tracker.markUsed("edited") // Service messages can't be edited
+      tracker.markUsed("actor")  // Sending user name has been parsed during a separate pass
       getCheckedField[String](jv, "action") match {
         case "phone_call" =>
           Message.Service.PhoneCall(
             id                  = getCheckedField[Long](jv, "id"),
             time                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromNameOption      = getStringOpt(jv, "actor", true),
             fromId              = getCheckedField[Long](jv, "actor_id"),
             durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
             discardReasonOption = getStringOpt(jv, "discard_reason", false),
@@ -133,7 +192,6 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
           Message.Service.PinMessage(
             id             = getCheckedField[Long](jv, "id"),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromNameOption = getStringOpt(jv, "actor", true),
             fromId         = getCheckedField[Long](jv, "actor_id"),
             messageId      = getCheckedField[Long](jv, "message_id"),
             textOption     = RichTextParser.parseRichTextOption(jv)
@@ -142,7 +200,6 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
           Message.Service.ClearHistory(
             id             = getCheckedField[Long](jv, "id"),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromNameOption = getStringOpt(jv, "actor", true),
             fromId         = getCheckedField[Long](jv, "actor_id"),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
@@ -150,7 +207,6 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
           Message.Service.EditPhoto(
             id             = getCheckedField[Long](jv, "id"),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromNameOption = getStringOpt(jv, "actor", true),
             fromId         = getCheckedField[Long](jv, "actor_id"),
             pathOption     = getStringOpt(jv, "photo", true),
             widthOption    = getFieldOpt[Int](jv, "width", false),
@@ -161,7 +217,6 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
           Message.Service.Group.Create(
             id             = getCheckedField[Long](jv, "id"),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromNameOption = getStringOpt(jv, "actor", true),
             fromId         = getCheckedField[Long](jv, "actor_id"),
             title          = getCheckedField[String](jv, "title"),
             members        = getCheckedField[Seq[String]](jv, "members"),
@@ -171,7 +226,6 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
           Message.Service.Group.InviteMembers(
             id             = getCheckedField[Long](jv, "id"),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromNameOption = getStringOpt(jv, "actor", true),
             fromId         = getCheckedField[Long](jv, "actor_id"),
             members        = getCheckedField[Seq[String]](jv, "members"),
             textOption     = RichTextParser.parseRichTextOption(jv)
@@ -180,7 +234,6 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
           Message.Service.Group.RemoveMembers(
             id             = getCheckedField[Long](jv, "id"),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromNameOption = getStringOpt(jv, "actor", true),
             fromId         = getCheckedField[Long](jv, "actor_id"),
             members        = getCheckedField[Seq[String]](jv, "members"),
             textOption     = RichTextParser.parseRichTextOption(jv)
@@ -409,9 +462,9 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     tracker.markUsed("messages")
     tracker.ensuringUsage(jv) {
       Chat(
-        dsUuid        = dsUuid,
-        id            = getCheckedField[Long](jv, "id"),
-        nameOption    = getStringOpt(jv, "name", true),
+        dsUuid     = dsUuid,
+        id         = getCheckedField[Long](jv, "id"),
+        nameOption = getStringOpt(jv, "name", true),
         tpe = getCheckedField[String](jv, "type") match {
           case "personal_chat" => ChatType.Personal
           case "private_group" => ChatType.PrivateGroup
@@ -486,6 +539,8 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     tracker.markUsed(fn1)
     res.extract[A]
   }
+
+  private case class ShortUser(id: Long, fullNameOption: Option[String])
 
   /** Tracks JSON fields being used and ensures that nothing is left unattended */
   class FieldUsageTracker {

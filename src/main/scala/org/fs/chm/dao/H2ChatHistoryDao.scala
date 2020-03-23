@@ -10,6 +10,7 @@ import java.util.UUID
 import cats.effect._
 import cats.implicits._
 import com.github.nscala_time.time.Imports._
+import doobie.ConnectionIO
 import doobie._
 import doobie.free.connection
 import doobie.h2.implicits._
@@ -52,12 +53,16 @@ class H2ChatHistoryDao(
     queries.users.selectAll(dsUuid).transact(txctr).unsafeRunSync()
   }
 
+  def userOption(dsUuid: UUID, id: Long): Option[User] = {
+    queries.users.select(dsUuid, id).transact(txctr).unsafeRunSync()
+  }
+
   override def chats(dsUuid: UUID): Seq[Chat] = {
     queries.chats.selectAll(dsUuid).transact(txctr).unsafeRunSync()
   }
 
-  override def chatOption(dsUuid: UUID, chatId: Long): Option[Chat] = {
-    queries.chats.select(dsUuid, chatId).transact(txctr).unsafeRunSync()
+  override def chatOption(dsUuid: UUID, id: ChatId): Option[Chat] = {
+    queries.chats.select(dsUuid, id).transact(txctr).unsafeRunSync()
   }
 
   private def interlocutorsCache: Map[UUID, Map[ChatId, Seq[User]]] = Lock.synchronized {
@@ -322,7 +327,6 @@ class H2ChatHistoryDao(
           message_type        VARCHAR(255) NOT NULL,
           time                TIMESTAMP NOT NULL,
           edit_time           TIMESTAMP,
-          from_name           VARCHAR(255),
           from_id             BIGINT NOT NULL,
           forward_from_name   VARCHAR(255),
           reply_to_message_id BIGINT, -- not a reference
@@ -423,6 +427,9 @@ class H2ChatHistoryDao(
       def selectMyself(dsUuid: UUID) =
         (selectFr(dsUuid) ++ fr"AND is_myself = true").query[User].unique
 
+      def select(dsUuid: UUID, id: Long) =
+        (selectFr(dsUuid) ++ fr"AND id = $id").query[User].option
+
       def selectInterlocutorIds(dsUuid: UUID, chatId: Long) =
         sql"SELECT DISTINCT from_id FROM messages WHERE ds_uuid = $dsUuid AND chat_id = $chatId ORDER BY from_id"
           .query[Long]
@@ -461,20 +468,28 @@ class H2ChatHistoryDao(
           ++ fr"${c.dsUuid}, ${c.id}, ${c.nameOption}, ${c.tpe}, ${c.imgPathOption}"
           ++ fr")").update.run
 
-      /** After changing user, rename private chat(s) with him accordingly */
-      def updateRenameUser(u: User) =
-        (fr"UPDATE chats c SET c.name = ${u.prettyNameOption}"
-          ++ fr"WHERE c.ds_uuid = ${u.dsUuid}"
-          ++ fr"AND c.type = ${ChatType.Personal: ChatType}"
-          ++ fr"AND EXISTS("
-          ++ fr"SELECT m.from_id FROM messages m"
-          ++ fr"WHERE m.ds_uuid = c.ds_uuid AND m.chat_id = c.id AND m.from_id = ${u.id}"
-          ++ fr")").update.run
+      /**
+       * After changing user, rename private chat(s) with him accordingly.
+       * If user is self, do nothing.
+       */
+      def updateRenameUser(u: User): ConnectionIO[Int] = {
+        if (myself(u.dsUuid).id == u.id) {
+          cats.free.Free.pure(0)
+        } else {
+          (fr"UPDATE chats c SET c.name = ${u.prettyNameOption}"
+            ++ fr"WHERE c.ds_uuid = ${u.dsUuid}"
+            ++ fr"AND c.type = ${ChatType.Personal: ChatType}"
+            ++ fr"AND EXISTS("
+            ++ fr"SELECT m.from_id FROM messages m"
+            ++ fr"WHERE m.ds_uuid = c.ds_uuid AND m.chat_id = c.id AND m.from_id = ${u.id}"
+            ++ fr")").update.run
+        }
+      }
     }
 
     object rawMessages {
 
-      private val colsFr      = Fragment.const(s"""|ds_uuid, chat_id, id, message_type, time, edit_time, from_name,
+      private val colsFr      = Fragment.const(s"""|ds_uuid, chat_id, id, message_type, time, edit_time,
                                               |from_id, forward_from_name, reply_to_message_id, title, members,
                                               |duration_sec, discard_reason, pinned_message_id,
                                               |path, width, height""".stripMargin)
@@ -521,7 +536,7 @@ class H2ChatHistoryDao(
       def insert(m: RawMessage): ConnectionIO[Int] =
         (fr"INSERT INTO messages (" ++ colsFr ++ fr") VALUES ("
           ++ fr"${m.dsUuid}, ${m.chatId}, ${m.id}, ${m.messageType}, ${m.time}, ${m.editTimeOption},"
-          ++ fr"${m.fromNameOption}, ${m.fromId}, ${m.forwardFromNameOption}, ${m.replyToMessageIdOption},"
+          ++ fr"${m.fromId}, ${m.forwardFromNameOption}, ${m.replyToMessageIdOption},"
           ++ fr"${m.titleOption}, ${m.members}, ${m.durationSecOption}, ${m.discardReasonOption},"
           ++ fr"${m.pinnedMessageIdOption}, ${m.pathOption}, ${m.widthOption}, ${m.heightOption}"
           ++ fr")").update.run
@@ -602,7 +617,6 @@ class H2ChatHistoryDao(
             id                     = rm.id,
             time                   = rm.time,
             editTimeOption         = rm.editTimeOption,
-            fromNameOption         = rm.fromNameOption,
             fromId                 = rm.fromId,
             forwardFromNameOption  = rm.forwardFromNameOption,
             replyToMessageIdOption = rm.replyToMessageIdOption,
@@ -613,7 +627,6 @@ class H2ChatHistoryDao(
           Message.Service.PhoneCall(
             id                  = rm.id,
             time                = rm.time,
-            fromNameOption      = rm.fromNameOption,
             fromId              = rm.fromId,
             textOption          = textOption,
             durationSecOption   = rm.durationSecOption,
@@ -623,7 +636,6 @@ class H2ChatHistoryDao(
           Message.Service.PinMessage(
             id             = rm.id,
             time           = rm.time,
-            fromNameOption = rm.fromNameOption,
             fromId         = rm.fromId,
             textOption     = textOption,
             messageId      = rm.pinnedMessageIdOption.get
@@ -632,7 +644,6 @@ class H2ChatHistoryDao(
           Message.Service.ClearHistory(
             id             = rm.id,
             time           = rm.time,
-            fromNameOption = rm.fromNameOption,
             fromId         = rm.fromId,
             textOption     = textOption,
           )
@@ -640,7 +651,6 @@ class H2ChatHistoryDao(
           Message.Service.EditPhoto(
             id             = rm.id,
             time           = rm.time,
-            fromNameOption = rm.fromNameOption,
             fromId         = rm.fromId,
             textOption     = textOption,
             pathOption     = rm.pathOption,
@@ -651,7 +661,6 @@ class H2ChatHistoryDao(
           Message.Service.Group.Create(
             id             = rm.id,
             time           = rm.time,
-            fromNameOption = rm.fromNameOption,
             fromId         = rm.fromId,
             textOption     = textOption,
             title          = rm.titleOption.get,
@@ -661,7 +670,6 @@ class H2ChatHistoryDao(
           Message.Service.Group.InviteMembers(
             id             = rm.id,
             time           = rm.time,
-            fromNameOption = rm.fromNameOption,
             fromId         = rm.fromId,
             textOption     = textOption,
             members        = rm.members
@@ -670,7 +678,6 @@ class H2ChatHistoryDao(
           Message.Service.Group.RemoveMembers(
             id             = rm.id,
             time           = rm.time,
-            fromNameOption = rm.fromNameOption,
             fromId         = rm.fromId,
             textOption     = textOption,
             members        = rm.members
@@ -779,7 +786,6 @@ class H2ChatHistoryDao(
         messageType            = "",
         time                   = m.time,
         editTimeOption         = None,
-        fromNameOption         = m.fromNameOption,
         fromId                 = m.fromId,
         forwardFromNameOption  = None,
         replyToMessageIdOption = None,
@@ -999,7 +1005,6 @@ object H2ChatHistoryDao {
       messageType: String,
       time: DateTime,
       editTimeOption: Option[DateTime],
-      fromNameOption: Option[String],
       fromId: Long,
       forwardFromNameOption: Option[String],
       replyToMessageIdOption: Option[Long],
