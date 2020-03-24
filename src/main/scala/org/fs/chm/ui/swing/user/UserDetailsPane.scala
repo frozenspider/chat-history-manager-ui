@@ -14,6 +14,7 @@ import org.fs.chm.dao.User
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.general.field.TextComponent
 import org.fs.chm.ui.swing.general.field.TextOptionComponent
+import org.fs.chm.ui.swing.general.field.ValueComponent
 
 class UserDetailsPane(
     private var user: User,
@@ -61,19 +62,20 @@ class UserDetailsPane(
 
     border = new MatteBorder(0, 0, 1, 0, Color.GRAY)
 
-    menuCallbacksOption foreach addRightClickMenu
-  }
+    menuCallbacksOption foreach { _ => // Adding right-click menu
+      val popupMenu = new PopupMenu {
+        contents += menuItem("Edit", enabled = dao.isMutable)(edit())
+      }
 
-  private def addRightClickMenu(callbacks: UserDetailsMenuCallbacks): Unit = {
-    val popupMenu = new PopupMenu {
-      contents += menuItem("Edit", enabled = dao.isMutable)(edit())
-    }
-
-    // Reactions
-    listenTo(this, mouse.clicks)
-    reactions += {
-      case e @ MouseReleased(src, pt, _, _, _) if SwingUtilities.isRightMouseButton(e.peer) && enabled =>
-        popupMenu.show(this, pt.x, pt.y)
+      // Reactions
+      listenTo(this, mouse.clicks)
+      this.contents.collect {
+        case c: ValueComponent[_] => listenTo(c.innerComponent, c.innerComponent.mouse.clicks)
+      }
+      reactions += {
+        case e @ MouseReleased(src, pt, _, _, _) if SwingUtilities.isRightMouseButton(e.peer) && enabled =>
+          popupMenu.show(src, pt.x, pt.y)
+      }
     }
   }
 

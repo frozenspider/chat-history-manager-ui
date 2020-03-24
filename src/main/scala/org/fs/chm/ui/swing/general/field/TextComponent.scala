@@ -27,9 +27,11 @@ class TextComponent(
     layout(tc) = Center
   }
 
+  override def value: String =
+    tc.text.trim
+
   override def value_=(v: String): Unit =
     tc.text = v
 
-  override def value: String =
-    tc.text.trim
+  override def innerComponent: TextField = tc
 }

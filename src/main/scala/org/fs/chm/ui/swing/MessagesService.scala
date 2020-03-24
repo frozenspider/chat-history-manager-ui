@@ -11,6 +11,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.fs.chm.dao.Message.Service
 import org.fs.chm.dao._
 import org.fs.chm.ui.swing.general.ChatWithDao
+import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.utility.EntityUtils
 import org.fs.utility.Imports._
 
@@ -59,23 +60,6 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     MessageDocument(doc, msgEl)
   }
 
-  val NameColors = Seq(
-    // User
-    "#6495ED", // CornflowerBlue
-    // First interlocutor
-    "#B22222", // FireBrick
-    "#008000", // Green
-    "#DAA520", // GoldenRod
-    "#BA55D3", // MediumOrchid
-    "#FF69B4", // HotPink
-    "#808000", // Olive
-    "#008080", // Teal
-    "#9ACD32", // YellowGreen
-    "#FF8C00", // DarkOrange
-    "#00D0D0", // Cyan-ish
-    "#BDB76B" // DarkKhaki
-  )
-
   lazy val pleaseWaitDoc: HTMLDocument = {
     val md = createStubDoc
     md.insert("<div><h1>Please wait...</h1></div>", MessageInsertPosition.Leading)
@@ -118,7 +102,7 @@ class MessagesService(htmlKit: HTMLEditorKit) {
       val idx2 = intl indexWhere (u => nameOption contains u.prettyName)
       if (idx1 != -1) idx1 else idx2
     }
-    val color = if (idx >= 0) NameColors(idx % NameColors.length) else "#000000"
+    val color = if (idx >= 0) Colors.stringForIdx(idx) else "#000000"
     val resolvedName = nameOption getOrElse {
       EntityUtils.getOrUnnamed(idOption flatMap (id => intl.find(_.id == id)) map (_.prettyName))
     }

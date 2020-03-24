@@ -37,7 +37,7 @@ class DatasetItem[I <: Panel](
     listenTo(this, mouse.clicks)
     reactions += {
       case e @ MouseReleased(src, pt, _, _, _) if SwingUtilities.isRightMouseButton(e.peer) && enabled =>
-        headerPopupMenu.show(this, pt.x, pt.y)
+        headerPopupMenu.show(src, pt.x, pt.y)
     }
   }
 

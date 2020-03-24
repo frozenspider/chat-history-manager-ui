@@ -27,11 +27,13 @@ class TextOptionComponent(
     layout(tc) = Center
   }
 
-  override def value_=(v: Option[String]): Unit =
-    tc.text = v getOrElse ""
-
   override def value: Option[String] = {
     val v = tc.text.trim
     if (v.isEmpty) None else Some(v)
   }
+
+  override def value_=(v: Option[String]): Unit =
+    tc.text = v getOrElse ""
+
+  override def innerComponent: TextField = tc
 }

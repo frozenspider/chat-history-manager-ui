@@ -208,12 +208,22 @@ class MainFrameApp //
   }
 
   def showUsersDialog(): Unit = {
-    val userList = new DaoList(dao =>
-      new DaoItem(dao, None, { ds =>
-        dao.users(ds.uuid) map { u =>
-          new UserDetailsPane(u, dao, false, Some(this))
+    val userList = new DaoList({ dao =>
+      new DaoItem(
+        dao,
+        None, { ds =>
+          dao.users(ds.uuid).zipWithIndex map {
+            case (u, i) =>
+              val pane = new UserDetailsPane(u, dao, false, Some(this))
+              for (el <- Seq(pane.firstNameC, pane.lastNameC)) {
+                el.innerComponent.foreground = Colors.forIdx(i)
+                el.innerComponent.fontStyle  = Font.Style.Bold
+              }
+              pane
+          }
         }
-      }))
+      )
+    })
     userList.replaceWith(loadedDaos.keys.toSeq)
     userList.panel.preferredWidth = DaoItem.PanelWidth
 

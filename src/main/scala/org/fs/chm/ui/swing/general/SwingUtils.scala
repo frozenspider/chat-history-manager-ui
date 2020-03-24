@@ -89,6 +89,32 @@ object SwingUtils extends Logging {
     /** Light red */
     val ConflictBg: Color = Color.decode("#F8CECE")
 
+    val CyclingStrings = Seq(
+      // User
+      "#6495ED", // CornflowerBlue
+      // First interlocutor
+      "#B22222", // FireBrick
+      "#008000", // Green
+      "#DAA520", // GoldenRod
+      "#BA55D3", // MediumOrchid
+      "#FF69B4", // HotPink
+      "#808000", // Olive
+      "#008080", // Teal
+      "#9ACD32", // YellowGreen
+      "#FF8C00", // DarkOrange
+      "#00D0D0", // Cyan-ish
+      "#BDB76B" // DarkKhaki
+    )
+
+    val Cycling = CyclingStrings map Color.decode
+
+    def forIdx(i: Int): Color = {
+      Cycling(i % Cycling.size)
+    }
+
+    def stringForIdx(i: Int): String = {
+      CyclingStrings(i % CyclingStrings.size)
+    }
   }
 
   class FillerComponent(val horizontal: Boolean, val dim: Int) extends Component {

@@ -82,8 +82,8 @@ class ChatListItem(
     reactions += {
       case e @ MouseReleased(_, __, _, _, _) if SwingUtilities.isLeftMouseButton(e.peer) && enabled =>
         select()
-      case e @ MouseReleased(_, pt, _, _, _) if SwingUtilities.isRightMouseButton(e.peer) && enabled =>
-        popupMenu.show(this, pt.x, pt.y)
+      case e @ MouseReleased(src, pt, _, _, _) if SwingUtilities.isRightMouseButton(e.peer) && enabled =>
+        popupMenu.show(src, pt.x, pt.y)
     }
 
     maximumSize = new Dimension(Int.MaxValue, preferredSize.height)
