@@ -10,6 +10,9 @@ import java.awt.image.DataBuffer
 import java.awt.image.DataBufferByte
 import java.awt.image.Raster
 
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
+
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
 import webp.WebpNative
@@ -33,7 +36,7 @@ object Webp extends Logging {
   }
 
   /** Initializes JNI library to speed up subsequent calls */
-  def eagerInit(): Unit = {
+  def preload(): Future[Unit] = Future {
     webNativeOption
   }
 

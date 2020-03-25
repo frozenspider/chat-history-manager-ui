@@ -3,6 +3,7 @@ package org.fs.chm.loader
 import java.io.File
 import java.io.FileNotFoundException
 
+import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 
 import cats.effect.Blocker
@@ -10,6 +11,7 @@ import cats.effect.IO
 import doobie.Transactor
 import org.flywaydb.core.Flyway
 import org.fs.chm.dao._
+import org.fs.utility.StopWatch
 import org.h2.jdbcx.JdbcConnectionPool
 
 class H2DataManager extends DataLoader[H2ChatHistoryDao] {
@@ -26,6 +28,32 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
     "DATABASE_TO_UPPER=false"
   )
   private val optionsString = options.mkString(";", ";", "")
+
+  def preload(): Seq[Future[_]] = {
+    // To preload stuff, we'll create an in-memory DB and drop it
+    implicit val ec = ExecutionContext.global
+    val f1 = Future {
+      StopWatch.measureAndCall {
+        val dao = daoFromUrlPath("jdbc:h2:mem:preload1", new File("."))
+        try {
+          dao.createTables()
+        } finally {
+          dao.close()
+        }
+      } { (_, t) =>
+        log.info(s"DAO preloaded in ${t} ms")
+      }
+    }
+    val f2 = Future {
+      StopWatch.measureAndCall {
+        val flyway = Flyway.configure.dataSource("jdbc:h2:mem:preload2", "sa", "").load
+        flyway.baseline()
+      } { (_, t) =>
+        log.info(s"Flyway preloaded in ${t} ms")
+      }
+    }
+    Seq(f1, f2)
+  }
 
   def create(path: File): Unit = {
     val dataDbFile: File = new File(path, dataFileName)
@@ -52,8 +80,12 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
   }
 
   private def daoFromFile(path: File): H2ChatHistoryDao = {
+    daoFromUrlPath(dbUrl(path), path)
+  }
+
+  private def daoFromUrlPath(url: String, path: File): H2ChatHistoryDao = {
     Class.forName("org.h2.Driver")
-    val connPool = JdbcConnectionPool.create(dbUrl(path), "sa", "")
+    val connPool = JdbcConnectionPool.create(url, "sa", "")
     val execCxt: ExecutionContext = ExecutionContext.global
     val blocker: Blocker          = Blocker.liftExecutionContext(execCxt)
     val txctr = Transactor.fromDataSource[IO](connPool, execCxt, blocker)
@@ -62,5 +94,5 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
 }
 
 object H2DataManager {
-  val DefaultExt   = "mv.db"
+  val DefaultExt = "mv.db"
 }

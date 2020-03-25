@@ -65,8 +65,12 @@ class MainFrameApp //
   // better pictures rendering
   // emoji and fonts
 
-  Future {
-    Webp.eagerInit()
+  val preloadResult: Future[_] = {
+    val futureSeq = Seq(
+      DataLoaders.preload(),
+      Seq(Webp.preload())
+    ).flatten
+    futureSeq.reduce((a, b) => a.flatMap(_ => b))
   }
 
   override def top = new MainFrame {
@@ -92,7 +96,7 @@ class MainFrameApp //
 
   lazy val (menuBar, dbEmbeddedMenu) = {
     val separatorBeforeDb = new Separator()
-    val separatorAfterDb = new Separator()
+    val separatorAfterDb  = new Separator()
     val dbMenu = new Menu("Database") {
       contents += menuItem("Open")(showOpenDialog())
       contents += separatorBeforeDb
@@ -156,10 +160,12 @@ class MainFrameApp //
   }
 
   def freezeTheWorld(): Unit = {
+    menuBar.contents foreach (_.enabled = false)
     changeChatsClickable(false)
   }
 
   def unfreezeTheWorld(): Unit = {
+    menuBar.contents foreach (_.enabled = true)
     changeChatsClickable(true)
   }
 
@@ -578,6 +584,11 @@ class MainFrameApp //
     private val h2      = new H2DataManager
     private val tg      = new TelegramDataLoader
     private val gts5610 = new GTS5610DataLoader
+
+    /** Initializes DAOs to speed up subsequent calls */
+    def preload(): Seq[Future[_]] = {
+      h2.preload()
+    }
 
     private val h2ff = easyFileFilter(
       s"${BuildInfo.name} database (*.${H2DataManager.DefaultExt})"
