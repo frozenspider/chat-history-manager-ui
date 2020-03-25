@@ -124,4 +124,41 @@ object SwingUtils extends Logging {
       else
         JBox.createVerticalStrut(dim).asInstanceOf[JComponent]
   }
+
+  /** Represents a "sublist" of menu items between two separators */
+  class EmbeddedMenu(_menu: Menu, before: Separator, after: Separator) {
+    private val menu = new MenuWrapper(_menu)
+
+    require(menu.indexOf(before) > 0)
+    require(menu.indexOf(after) > 0)
+
+    def clear(): Unit = {
+      val i1      = menu.indexOf(before)
+      val i2      = menu.indexOf(after)
+      val between = i2 - i1 - 1
+      menu.remove(i1 + 1, between)
+    }
+
+    def append(item: Menu): Unit = {
+      val i = menu.indexOf(after)
+      menu.insert(i, item)
+    }
+  }
+
+  /** Scala Swing "contents" wrapper for menu can't be used to get stuff back, so... */
+  private class MenuWrapper(m: Menu) {
+    def indexOf(c: Component): Int = {
+      m.peer.getPopupMenu.getComponentZOrder(c.peer)
+    } ensuring (_ >= 0)
+
+    def remove(from: Int, len: Int): Unit = {
+      val pm   = m.peer.getPopupMenu
+      val cmps = (from until (from + len)) map pm.getComponent
+      cmps foreach pm.remove
+    }
+
+    def insert(i: Int, item: Component): Unit = {
+      m.contents.insert(i, item)
+    }
+  }
 }

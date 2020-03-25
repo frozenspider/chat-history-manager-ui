@@ -90,19 +90,23 @@ class MainFrameApp //
     layout(msgAreaContainer.panel) = Center
   }
 
-  lazy val (menuBar, databaseMenuRoot) = {
-    val databaseMenuRoot = new Menu("Databases")
-    databaseMenuRoot.enabled = false
-    new MenuBar {
-      contents += new Menu("Database") {
-        contents += menuItem("Open")(showOpenDialog())
-        contents += databaseMenuRoot
-      }
+  lazy val (menuBar, dbEmbeddedMenu) = {
+    val separatorBeforeDb = new Separator()
+    val separatorAfterDb = new Separator()
+    val dbMenu = new Menu("Database") {
+      contents += menuItem("Open")(showOpenDialog())
+      contents += separatorBeforeDb
+      contents += separatorAfterDb
+    }
+    val dbEmbeddedMenu = new EmbeddedMenu(dbMenu, separatorBeforeDb, separatorAfterDb)
+    val menuBar = new MenuBar {
+      contents += dbMenu
       contents += new Menu("Edit") {
         contents += menuItem("Users")(showUsersDialog())
         contents += menuItem("Merge Datasets")(showSelectDatasetsToMergeDialog())
       }
-    } -> databaseMenuRoot
+    }
+    (menuBar, dbEmbeddedMenu)
   }
 
   lazy val chatList = new DaoList(dao => new DaoChatItem(dao))
@@ -360,14 +364,14 @@ class MainFrameApp //
   }
 
   def daoListChanged(): Unit = {
-    databaseMenuRoot.contents.clear()
+    dbEmbeddedMenu.clear()
     for (dao <- loadedDaos.keys) {
-      val daoMenu = new Menu(dao.name)
-      daoMenu.contents          += menuItem("Save As...")(showSaveAsDialog(dao))
-      daoMenu.contents          += menuItem("Close")(close(dao))
-      databaseMenuRoot.contents += daoMenu
+      val daoMenu = new Menu(dao.name) {
+        contents += menuItem("Save As...")(showSaveAsDialog(dao))
+        contents += menuItem("Close")(close(dao))
+      }
+      dbEmbeddedMenu.append(daoMenu)
     }
-    databaseMenuRoot.enabled = loadedDaos.nonEmpty
     chatsOuterPanel.revalidate()
     chatsOuterPanel.repaint()
   }
