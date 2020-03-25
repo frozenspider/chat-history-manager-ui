@@ -24,49 +24,8 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     val dataset = Dataset.createDefault("Telegram", "telegram")
 
     val parsed = JsonMethods.parse(resultJsonFile)
-    val myself = parseMyself(getRawField(parsed, "personal_information", true), dataset.uuid)
 
-    val users = {
-      val contactUsers = for {
-        contact <- getCheckedField[Seq[JValue]](parsed, "contacts", "list")
-      } yield parseUser(contact, dataset.uuid)
-
-      // Doing additional pass over messages to fetch all users
-      val messageUsers = (
-        for {
-          chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
-          if (getCheckedField[String](chat, "type") != "saved_messages")
-          message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
-        } yield parseShortUserFromMessage(message)
-      ).toSet
-
-      require(messageUsers.forall(_.id > 0), "All user IDs in messages must be positive!")
-      val combinedUsers = messageUsers.map {
-        case ShortUser(id, _) if id == myself.id =>
-          myself
-        case ShortUser(id, fullNameOption) => //
-          {
-            contactUsers find (_.id == id)
-          }.orElse {
-            contactUsers find (fullNameOption contains _.prettyName)
-          }.getOrElse {
-            User(
-              dsUuid             = dataset.uuid,
-              id                 = id,
-              firstNameOption    = fullNameOption,
-              lastNameOption     = None,
-              usernameOption     = None,
-              phoneNumberOption  = None,
-              lastSeenTimeOption = None
-            )
-          }.copy(id = id)
-      }
-
-      // Append myself if not encountered in messages
-      val combinedUsers2 = if (combinedUsers contains myself) combinedUsers else (combinedUsers + myself)
-
-      combinedUsers2.toSeq sortBy (u => (u.id, u.prettyName))
-    }
+    val (myself, users) = parseAndCombineUsers(parsed, dataset.uuid)
 
     val chatsWithMessages = for {
       chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
@@ -143,7 +102,60 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
         throw new IllegalArgumentException(
           s"Don't know how to parse message of type '$other' for ${jv.toString.take(500)}")
     }
+  }
 
+  /**
+   * Parse users from contact list and chat messages and combine them to get as much info as possible.
+   * Returns `(myself, users)`
+   */
+  private def parseAndCombineUsers(parsed: JValue, dsUuid: UUID): (User, Seq[User]) = {
+    implicit val dummyTracker = new FieldUsageTracker
+
+    val myself = parseMyself(getRawField(parsed, "personal_information", true), dsUuid)
+
+    val contactUsers = for {
+      contact <- getCheckedField[Seq[JValue]](parsed, "contacts", "list")
+    } yield parseUser(contact, dsUuid)
+
+    // Doing additional pass over messages to fetch all users
+    val messageUsers = (
+      for {
+        chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
+        if (getCheckedField[String](chat, "type") != "saved_messages")
+        message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
+      } yield parseShortUserFromMessage(message)
+    ).toSet
+
+    require(messageUsers.forall(_.id > 0), "All user IDs in messages must be positive!")
+    val combinedUsers = messageUsers.map {
+      case ShortUser(id, _) if id == myself.id =>
+        myself
+      case ShortUser(id, fullNameOption) => //
+        {
+          contactUsers find (_.id == id)
+        }.orElse {
+          contactUsers find (fullNameOption contains _.prettyName)
+        }.getOrElse {
+          User(
+            dsUuid             = dsUuid,
+            id                 = id,
+            firstNameOption    = fullNameOption,
+            lastNameOption     = None,
+            usernameOption     = None,
+            phoneNumberOption  = None,
+            lastSeenTimeOption = None
+          )
+        }.copy(id = id)
+    }
+
+    // Append myself if not encountered in messages
+    val combinedUsers2 = if (combinedUsers contains myself) combinedUsers else (combinedUsers + myself)
+    val combinedUsers3 = combinedUsers2.toSeq sortBy (u => (u.id, u.prettyName))
+    (myself, combinedUsers3)
+  } ensuring { p =>
+    // Ensuring all IDs are unique
+    val (myself, users) = p
+    (users.toStream.map(_.id).toSet + myself.id).size == users.size
   }
 
   private object MessageParser {
@@ -190,53 +202,53 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
           )
         case "pin_message" =>
           Message.Service.PinMessage(
-            id             = getCheckedField[Long](jv, "id"),
-            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
-            messageId      = getCheckedField[Long](jv, "message_id"),
-            textOption     = RichTextParser.parseRichTextOption(jv)
+            id         = getCheckedField[Long](jv, "id"),
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            messageId  = getCheckedField[Long](jv, "message_id"),
+            textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "clear_history" =>
           Message.Service.ClearHistory(
-            id             = getCheckedField[Long](jv, "id"),
-            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
-            textOption     = RichTextParser.parseRichTextOption(jv)
+            id         = getCheckedField[Long](jv, "id"),
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "edit_group_photo" =>
           Message.Service.EditPhoto(
-            id             = getCheckedField[Long](jv, "id"),
-            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
-            pathOption     = getStringOpt(jv, "photo", true),
-            widthOption    = getFieldOpt[Int](jv, "width", false),
-            heightOption   = getFieldOpt[Int](jv, "height", false),
-            textOption     = RichTextParser.parseRichTextOption(jv)
+            id           = getCheckedField[Long](jv, "id"),
+            time         = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId       = getCheckedField[Long](jv, "actor_id"),
+            pathOption   = getStringOpt(jv, "photo", true),
+            widthOption  = getFieldOpt[Int](jv, "width", false),
+            heightOption = getFieldOpt[Int](jv, "height", false),
+            textOption   = RichTextParser.parseRichTextOption(jv)
           )
         case "create_group" =>
           Message.Service.Group.Create(
-            id             = getCheckedField[Long](jv, "id"),
-            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
-            title          = getCheckedField[String](jv, "title"),
-            members        = getCheckedField[Seq[String]](jv, "members"),
-            textOption     = RichTextParser.parseRichTextOption(jv)
+            id         = getCheckedField[Long](jv, "id"),
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            title      = getCheckedField[String](jv, "title"),
+            members    = getCheckedField[Seq[String]](jv, "members"),
+            textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "invite_members" =>
           Message.Service.Group.InviteMembers(
-            id             = getCheckedField[Long](jv, "id"),
-            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
-            members        = getCheckedField[Seq[String]](jv, "members"),
-            textOption     = RichTextParser.parseRichTextOption(jv)
+            id         = getCheckedField[Long](jv, "id"),
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            members    = getCheckedField[Seq[String]](jv, "members"),
+            textOption = RichTextParser.parseRichTextOption(jv)
           )
         case "remove_members" =>
           Message.Service.Group.RemoveMembers(
-            id             = getCheckedField[Long](jv, "id"),
-            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
-            members        = getCheckedField[Seq[String]](jv, "members"),
-            textOption     = RichTextParser.parseRichTextOption(jv)
+            id         = getCheckedField[Long](jv, "id"),
+            time       = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId     = getCheckedField[Long](jv, "actor_id"),
+            members    = getCheckedField[Seq[String]](jv, "members"),
+            textOption = RichTextParser.parseRichTextOption(jv)
           )
         case other =>
           throw new IllegalArgumentException(
