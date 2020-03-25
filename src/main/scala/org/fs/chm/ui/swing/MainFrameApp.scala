@@ -6,6 +6,7 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.annotation.tailrec
 import scala.collection.immutable.ListMap
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -21,6 +22,7 @@ import org.fs.chm.loader._
 import org.fs.chm.ui.swing.MessagesService._
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
+import org.fs.chm.ui.swing.general.SwingUtils
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.list.DaoDatasetSelectionCallbacks
 import org.fs.chm.ui.swing.list.DaoItem
@@ -73,6 +75,11 @@ class MainFrameApp //
     contents = ui
     size     = new Dimension(1000, 700)
     peer.setLocationRelativeTo(null)
+
+    // Install EDT exception handler
+    Swing.onEDTWait {
+      Thread.currentThread.setUncaughtExceptionHandler(handleException)
+    }
   }
 
   val ui = new BorderPanel {
@@ -143,6 +150,14 @@ class MainFrameApp //
     m
   }
 
+  def freezeTheWorld(): Unit = {
+    changeChatsClickable(false)
+  }
+
+  def unfreezeTheWorld(): Unit = {
+    changeChatsClickable(true)
+  }
+
   def changeChatsClickable(enabled: Boolean): Unit = {
     chatsOuterPanel.enabled = enabled
     def changeClickableRecursive(c: Component): Unit = c match {
@@ -171,12 +186,16 @@ class MainFrameApp //
       case FileChooser.Result.Approve if loadedDaos.keys.exists(_ isLoaded chooser.selectedFile.getParentFile) =>
         showWarning(s"File '${chooser.selectedFile}' is already loaded")
       case FileChooser.Result.Approve => {
-        changeChatsClickable(false)
+        freezeTheWorld()
         config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
         Future { // To release UI lock
           Swing.onEDT {
-            val dao = DataLoaders.load(chooser.selectedFile)
-            loadDaoFromEDT(dao)
+            try {
+              val dao = DataLoaders.load(chooser.selectedFile)
+              loadDaoFromEDT(dao)
+            } finally {
+              unfreezeTheWorld()
+            }
           }
         }
       }
@@ -193,14 +212,18 @@ class MainFrameApp //
       case FileChooser.Result.Cancel => // NOOP
       case FileChooser.Result.Error  => // Mostly means that dialog was dismissed, also NOOP
       case FileChooser.Result.Approve => {
-        changeChatsClickable(false)
+        freezeTheWorld()
         config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
         Future { // To release UI lock
           Swing.onEDT {
-            // TODO: Intercept and show errors, e.g. "file already exists"
-            val dstDao = DataLoaders.saveAs(srcDao, chooser.selectedFile)
-            // TODO: Unload srcDao
-            loadDaoFromEDT(dstDao)
+            try {
+              // TODO: Intercept and show errors, e.g. "file already exists"
+              val dstDao = DataLoaders.saveAs(srcDao, chooser.selectedFile)
+              // TODO: Unload srcDao
+              loadDaoFromEDT(dstDao)
+            } finally {
+              unfreezeTheWorld()
+            }
           }
         }
       }
@@ -268,6 +291,10 @@ class MainFrameApp //
     }
   }
 
+  //
+  // Other stuff
+  //
+
   def mergeDatasets(
       masterDao: H2ChatHistoryDao,
       masterDs: Dataset,
@@ -319,7 +346,7 @@ class MainFrameApp //
       chatList.append(dao)
     }
     daoListChanged()
-    changeChatsClickable(true)
+    unfreezeTheWorld()
   }
 
   def daoListChanged(): Unit = {
@@ -334,22 +361,25 @@ class MainFrameApp //
   override def renameDataset(dsUuid: UUID, newName: String, dao: ChatHistoryDao): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
-    changeChatsClickable(false)
+    freezeTheWorld()
     Swing.onEDT { // To release UI lock
-      Lock.synchronized {
-        dao.mutable.renameDataset(dsUuid, newName)
-        chatList.replaceWith(loadedDaos.keys.toSeq)
+      try {
+        Lock.synchronized {
+          dao.mutable.renameDataset(dsUuid, newName)
+          chatList.replaceWith(loadedDaos.keys.toSeq)
+        }
+        chatsOuterPanel.revalidate()
+        chatsOuterPanel.repaint()
+      } finally {
+        unfreezeTheWorld()
       }
-      chatsOuterPanel.revalidate()
-      chatsOuterPanel.repaint()
-      changeChatsClickable(true)
     }
   }
 
   override def userEdited(user: User, dao: ChatHistoryDao): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
-    changeChatsClickable(false)
+    freezeTheWorld()
     Swing.onEDT { // To release UI lock
       Lock.synchronized {
         dao.mutable.updateUser(user)
@@ -363,7 +393,7 @@ class MainFrameApp //
           (chat, _) <- loadedDaos(dao)
           if dao.interlocutors(chat) exists (_.id == user.id)
         } yield chat
-        chatsToEvict foreach(c => evictFromCache(dao, c))
+        chatsToEvict foreach (c => evictFromCache(dao, c))
 
         // Reload currently selected chat
         val chatItemToReload = for {
@@ -377,7 +407,7 @@ class MainFrameApp //
             chatItem.select()
           case None =>
             // No need to do anything
-            changeChatsClickable(true)
+            unfreezeTheWorld()
         }
       }
     }
@@ -390,7 +420,7 @@ class MainFrameApp //
       if (!loadedDaos(cc.dao).contains(cc.chat)) {
         updateCache(cc.dao, cc.chat, ChatCache(None, None))
       }
-      changeChatsClickable(false)
+      freezeTheWorld()
     }
     val f = Future {
       val cache = loadedDaos(cc.dao)(cc.chat)
@@ -418,7 +448,7 @@ class MainFrameApp //
         val doc = loadedDaos(cc.dao)(cc.chat).msgDocOption.get.doc
         msgAreaContainer.document = doc
         msgAreaContainer.scroll.toEnd() // FIXME: Doesn't always work!
-        changeChatsClickable(true)
+        unfreezeTheWorld()
       })
     }
   }
@@ -433,7 +463,7 @@ class MainFrameApp //
           val cache      = loadedDaos(cc.dao)(cc.chat)
           val loadStatus = cache.loadStatusOption.get
           if (!loadStatus.beginReached) {
-            changeChatsClickable(false)
+            freezeTheWorld()
             loadMessagesInProgress set true
             val msgDoc = cache.msgDocOption.get
             val f = Future {
@@ -469,7 +499,7 @@ class MainFrameApp //
             f.onComplete(_ =>
               Swing.onEDTWait(Lock.synchronized {
                 loadMessagesInProgress set false
-                changeChatsClickable(true)
+                unfreezeTheWorld()
                 msgAreaContainer.caretUpdatesEnabled = true
               }))
           }
@@ -485,6 +515,21 @@ class MainFrameApp //
     Lock.synchronized {
       if (loadedDaos.contains(dao)) {
         loadedDaos = loadedDaos + (dao -> (loadedDaos(dao) - chat))
+      }
+    }
+
+  @tailrec
+  private def handleException(thread: Thread, ex: Throwable): Unit =
+    if (ex.getCause != null && ex.getCause != ex) {
+      handleException(thread, ex.getCause)
+    } else {
+      ex match {
+        case ex: IllegalArgumentException =>
+          log.warn("Caught an exception:", ex)
+          SwingUtils.showWarning(ex.getMessage)
+        case _ =>
+          log.error("Caught an exception:", ex)
+          SwingUtils.showError(ex.getMessage)
       }
     }
 
