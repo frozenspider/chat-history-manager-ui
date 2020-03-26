@@ -45,7 +45,9 @@ class MainFrameApp //
     with DaoDatasetSelectionCallbacks
     with ChatListSelectionCallbacks
     with UserDetailsMenuCallbacks { app =>
-  private val Lock             = new Object
+
+  /** A lock which needs to be taken to mutate local variables or DAO */
+  private val MutationLock     = new Object
   private val MsgBatchLoadSize = 100
 
   private var loadedDaos: ListMap[ChatHistoryDao, Map[Chat, ChatCache]] = ListMap.empty
@@ -203,7 +205,7 @@ class MainFrameApp //
           Swing.onEDT {
             try {
               val dao = DataLoaders.load(chooser.selectedFile)
-              loadDaoFromEDT(dao)
+              loadDaoInEDT(dao)
             } finally {
               unfreezeTheWorld()
             }
@@ -215,9 +217,10 @@ class MainFrameApp //
 
   def close(dao: ChatHistoryDao): Unit = {
     checkEdt()
-    Lock.synchronized {
+    MutationLock.synchronized {
       loadedDaos = loadedDaos - dao
       chatList.replaceWith(loadedDaos.keys.toSeq)
+      dao.close()
     }
     daoListChanged()
   }
@@ -235,13 +238,13 @@ class MainFrameApp //
         freezeTheWorld()
         config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
         Future { // To release UI lock
-          Swing.onEDT {
-            try {
-              // TODO: Intercept and show errors, e.g. "file already exists"
-              val dstDao = DataLoaders.saveAs(srcDao, chooser.selectedFile)
-              // TODO: Unload srcDao
-              loadDaoFromEDT(dstDao)
-            } finally {
+          try {
+            val dstDao = DataLoaders.saveAs(srcDao, chooser.selectedFile)
+            Swing.onEDTWait {
+              loadDaoInEDT(dstDao, Some(srcDao))
+            }
+          } finally {
+            Swing.onEDT {
               unfreezeTheWorld()
             }
           }
@@ -359,11 +362,20 @@ class MainFrameApp //
     }
   }
 
-  def loadDaoFromEDT(dao: ChatHistoryDao): Unit = {
+  def loadDaoInEDT(dao: ChatHistoryDao, daoToReplaceOption: Option[ChatHistoryDao] = None): Unit = {
     checkEdt()
-    Lock.synchronized {
-      loadedDaos = loadedDaos + (dao -> Map.empty) // TODO: Reverse?
-      chatList.append(dao)
+    MutationLock.synchronized {
+      daoToReplaceOption match {
+        case Some(srcDao) =>
+          val seq  = loadedDaos.toSeq
+          val seq2 = seq.updated(seq.indexWhere(_._1 == srcDao), (dao -> Map.empty[Chat, ChatCache]))
+          loadedDaos = ListMap(seq2: _*)
+          chatList.replaceWith(loadedDaos.keys.toSeq)
+          srcDao.close()
+        case None =>
+          loadedDaos = loadedDaos + (dao -> Map.empty) // TODO: Reverse?
+          chatList.append(dao)
+      }
     }
     daoListChanged()
     unfreezeTheWorld()
@@ -388,7 +400,7 @@ class MainFrameApp //
     freezeTheWorld()
     Swing.onEDT { // To release UI lock
       try {
-        Lock.synchronized {
+        MutationLock.synchronized {
           dao.mutable.renameDataset(dsUuid, newName)
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
@@ -405,13 +417,13 @@ class MainFrameApp //
     require(dao.isMutable, "DAO is immutable!")
     freezeTheWorld()
     Swing.onEDT { // To release UI lock
-      Lock.synchronized {
+      MutationLock.synchronized {
         dao.mutable.updateUser(user)
         chatList.replaceWith(loadedDaos.keys.toSeq)
       }
       chatsOuterPanel.revalidate()
       chatsOuterPanel.repaint()
-      Lock.synchronized {
+      MutationLock.synchronized {
         // Evict chats containing edited user from cache
         val chatsToEvict = for {
           (chat, _) <- loadedDaos(dao)
@@ -437,8 +449,25 @@ class MainFrameApp //
     }
   }
 
+  override def deleteChat(cc: ChatWithDao): Unit = {
+    freezeTheWorld()
+    Swing.onEDT {
+      try {
+        MutationLock.synchronized {
+          cc.dao.mutable.delete(cc.chat)
+          evictFromCache(cc.dao, cc.chat)
+          chatList.replaceWith(loadedDaos.keys.toSeq)
+        }
+        chatsOuterPanel.revalidate()
+        chatsOuterPanel.repaint()
+      } finally {
+        unfreezeTheWorld()
+      }
+    }
+  }
+
   override def chatSelected(cc: ChatWithDao): Unit = {
-    Lock.synchronized {
+    MutationLock.synchronized {
       currentChatOption         = None
       msgAreaContainer.document = msgService.pleaseWaitDoc
       if (!loadedDaos(cc.dao).contains(cc.chat)) {
@@ -467,7 +496,7 @@ class MainFrameApp //
       }
     }
     f foreach { _ =>
-      Swing.onEDTWait(Lock.synchronized {
+      Swing.onEDTWait(MutationLock.synchronized {
         currentChatOption = Some(cc)
         val doc = loadedDaos(cc.dao)(cc.chat).msgDocOption.get.doc
         msgAreaContainer.document = doc
@@ -482,7 +511,7 @@ class MainFrameApp //
       case _ if loadMessagesInProgress.get => // NOOP
       case None                            => // NOOP
       case Some(cc) =>
-        Lock.synchronized {
+        MutationLock.synchronized {
           msgAreaContainer.caretUpdatesEnabled = false
           val cache      = loadedDaos(cc.dao)(cc.chat)
           val loadStatus = cache.loadStatusOption.get
@@ -491,7 +520,7 @@ class MainFrameApp //
             loadMessagesInProgress set true
             val msgDoc = cache.msgDocOption.get
             val f = Future {
-              Lock.synchronized {
+              MutationLock.synchronized {
                 val (viewPos1, viewSize1) = msgAreaContainer.view.posAndSize
                 msgDoc.insert("<div id=\"loading\"><hr><p> Loading... </p><hr></div>", MessageInsertPosition.Leading)
                 val addedMessages =
@@ -521,7 +550,7 @@ class MainFrameApp //
               }
             }
             f.onComplete(_ =>
-              Swing.onEDTWait(Lock.synchronized {
+              Swing.onEDTWait(MutationLock.synchronized {
                 loadMessagesInProgress set false
                 unfreezeTheWorld()
                 msgAreaContainer.caretUpdatesEnabled = true
@@ -531,12 +560,12 @@ class MainFrameApp //
     }
 
   def updateCache(dao: ChatHistoryDao, chat: Chat, cache: ChatCache): Unit =
-    Lock.synchronized {
+    MutationLock.synchronized {
       loadedDaos = loadedDaos + (dao -> (loadedDaos(dao) + (chat -> cache)))
     }
 
   def evictFromCache(dao: ChatHistoryDao, chat: Chat): Unit =
-    Lock.synchronized {
+    MutationLock.synchronized {
       if (loadedDaos.contains(dao)) {
         loadedDaos = loadedDaos + (dao -> (loadedDaos(dao) - chat))
       }

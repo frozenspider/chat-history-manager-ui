@@ -28,7 +28,8 @@ class GTS5610DataLoaderSpec //
     val ds = dao.datasets.head
 
     val users = dao.users(ds.uuid)
-    assert(users.size === 3)
+    assert(users.size === 4)
+    assert(dao.myself(ds.uuid).firstNameOption === Some("Me"))
 
     val chats = dao.chats(ds.uuid)
     assert(chats.size === 3)

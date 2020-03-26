@@ -206,9 +206,9 @@ class H2ChatHistoryDaoSpec //
   test("message fetching corner cases") {
     freeH2Dao()
 
-    val msgs = (3 to 7) map (TestUtils.createRegularMessage(_, 1))
-    tgDao = TestUtils.createSimpleDao("TG", msgs, 1)
-    dir   = Files.createTempDirectory(null).toFile
+    val msgs  = (3 to 7) map (TestUtils.createRegularMessage(_, 1))
+    val tgDao = TestUtils.createSimpleDao("TG", msgs, 1)
+    dir = Files.createTempDirectory(null).toFile
 
     manager.create(dir)
     h2dao = manager.loadData(dir)
@@ -236,6 +236,29 @@ class H2ChatHistoryDaoSpec //
 
       assert(dao.countMessagesBetween(chat, 6, 9) === 1)
       assert(dao.countMessagesBetween(chat, 7, 9) === 0)
+    }
+  }
+
+  test("delete chat") {
+    val chats = h2dao.chats(dsUuid)
+    val users = h2dao.users(dsUuid)
+
+    {
+      // User is not deleted because it participates in another chat
+      val chatToDelete = chats.find(c => c.tpe == ChatType.Personal && c.id == 9777777777L).get
+      h2dao.delete(chatToDelete)
+      assert(h2dao.chats(dsUuid).size === chats.size - 1)
+      assert(h2dao.users(dsUuid).size === users.size)
+      assert(h2dao.firstMessages(chatToDelete, 10).isEmpty)
+    }
+
+    {
+      // User is deleted
+      val chatToDelete = chats.find(c => c.tpe == ChatType.Personal && c.id == 4321012345L).get
+      h2dao.delete(chatToDelete)
+      assert(h2dao.chats(dsUuid).size === chats.size - 2)
+      assert(h2dao.users(dsUuid).size === users.size - 1)
+      assert(h2dao.firstMessages(chatToDelete, 10).isEmpty)
     }
   }
 

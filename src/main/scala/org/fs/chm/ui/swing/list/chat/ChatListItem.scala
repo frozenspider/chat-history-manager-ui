@@ -34,6 +34,8 @@ class ChatListItem(
 
   private val popupMenu = new PopupMenu {
     contents += menuItem("Details")(showDetailsPopup())
+    contents += new Separator()
+    contents += menuItem("Delete", enabled = callbacksOption.nonEmpty && cc.dao.isMutable)(showDeletePopup())
   }
 
   private var _activeColor:   Color = Color.LIGHT_GRAY
@@ -114,10 +116,20 @@ class ChatListItem(
 
   private def showDetailsPopup(): Unit = {
     Dialog.showMessage(
-      message     = new ChatDetailsPane(cc).peer,
       title       = "Chat Details",
+      message     = new ChatDetailsPane(cc).peer,
       messageType = Dialog.Message.Plain
     )
+  }
+
+  private def showDeletePopup(): Unit = {
+    Dialog.showConfirmation(
+      title   = "Deleting Chat",
+      message = s"Are you sure you want to delete a chat '${EntityUtils.getOrUnnamed(cc.chat.nameOption)}'?"
+    ) match {
+      case Dialog.Result.Yes => callbacksOption.get.deleteChat(cc)
+      case _                 => // NOOP
+    }
   }
 
   override def enabled_=(b: Boolean): Unit = {
@@ -126,7 +138,7 @@ class ChatListItem(
       c.setEnabled(enabled)
       c.getComponents foreach {
         case c: AwtContainer => changeClickableRecursive(c)
-        case _               => //NOOP
+        case _               => // NOOP
       }
     }
     changeClickableRecursive(peer)

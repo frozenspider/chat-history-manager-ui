@@ -41,7 +41,7 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
           dao.close()
         }
       } { (_, t) =>
-        log.info(s"DAO preloaded in ${t} ms")
+        log.info(s"H2 DAO preloaded in ${t} ms")
       }
     }
     val f2 = Future {

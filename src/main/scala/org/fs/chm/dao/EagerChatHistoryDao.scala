@@ -14,6 +14,7 @@ class EagerChatHistoryDao(
     users1: Seq[User],
     chatsWithMessages: ListMap[Chat, IndexedSeq[Message]]
 ) extends ChatHistoryDao {
+  require(users1 contains myself1)
 
   override def datasets: Seq[Dataset] = Seq(dataset)
 

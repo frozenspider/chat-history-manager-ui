@@ -253,7 +253,18 @@ class H2ChatHistoryDao(
 
   override def delete(chat: Chat): Unit = {
     backup()
-    ???
+    val query = for {
+      _ <- queries.rawContent.deleteByChat(chat.dsUuid, chat.id)
+      _ <- queries.rawRichTextElements.deleteByChat(chat.dsUuid, chat.id)
+      _ <- queries.rawMessages.deleteByChat(chat.dsUuid, chat.id)
+      _ <- queries.chats.delete(chat.dsUuid, chat.id)
+      u <- queries.users.deleteOrphans(chat.dsUuid)
+    } yield u
+    val deletedUsersNum = query.transact(txctr).unsafeRunSync()
+    log.info(s"Deleted ${deletedUsersNum} orphaned users")
+    Lock.synchronized {
+      _interlocutorsCacheOption = None
+    }
   }
 
   override protected def backup(): Unit = {
@@ -448,6 +459,23 @@ class H2ChatHistoryDao(
           ++ fr"username = ${u.usernameOption},"
           ++ fr"phone_number = ${u.phoneNumberOption}"
           ++ fr"WHERE ds_uuid = ${u.dsUuid} AND id = ${u.id}").update.run
+
+      /** Delete all users from the given dataset (other than self) that have no messages in any chat */
+      def deleteOrphans(dsUuid: UUID): ConnectionIO[Int] =
+        sql"""
+            DELETE FROM users u
+            WHERE u.id IN (
+              SELECT id FROM (
+                SELECT
+                  u.id,
+                  u.first_name,
+                  (SELECT COUNT(*) FROM messages m WHERE m.ds_uuid = $dsUuid AND m.from_id = u.id) AS msgs_count
+                FROM users u
+                WHERE u.ds_uuid = $dsUuid
+                AND u.is_myself = false
+              ) WHERE msgs_count = 0
+            )
+           """.update.run
     }
 
     object chats {
@@ -460,7 +488,7 @@ class H2ChatHistoryDao(
       def selectAll(dsUuid: UUID) =
         selectFr(dsUuid).query[Chat].to[Seq]
 
-      def select(dsUuid: UUID, id: Long) =
+      def select(dsUuid: UUID, id: ChatId) =
         (selectFr(dsUuid) ++ fr"AND c.id = ${id}").query[Chat].option
 
       def insert(c: Chat) =
@@ -485,6 +513,9 @@ class H2ChatHistoryDao(
             ++ fr")").update.run
         }
       }
+
+      def delete(dsUuid: UUID, id: ChatId): ConnectionIO[Int] =
+        (fr"DELETE FROM chats WHERE ds_uuid = ${dsUuid} AND id = ${id}").update.run
     }
 
     object rawMessages {
@@ -540,6 +571,9 @@ class H2ChatHistoryDao(
           ++ fr"${m.titleOption}, ${m.members}, ${m.durationSecOption}, ${m.discardReasonOption},"
           ++ fr"${m.pinnedMessageIdOption}, ${m.pathOption}, ${m.widthOption}, ${m.heightOption}"
           ++ fr")").update.run
+
+      def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
+        (fr"DELETE FROM messages WHERE ds_uuid = ${dsUuid} AND chat_id = ${chatId}").update.run
     }
 
     object rawRichTextElements {
@@ -555,6 +589,9 @@ class H2ChatHistoryDao(
           ++ fr"${dsUuid}, ${chatId}, ${messageId}, ${rrte.elementType}, ${rrte.text},"
           ++ fr"${rrte.hrefOption}, ${rrte.hiddenOption}, ${rrte.languageOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
+
+      def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
+        (fr"DELETE FROM messages_text_elements WHERE ds_uuid = ${dsUuid} AND chat_id = ${chatId}").update.run
     }
 
     object rawContent {
@@ -563,13 +600,13 @@ class H2ChatHistoryDao(
           s"""|element_type, path, thumbnail_path, emoji, width, height, mime_type, title, performer, lat, lon,
               |duration_sec, poll_question, first_name, last_name, phone_number, vcard_path""".stripMargin)
 
-      def select(dsUuid: UUID, chatId: Long, messageId: Long): ConnectionIO[Option[RawContent]] =
+      def select(dsUuid: UUID, chatId: ChatId, messageId: Long): ConnectionIO[Option[RawContent]] =
         (fr"SELECT" ++ colsNoIdentityFr ++ fr"FROM messages_content"
           ++ fr"WHERE ds_uuid = ${dsUuid} AND chat_id = ${chatId} AND message_id = ${messageId}")
           .query[RawContent]
           .option
 
-      def insert(rc: RawContent, dsUuid: UUID, chatId: Long, messageId: Long): ConnectionIO[Long] =
+      def insert(rc: RawContent, dsUuid: UUID, chatId: ChatId, messageId: Long): ConnectionIO[Long] =
         (fr"INSERT INTO messages_content(ds_uuid, chat_id, message_id, " ++ colsNoIdentityFr ++ fr") VALUES ("
           ++ fr"${dsUuid}, ${chatId}, ${messageId},"
           ++ fr"${rc.elementType}, ${rc.pathOption}, ${rc.thumbnailPathOption}, ${rc.emojiOption}, ${rc.widthOption},"
@@ -577,9 +614,12 @@ class H2ChatHistoryDao(
           ++ fr"${rc.lonOption}, ${rc.durationSecOption}, ${rc.pollQuestionOption}, ${rc.firstNameOption},"
           ++ fr" ${rc.lastNameOption}, ${rc.phoneNumberOption}, ${rc.vcardPathOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
+
+      def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
+        (fr"DELETE FROM messages_content WHERE ds_uuid = ${dsUuid} AND chat_id = ${chatId}").update.run
     }
 
-    /** Select all non-null filesystem paths from all tables for the specific datased */
+    /** Select all non-null filesystem paths from all tables for the specific dataset */
     def selectAllPaths(dsUuid: UUID): ConnectionIO[Seq[String]] = {
       def q(col: String, table: String) = {
         val whereFr = Fragments.whereAnd(
@@ -634,53 +674,53 @@ class H2ChatHistoryDao(
           )
         case "service_pin_message" =>
           Message.Service.PinMessage(
-            id             = rm.id,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            messageId      = rm.pinnedMessageIdOption.get
+            id         = rm.id,
+            time       = rm.time,
+            fromId     = rm.fromId,
+            textOption = textOption,
+            messageId  = rm.pinnedMessageIdOption.get
           )
         case "service_clear_history" =>
           Message.Service.ClearHistory(
-            id             = rm.id,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
+            id         = rm.id,
+            time       = rm.time,
+            fromId     = rm.fromId,
+            textOption = textOption,
           )
         case "service_edit_photo" =>
           Message.Service.EditPhoto(
-            id             = rm.id,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            pathOption     = rm.pathOption,
-            widthOption    = rm.widthOption,
-            heightOption   = rm.heightOption
+            id           = rm.id,
+            time         = rm.time,
+            fromId       = rm.fromId,
+            textOption   = textOption,
+            pathOption   = rm.pathOption,
+            widthOption  = rm.widthOption,
+            heightOption = rm.heightOption
           )
         case "service_group_create" =>
           Message.Service.Group.Create(
-            id             = rm.id,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            title          = rm.titleOption.get,
-            members        = rm.members
+            id         = rm.id,
+            time       = rm.time,
+            fromId     = rm.fromId,
+            textOption = textOption,
+            title      = rm.titleOption.get,
+            members    = rm.members
           )
         case "service_invite_group_members" =>
           Message.Service.Group.InviteMembers(
-            id             = rm.id,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            members        = rm.members
+            id         = rm.id,
+            time       = rm.time,
+            fromId     = rm.fromId,
+            textOption = textOption,
+            members    = rm.members
           )
         case "service_group_remove_members" =>
           Message.Service.Group.RemoveMembers(
-            id             = rm.id,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            members        = rm.members
+            id         = rm.id,
+            time       = rm.time,
+            fromId     = rm.fromId,
+            textOption = textOption,
+            members    = rm.members
           )
       }
     }

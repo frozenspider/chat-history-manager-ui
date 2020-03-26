@@ -52,6 +52,8 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
         case (_, vmsgs) =>
           val head   = vmsgs.head
           val userId = (head.name + head.phoneOption.getOrElse("")).hashCode.abs
+
+          // TODO: Special treatment for myself
           val user = User(
             dsUuid             = dataset.uuid,
             id                 = userId,
@@ -90,12 +92,14 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
     // Ordering by descending last message
     val chatsWithMessages = ListMap(userToChatWithMsgsMap.values.toSeq.sortBy(_._2.last.time).reverse: _*)
 
+    val users = (userToChatWithMsgsMap.keys.toSet + myself).toSeq sortBy (u => (u.id, u.prettyName))
+
     new EagerChatHistoryDao(
       name              = "GT-S5610 export data from " + path.getName,
       dataPathRoot      = path,
       dataset           = dataset,
       myself1           = myself,
-      users1            = userToChatWithMsgsMap.keys.toSeq sortBy (u => (u.id, u.prettyName)),
+      users1            = users,
       chatsWithMessages = chatsWithMessages
     )
   }

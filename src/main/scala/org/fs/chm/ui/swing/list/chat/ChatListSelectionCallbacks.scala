@@ -4,4 +4,5 @@ import org.fs.chm.ui.swing.general.ChatWithDao
 
 trait ChatListSelectionCallbacks {
   def chatSelected(cc: ChatWithDao): Unit
+  def deleteChat(cc: ChatWithDao): Unit
 }
