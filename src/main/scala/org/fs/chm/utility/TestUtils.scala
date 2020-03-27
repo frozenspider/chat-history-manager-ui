@@ -84,6 +84,8 @@ object TestUtils {
 
     override def updateUser(user: User): Unit = ???
 
+    override def mergeUsers(baseUser: User, absorbedUser: User): Unit = ???
+
     override def delete(chat: Chat): Unit = ???
 
     override protected def backup(): Unit = ???

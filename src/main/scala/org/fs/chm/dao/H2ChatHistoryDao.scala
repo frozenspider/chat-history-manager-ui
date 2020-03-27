@@ -3,7 +3,6 @@ package org.fs.chm.dao
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.FileTime
-import java.sql.Connection
 import java.sql.Timestamp
 import java.util.UUID
 
@@ -13,8 +12,10 @@ import com.github.nscala_time.time.Imports._
 import doobie.ConnectionIO
 import doobie._
 import doobie.free.connection
+import doobie.free.connection.ConnectionOp
 import doobie.h2.implicits._
 import doobie.implicits._
+import org.fs.chm.utility.EntityUtils._
 import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
@@ -243,9 +244,54 @@ class H2ChatHistoryDao(
 
   override def updateUser(user: User): Unit = {
     backup()
-    val rowsNum = queries.users.update(user).transact(txctr).unsafeRunSync()
+    val isMyself = myself(user.dsUuid).id == user.id
+    val rowsNum = queries.users.update(user, isMyself).transact(txctr).unsafeRunSync()
     require(rowsNum == 1, s"Updating user affected ${rowsNum} rows!")
     queries.chats.updateRenameUser(user).transact(txctr).unsafeRunSync()
+    Lock.synchronized {
+      _interlocutorsCacheOption = None
+    }
+  }
+
+  override def mergeUsers(baseUser: User, absorbedUser: User): Unit = {
+    backup()
+    val me       = myself(baseUser.dsUuid)
+    val isMyself = me.id == baseUser.id || me.id == absorbedUser.id
+    val newUser = baseUser.copy(
+      firstNameOption    = absorbedUser.firstNameOption,
+      lastNameOption     = absorbedUser.lastNameOption,
+      usernameOption     = absorbedUser.usernameOption,
+      phoneNumberOption  = absorbedUser.phoneNumberOption,
+      lastSeenTimeOption = latest(baseUser.lastSeenTimeOption, absorbedUser.lastSeenTimeOption)
+    )
+    val pure0 = cats.free.Free.pure[ConnectionOp, Int](0)
+    val query = for {
+      v1 <- queries.users.update(newUser, isMyself)
+      // Change ownership of old user's stuff
+      v2 <- queries.rawMessages.reassign(newUser.dsUuid, absorbedUser, newUser)
+      v3 <- queries.users.delete(newUser.dsUuid, absorbedUser.id)
+      // Merge personal chats
+      pcs <- queries.chats.selectAllPersonalChats(newUser.dsUuid, newUser.id)
+      v4 <- {
+        if (pcs.nonEmpty) {
+          val mainChat = pcs.head
+          pcs.tail.foldLeft(pure0)((query, otherChat) => {
+            for {
+              _ <- query
+              _ <- queries.setRefIntegrity(false)
+              _ <- queries.rawMessages.reassign(newUser.dsUuid, otherChat, mainChat)
+              _ <- queries.rawRichTextElements.reassign(newUser.dsUuid, otherChat, mainChat)
+              _ <- queries.rawContent.reassign(newUser.dsUuid, otherChat, mainChat)
+              _ <- queries.setRefIntegrity(true)
+              _ <- queries.chats.delete(newUser.dsUuid, otherChat.id)
+            } yield 0
+          })
+        } else pure0
+      }
+      v5 <- queries.chats.updateRenameUser(newUser)
+    } yield v1 + v2 + v3 + v4 + v5
+    val rowsNum = query.transact(txctr).unsafeRunSync()
+    assert(rowsNum > 0, "Nothing was updated!")
     Lock.synchronized {
       _interlocutorsCacheOption = None
     }
@@ -408,7 +454,11 @@ class H2ChatHistoryDao(
       createQueries.reduce((a, b) => a flatMap (_ => b))
     }
 
-    def withLimit(limit: Int) = fr"LIMIT ${limit}"
+    def setRefIntegrity(enabled: Boolean): ConnectionIO[Int] =
+      Fragment.const(s"SET REFERENTIAL_INTEGRITY ${if (enabled) "TRUE" else "FALSE"}").update.run
+
+    def withLimit(limit: Int) =
+      fr"LIMIT ${limit}"
 
     def backup(path: String): ConnectionIO[Int] =
       sql"BACKUP TO $path".update.run
@@ -452,13 +502,20 @@ class H2ChatHistoryDao(
           ++ fr"${u.phoneNumberOption}, ${u.lastSeenTimeOption}, ${isMyself}"
           ++ fr")").update.run
 
-      def update(u: User) =
-        (fr"UPDATE users SET"
-          ++ fr"first_name = ${u.firstNameOption},"
-          ++ fr"last_name = ${u.lastNameOption},"
-          ++ fr"username = ${u.usernameOption},"
-          ++ fr"phone_number = ${u.phoneNumberOption}"
-          ++ fr"WHERE ds_uuid = ${u.dsUuid} AND id = ${u.id}").update.run
+      def update(u: User, isMyself: Boolean) =
+        sql"""
+            UPDATE users SET
+              first_name    = ${u.firstNameOption},
+              last_name     = ${u.lastNameOption},
+              username      = ${u.usernameOption},
+              phone_number  = ${u.phoneNumberOption},
+              is_myself     = ${isMyself}
+            WHERE ds_uuid = ${u.dsUuid} AND id = ${u.id}
+           """.update.run
+
+      /** Delete all users from the given dataset (other than self) that have no messages in any chat */
+      def delete(dsUuid: UUID, id: Long): ConnectionIO[Int] =
+        sql"DELETE FROM users u WHERE u.id = ${id}".update.run
 
       /** Delete all users from the given dataset (other than self) that have no messages in any chat */
       def deleteOrphans(dsUuid: UUID): ConnectionIO[Int] =
@@ -485,10 +542,24 @@ class H2ChatHistoryDao(
       private def selectFr(dsUuid: UUID) =
         fr"SELECT" ++ colsFr ++ fr"," ++ msgCountFr ++ fr"FROM chats c WHERE c.ds_uuid = $dsUuid"
 
-      def selectAll(dsUuid: UUID) =
+      private def hasMessagesFromUser(userId: Long) =
+        (fr"EXISTS (SELECT m.from_id FROM messages m"
+          ++ fr"WHERE m.ds_uuid = c.ds_uuid AND m.chat_id = c.id AND m.from_id = ${userId})")
+
+      def selectAll(dsUuid: UUID): ConnectionIO[Seq[Chat]] =
         selectFr(dsUuid).query[Chat].to[Seq]
 
-      def select(dsUuid: UUID, id: ChatId) =
+      def selectAllPersonalChats(dsUuid: UUID, userId: Long): ConnectionIO[Seq[Chat]] =
+        if (myself(dsUuid).id == userId) {
+          cats.free.Free.pure(Seq.empty)
+        } else {
+            (selectFr(dsUuid) ++ fr"""
+                AND c.type = ${ChatType.Personal: ChatType}
+                AND """ ++ hasMessagesFromUser(userId) ++ fr"""
+             """).query[Chat].to[Seq]
+        }
+
+      def select(dsUuid: UUID, id: ChatId): ConnectionIO[Option[Chat]] =
         (selectFr(dsUuid) ++ fr"AND c.id = ${id}").query[Chat].option
 
       def insert(c: Chat) =
@@ -504,13 +575,13 @@ class H2ChatHistoryDao(
         if (myself(u.dsUuid).id == u.id) {
           cats.free.Free.pure(0)
         } else {
-          (fr"UPDATE chats c SET c.name = ${u.prettyNameOption}"
-            ++ fr"WHERE c.ds_uuid = ${u.dsUuid}"
-            ++ fr"AND c.type = ${ChatType.Personal: ChatType}"
-            ++ fr"AND EXISTS("
-            ++ fr"SELECT m.from_id FROM messages m"
-            ++ fr"WHERE m.ds_uuid = c.ds_uuid AND m.chat_id = c.id AND m.from_id = ${u.id}"
-            ++ fr")").update.run
+          (fr"""
+              UPDATE chats c SET
+                c.name = ${u.prettyNameOption}
+              WHERE c.ds_uuid = ${u.dsUuid}
+                AND c.type = ${ChatType.Personal: ChatType}
+                AND """ ++ hasMessagesFromUser(u.id) ++ fr"""
+             """).update.run
         }
       }
 
@@ -572,6 +643,18 @@ class H2ChatHistoryDao(
           ++ fr"${m.pinnedMessageIdOption}, ${m.pathOption}, ${m.widthOption}, ${m.heightOption}"
           ++ fr")").update.run
 
+      def reassign(dsUuid: UUID, fromUser: User, toUser: User): ConnectionIO[Int] =
+        sql"""
+            UPDATE messages SET from_id = ${toUser.id}
+            WHERE from_id = ${fromUser.id} AND ds_uuid = ${dsUuid}
+           """.update.run
+
+      def reassign(dsUuid: UUID, fromChat: Chat, toChat: Chat): ConnectionIO[Int] =
+        sql"""
+            UPDATE messages SET chat_id = ${toChat.id}
+            WHERE chat_id = ${fromChat.id} AND ds_uuid = ${dsUuid}
+           """.update.run
+
       def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
         (fr"DELETE FROM messages WHERE ds_uuid = ${dsUuid} AND chat_id = ${chatId}").update.run
     }
@@ -589,6 +672,12 @@ class H2ChatHistoryDao(
           ++ fr"${dsUuid}, ${chatId}, ${messageId}, ${rrte.elementType}, ${rrte.text},"
           ++ fr"${rrte.hrefOption}, ${rrte.hiddenOption}, ${rrte.languageOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
+
+      def reassign(dsUuid: UUID, fromChat: Chat, toChat: Chat): ConnectionIO[Int] =
+        sql"""
+            UPDATE messages_text_elements SET chat_id = ${toChat.id}
+            WHERE chat_id = ${fromChat.id} AND ds_uuid = ${dsUuid}
+           """.update.run
 
       def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
         (fr"DELETE FROM messages_text_elements WHERE ds_uuid = ${dsUuid} AND chat_id = ${chatId}").update.run
@@ -614,6 +703,12 @@ class H2ChatHistoryDao(
           ++ fr"${rc.lonOption}, ${rc.durationSecOption}, ${rc.pollQuestionOption}, ${rc.firstNameOption},"
           ++ fr" ${rc.lastNameOption}, ${rc.phoneNumberOption}, ${rc.vcardPathOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
+
+      def reassign(dsUuid: UUID, fromChat: Chat, toChat: Chat): ConnectionIO[Int] =
+        sql"""
+            UPDATE messages_content SET chat_id = ${toChat.id}
+            WHERE chat_id = ${fromChat.id} AND ds_uuid = ${dsUuid}
+           """.update.run
 
       def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
         (fr"DELETE FROM messages_content WHERE ds_uuid = ${dsUuid} AND chat_id = ${chatId}").update.run

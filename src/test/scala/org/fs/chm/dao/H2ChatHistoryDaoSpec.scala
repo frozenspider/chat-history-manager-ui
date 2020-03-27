@@ -5,6 +5,7 @@ import java.nio.charset.Charset
 import java.nio.file.Files
 import java.util.UUID
 
+import com.github.nscala_time.time.Imports._
 import org.fs.chm.TestHelper
 import org.fs.chm.loader.H2DataManager
 import org.fs.chm.loader.TelegramDataLoader
@@ -260,6 +261,56 @@ class H2ChatHistoryDaoSpec //
       assert(h2dao.users(dsUuid).size === users.size - 1)
       assert(h2dao.firstMessages(chatToDelete, 10).isEmpty)
     }
+  }
+
+  test("merge (absorb) user") {
+    def fetchPersonalChat(u: User): Chat = {
+      h2dao.chats(dsUuid).find(c => c.tpe == ChatType.Personal && h2dao.interlocutors(c).contains(u)) getOrElse {
+        fail(s"Chat for user $u not found!")
+      }
+    }
+
+    val usersBefore = h2dao.users(dsUuid)
+    val chatsBefore = h2dao.chats(dsUuid)
+
+    val baseUser     = usersBefore.find(_.id == 777777777L).get
+    val absorbedUser = usersBefore.find(_.id == 32507588L).get
+
+    val baseUserPc     = fetchPersonalChat(baseUser)
+    val absorbedUserPc = fetchPersonalChat(absorbedUser)
+
+    val baseUserPcMsgs     = h2dao.firstMessages(baseUserPc, 99999)
+    val absorbedUserPcMsgs = h2dao.firstMessages(absorbedUserPc, 99999)
+
+    h2dao.mergeUsers(baseUser, absorbedUser.copy(firstNameOption = Some("new-name")))
+
+    val chatsAfter = h2dao.chats(dsUuid)
+    val usersAfter = h2dao.users(dsUuid)
+
+    // Verify users
+    assert(usersAfter.size === usersBefore.size - 1)
+    val expectedUser = absorbedUser.copy(
+      id                 = baseUser.id,
+      firstNameOption    = Some("new-name"),
+      lastSeenTimeOption = baseUser.lastSeenTimeOption
+    )
+    assert(usersAfter.find(_.id == baseUser.id) === Some(expectedUser))
+    assert(!usersAfter.exists(_.id == absorbedUser.id))
+
+    // Verify chats
+    assert(chatsAfter.size === chatsBefore.size - 1)
+    val expectedChat = baseUserPc.copy(
+      nameOption = expectedUser.firstNameOption,
+      msgCount   = baseUserPcMsgs.size + absorbedUserPcMsgs.size
+    )
+    assert(chatsAfter.find(_.id == baseUserPc.id) === Some(expectedChat))
+    assert(!chatsAfter.exists(_.id == absorbedUserPc.id))
+
+    // Verify messages
+    val expectedMessages =
+      (baseUserPcMsgs ++ absorbedUserPcMsgs.map(_.asInstanceOf[Message.Regular].copy(fromId = baseUser.id)))
+        .sortBy(_.time)
+    assert(h2dao.firstMessages(chatsAfter.find(_.id == baseUserPc.id).get, 99999) === expectedMessages)
   }
 
   private def freeH2Dao(): Unit = {

@@ -76,6 +76,12 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
   /** Sets the data (names and phone only) for a user with the given `id` and `dsUuid` to the given state */
   def updateUser(user: User): Unit
 
+  /**
+   * Merge absorbed user into base user, replacing base user's names and phone. Last "last seen time" is selected.
+   * Their personal chats will also be merged into one (named after the "new" user).
+   */
+  def mergeUsers(baseUser: User, absorbedUser: User): Unit
+
   def delete(chat: Chat): Unit
 
   protected def backup(): Unit
