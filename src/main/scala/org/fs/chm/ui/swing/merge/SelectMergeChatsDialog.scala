@@ -28,7 +28,7 @@ class SelectMergeChatsDialog(
   )
 
   override protected lazy val dialogComponent: Component = {
-    table.wrapInScrollpane()
+    table.wrapInScrollpaneAndAdjustWidth()
   }
 
   override protected def validateChoices(): Option[Seq[ChangedChatMergeOption]] = {

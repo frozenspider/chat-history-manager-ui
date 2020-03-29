@@ -260,7 +260,7 @@ class MainFrameApp //
         None, { ds =>
           dao.users(ds.uuid).zipWithIndex map {
             case (u, i) =>
-              val pane = new UserDetailsPane(u, dao, false, Some(this))
+              val pane = new UserDetailsPane(dao, u, false, Some(this))
               for (el <- Seq(pane.firstNameC, pane.lastNameC)) {
                 el.innerComponent.foreground = Colors.forIdx(i)
                 el.innerComponent.fontStyle  = Font.Style.Bold
@@ -416,37 +416,21 @@ class MainFrameApp //
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     freezeTheWorld()
-    Swing.onEDT { // To release UI lock
-      MutationLock.synchronized {
-        dao.mutable.updateUser(user)
-        chatList.replaceWith(loadedDaos.keys.toSeq)
-      }
-      chatsOuterPanel.revalidate()
-      chatsOuterPanel.repaint()
-      MutationLock.synchronized {
-        // Evict chats containing edited user from cache
-        val chatsToEvict = for {
-          (chat, _) <- loadedDaos(dao)
-          if dao.interlocutors(chat) exists (_.id == user.id)
-        } yield chat
-        chatsToEvict foreach (c => evictFromCache(dao, c))
+    asyncChangeUsers(dao, {
+      dao.mutable.updateUser(user)
+      Seq(user.id)
+    })
+  }
 
-        // Reload currently selected chat
-        val chatItemToReload = for {
-          cwd  <- currentChatOption
-          item <- chatList.innerItems.find(i => i.chat.id == cwd.chat.id && i.chat.dsUuid == cwd.dsUuid)
-        } yield item
-
-        chatItemToReload match {
-          case Some(chatItem) =>
-            // Redo current chat layout
-            chatItem.select()
-          case None =>
-            // No need to do anything
-            unfreezeTheWorld()
-        }
-      }
-    }
+  override def usersMerged(baseUser: User, absorbedUser: User, dao: ChatHistoryDao): Unit = {
+    checkEdt()
+    require(dao.isMutable, "DAO is immutable!")
+    require(baseUser.dsUuid == absorbedUser.dsUuid, "Users are from different datasets!")
+    freezeTheWorld()
+    asyncChangeUsers(dao, {
+      dao.mutable.mergeUsers(baseUser, absorbedUser)
+      Seq(baseUser.id, absorbedUser.id)
+    })
   }
 
   override def deleteChat(cc: ChatWithDao): Unit = {
@@ -558,6 +542,52 @@ class MainFrameApp //
           }
         }
     }
+
+  /** Asynchronously apply the given change (under mutation lock) and refresh UI to reflect it */
+  def asyncChangeUsers(dao: ChatHistoryDao, applyChangeAndReturnChangedIds: => Seq[Long]): Unit = {
+    Future { // To release UI lock
+      try {
+        val userIds = MutationLock.synchronized {
+          val userIds = applyChangeAndReturnChangedIds
+          chatList.replaceWith(loadedDaos.keys.toSeq)
+          userIds
+        }
+        chatsOuterPanel.revalidate()
+        chatsOuterPanel.repaint()
+        MutationLock.synchronized {
+          // Evict chats containing edited user from cache
+          val chatsToEvict = for {
+            (chat, _) <- loadedDaos(dao)
+            if dao.interlocutors(chat) exists (u => userIds contains u.id)
+          } yield chat
+          chatsToEvict foreach (c => evictFromCache(dao, c))
+
+          // Reload currently selected chat
+          val chatItemToReload = for {
+            cwd  <- currentChatOption
+            item <- chatList.innerItems.find(i => i.chat.id == cwd.chat.id && i.chat.dsUuid == cwd.dsUuid)
+          } yield item
+
+          chatItemToReload match {
+            case Some(chatItem) =>
+              // Redo current chat layout
+              chatItem.select()
+            case None =>
+              // No need to do anything
+              Swing.onEDT {
+                unfreezeTheWorld()
+              }
+          }
+        }
+      } catch {
+        case ex: Exception =>
+          SwingUtils.showError(ex.getMessage)
+          Swing.onEDT {
+            unfreezeTheWorld()
+          }
+      }
+    }
+  }
 
   def updateCache(dao: ChatHistoryDao, chat: Chat, cache: ChatCache): Unit =
     MutationLock.synchronized {

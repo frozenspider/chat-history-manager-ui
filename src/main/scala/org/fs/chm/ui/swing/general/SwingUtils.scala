@@ -42,6 +42,22 @@ object SwingUtils extends Logging {
     def fontStyle_=(s: Style.Value) = el.font = new Font(el.font.getName, s.id, el.font.getSize)
   }
 
+  implicit class RichComponent(el: Component) {
+    def wrapInScrollpaneAndAdjustWidth(): ScrollPane = {
+      val sp = wrapInScrollpane()
+      el.preferredWidth = el.preferredWidth + sp.verticalScrollBar.preferredWidth
+      sp
+    }
+
+    def wrapInScrollpane(): ScrollPane = {
+      new ScrollPane(el) {
+        verticalScrollBar.unitIncrement = ComfortableScrollSpeed
+        verticalScrollBarPolicy         = ScrollPane.BarPolicy.Always
+        horizontalScrollBarPolicy       = ScrollPane.BarPolicy.Never
+      }
+    }
+  }
+
   def menuItem(title: String, enabled: Boolean = true)(action: => Any): MenuItem = {
     val e = enabled // To avoid name shadowing
     new MenuItem(new Action(title) { override def apply(): Unit = action }) {

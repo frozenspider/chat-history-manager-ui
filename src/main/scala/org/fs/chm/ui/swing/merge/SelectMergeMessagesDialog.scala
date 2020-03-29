@@ -36,7 +36,7 @@ class SelectMergeMessagesDialog(
   private lazy val table = new SelectMergesTable[RenderableMismatch, (Mismatch, MismatchResolution)](new Models)
 
   override protected lazy val dialogComponent: Component = {
-    table.wrapInScrollpane()
+    table.wrapInScrollpaneAndAdjustWidth()
   }
 
   override protected def validateChoices(): Option[Map[Mismatch, MismatchResolution]] = {

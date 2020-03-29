@@ -5,4 +5,5 @@ import org.fs.chm.dao.User
 
 trait UserDetailsMenuCallbacks {
   def userEdited(user: User, dao: ChatHistoryDao): Unit
+  def usersMerged(baseUser: User, absorbedUser: User, dao: ChatHistoryDao): Unit
 }
