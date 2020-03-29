@@ -91,7 +91,10 @@ object SwingUtils extends Logging {
     }
 
   def checkEdt() = {
-    require(EventQueue.isDispatchThread, "Should be called from EDT")
+    require(EventQueue.isDispatchThread, "Should be called from EDT! " + {
+      log.error("Should be called from EDT!", new IllegalArgumentException("Should be called from EDT!"))
+      ""
+    })
   }
 
   object Colors {

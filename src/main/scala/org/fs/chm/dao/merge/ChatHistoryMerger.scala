@@ -4,15 +4,16 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.fs.chm.dao._
-import org.fs.chm.dao.merge.ChatHistoryMerger._
+//import org.fs.chm.dao.merge.ChatHistoryMerger._
 import org.fs.chm.utility.EntityUtils._
+
 
 class ChatHistoryMerger(
     masterDao: MutableChatHistoryDao,
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset
-) {
+) /*
 
   /** Analyze dataset mergeability, returning the map from slave chat to mismatches in order. */
   def analyzeMergingChats(mc: Chat, sc: Chat): Seq[Mismatch] = {
@@ -272,3 +273,4 @@ object ChatHistoryMerger {
     case object Reject extends MismatchResolution
   }
 }
+*/

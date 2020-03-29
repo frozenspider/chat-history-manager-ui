@@ -17,7 +17,7 @@ import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.ChatHistoryMerger
-import org.fs.chm.dao.merge.ChatHistoryMerger._
+//import org.fs.chm.dao.merge.ChatHistoryMerger._
 import org.fs.chm.loader._
 import org.fs.chm.ui.swing.MessagesService._
 import org.fs.chm.ui.swing.general.ChatWithDao
@@ -290,6 +290,7 @@ class MainFrameApp //
   }
 
   def showSelectDatasetsToMergeDialog(): Unit = {
+    /*
     if (loadedDaos.isEmpty) {
       showWarning("Load a database first!")
     } else if (!loadedDaos.exists(_._1.isMutable)) {
@@ -312,12 +313,15 @@ class MainFrameApp //
           }
       }
     }
+     */
+    ???
   }
 
   //
   // Other stuff
   //
 
+  /*
   def mergeDatasets(
       masterDao: H2ChatHistoryDao,
       masterDs: Dataset,
@@ -361,7 +365,7 @@ class MainFrameApp //
       }
     }
   }
-
+*/
   def loadDaoInEDT(dao: ChatHistoryDao, daoToReplaceOption: Option[ChatHistoryDao] = None): Unit = {
     checkEdt()
     MutationLock.synchronized {
@@ -471,8 +475,8 @@ class MainFrameApp //
             msgDoc.insert(msgService.renderMessageHtml(cc, m), MessageInsertPosition.Trailing)
           }
           val loadStatus = LoadStatus(
-            firstId      = messages.headOption map (_.id) getOrElse (-1),
-            lastId       = messages.lastOption map (_.id) getOrElse (-1),
+            firstOption  = messages.headOption,
+            lastOption   = messages.lastOption,
             beginReached = messages.size < MsgBatchLoadSize,
             endReached   = true
           )
@@ -507,14 +511,17 @@ class MainFrameApp //
               MutationLock.synchronized {
                 val (viewPos1, viewSize1) = msgAreaContainer.view.posAndSize
                 msgDoc.insert("<div id=\"loading\"><hr><p> Loading... </p><hr></div>", MessageInsertPosition.Leading)
-                val addedMessages =
-                  cc.dao.messagesBefore(cc.chat, loadStatus.firstId, MsgBatchLoadSize).dropRight(1)
+                assert(loadStatus.firstOption.isDefined)
+                val addedMessages = loadStatus.firstOption match {
+                  case Some(first) => cc.dao.messagesBefore(cc.chat, first, MsgBatchLoadSize).dropRight(1)
+                  case None        => throw new MatchError("Uh-oh, this shouldn't happen!")
+                }
                 updateCache(
                   cc.dao,
                   cc.chat,
                   cache.copy(loadStatusOption = Some {
                     loadStatus.copy(
-                      firstId      = addedMessages.headOption map (_.id) getOrElse (-1),
+                      firstOption  = addedMessages.headOption,
                       beginReached = addedMessages.size < MsgBatchLoadSize
                     )
                   })
@@ -549,7 +556,9 @@ class MainFrameApp //
       try {
         val userIds = MutationLock.synchronized {
           val userIds = applyChangeAndReturnChangedIds
-          chatList.replaceWith(loadedDaos.keys.toSeq)
+          Swing.onEDTWait {
+            chatList.replaceWith(loadedDaos.keys.toSeq)
+          }
           userIds
         }
         chatsOuterPanel.revalidate()
@@ -631,8 +640,8 @@ class MainFrameApp //
   )
 
   private case class LoadStatus(
-      firstId: Long,
-      lastId: Long,
+      firstOption: Option[Message],
+      lastOption: Option[Message],
       beginReached: Boolean,
       endReached: Boolean
   )

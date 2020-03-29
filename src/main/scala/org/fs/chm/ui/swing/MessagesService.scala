@@ -86,8 +86,9 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     val titleNameHtml = renderTitleName(cc, Some(m.fromId), None)
     val titleHtml =
       s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})"""
+    val sourceIdAttr = m.sourceIdOption map (id => s"""message_source_id="$id"""") getOrElse ""
     s"""
-       |<div class="message" message_id="${m.id}">
+       |<div class="message" ${sourceIdAttr}>
        |   <div class="title">${titleHtml}</div>
        |   <div class="body">${msgHtml}</div>
        |</div>
@@ -120,7 +121,7 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     s"""<div class="forwarded-from">Forwarded from $titleNameHtml</div>"""
   }
 
-  private def renderSourceMessage(cc: ChatWithDao, srcId: Long): String = {
+  private def renderSourceMessage(cc: ChatWithDao, srcId: Message.SourceId): String = {
     val m2Option = cc.dao.messageOption(cc.chat, srcId)
     val html = m2Option match {
       case None     => "[Deleted message]"
