@@ -64,11 +64,10 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
             lastSeenTimeOption = None
           )
 
-          var msgId = 0
           val msgs = vmsgs.toIndexedSeq map { vmsg =>
-            msgId += 1
             Message.Regular(
-              id                     = msgId,
+              internalId             = Message.NoInternalId,
+              sourceIdOption         = None,
               time                   = vmsg.dateTime,
               editTimeOption         = None,
               fromId                 = userId,
@@ -95,12 +94,12 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
     val users = (userToChatWithMsgsMap.keys.toSet + myself).toSeq sortBy (u => (u.id, u.prettyName))
 
     new EagerChatHistoryDao(
-      name              = "GT-S5610 export data from " + path.getName,
-      dataPathRoot      = path,
-      dataset           = dataset,
-      myself1           = myself,
-      users1            = users,
-      chatsWithMessages = chatsWithMessages
+      name               = "GT-S5610 export data from " + path.getName,
+      dataPathRoot       = path,
+      dataset            = dataset,
+      myself1            = myself,
+      users1             = users,
+      _chatsWithMessages = chatsWithMessages
     )
   }
 

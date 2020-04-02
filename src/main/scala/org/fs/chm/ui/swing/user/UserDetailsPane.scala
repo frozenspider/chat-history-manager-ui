@@ -17,16 +17,16 @@ import org.fs.chm.ui.swing.general.field.TextOptionComponent
 import org.fs.chm.ui.swing.general.field.ValueComponent
 
 class UserDetailsPane(
-    private var user: User,
     dao: ChatHistoryDao,
-    mutable: Boolean,
+    private var user: User,
+    editable: Boolean,
     menuCallbacksOption: Option[UserDetailsMenuCallbacks]
 ) extends GridBagPanel {
 
-  val firstNameC   = new TextOptionComponent(user.firstNameOption, mutable)
-  val lastNameC    = new TextOptionComponent(user.lastNameOption, mutable)
+  val firstNameC   = new TextOptionComponent(user.firstNameOption, editable)
+  val lastNameC    = new TextOptionComponent(user.lastNameOption, editable)
   val usernameC    = new TextOptionComponent(user.usernameOption, false)
-  val phoneNumberC = new TextOptionComponent(user.phoneNumberOption, mutable)
+  val phoneNumberC = new TextOptionComponent(user.phoneNumberOption, editable)
 
   {
     val data: Seq[(String, Component)] = Seq(
@@ -65,6 +65,7 @@ class UserDetailsPane(
     menuCallbacksOption foreach { _ => // Adding right-click menu
       val popupMenu = new PopupMenu {
         contents += menuItem("Edit", enabled = dao.isMutable)(edit())
+        contents += menuItem("Merge With...", enabled = dao.isMutable)(merge())
       }
 
       // Reactions
@@ -79,14 +80,34 @@ class UserDetailsPane(
     }
   }
 
+  /** User from current field values */
+  def data: User = {
+    user.copy(
+      firstNameOption   = firstNameC.value,
+      lastNameOption    = lastNameC.value,
+      usernameOption    = usernameC.value,
+      phoneNumberOption = phoneNumberC.value
+    )
+  }
+
   private def edit(): Unit = {
-    val dialog = new UserDetailsDialog(user, dao)
+    val dialog = new UserDetailsDialog(dao, user)
     dialog.width   = this.width
     dialog.visible = true
-    dialog.selection foreach { result =>
-      this.user = result
+    dialog.selection foreach { user2 =>
+      menuCallbacksOption foreach (_.userEdited(user2, dao))
+      this.user = user2
       reload()
-      menuCallbacksOption foreach (_.userEdited(user, dao))
+    }
+  }
+
+  private def merge(): Unit = {
+    val dialog = new SelectUserToMergeDialog(dao, user)
+    dialog.visible = true
+    dialog.selection foreach { user2 =>
+      menuCallbacksOption foreach (_.usersMerged(user, user2, dao))
+      this.user = user2
+      reload()
     }
   }
 

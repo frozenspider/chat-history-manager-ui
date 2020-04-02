@@ -41,12 +41,13 @@ object TestUtils {
 
   def createRegularMessage(idx: Int, userId: Int): Message = {
     Message.Regular(
-      id                     = idx,
+      internalId             = Message.NoInternalId,
+      sourceIdOption         = Some(idx.toLong.asInstanceOf[Message.SourceId]),
       time                   = baseDate.plusMinutes(idx),
       editTimeOption         = Some(baseDate.plusMinutes(idx).plusSeconds(5)),
       fromId                 = userId,
       forwardFromNameOption  = Some("u" + userId),
-      replyToMessageIdOption = Some(rnd.nextInt(idx)), // Any previous message
+      replyToMessageIdOption = Some(rnd.nextInt(idx).toLong.asInstanceOf[Message.SourceId]), // Any previous message
       textOption             = Some(RichText(Seq(RichText.Plain(s"Hello there, ${idx}!")))),
       contentOption          = Some(Content.Poll(s"Hey, ${idx}!"))
     )
@@ -63,12 +64,12 @@ object TestUtils {
     val dataPathRoot = Files.createTempDirectory(null).toFile
     dataPathRoot.deleteOnExit()
     new EagerChatHistoryDao(
-      name              = "Dao " + nameSuffix,
-      dataPathRoot      = dataPathRoot,
-      dataset           = ds,
-      myself1           = users.head,
-      users1            = users,
-      chatsWithMessages = ListMap(chat -> msgs.toIndexedSeq)
+      name               = "Dao " + nameSuffix,
+      dataPathRoot       = dataPathRoot,
+      dataset            = ds,
+      myself1            = users.head,
+      users1             = users,
+      _chatsWithMessages = ListMap(chat -> msgs.toIndexedSeq)
     ) with EagerMutableDaoTrait
   }
 
@@ -83,6 +84,8 @@ object TestUtils {
     override def renameDataset(dsUuid: UUID, newName: String): Dataset = ???
 
     override def updateUser(user: User): Unit = ???
+
+    override def mergeUsers(baseUser: User, absorbedUser: User): Unit = ???
 
     override def delete(chat: Chat): Unit = ???
 

@@ -5,6 +5,7 @@ import java.nio.charset.Charset
 import java.nio.file.Files
 import java.util.UUID
 
+import com.github.nscala_time.time.Imports._
 import org.fs.chm.TestHelper
 import org.fs.chm.loader.H2DataManager
 import org.fs.chm.loader.TelegramDataLoader
@@ -97,50 +98,50 @@ class H2ChatHistoryDaoSpec //
       assert(scroll2 === allH2.tail.take(numMsgsToTake))
       assert(scroll2 === tgDao.scrollMessages(tgChat, 1, numMsgsToTake))
 
-      val before1 = h2dao.messagesBefore(h2Chat, allH2.last.id, numMsgsToTake)
+      val before1 = h2dao.messagesBefore(h2Chat, allH2.last, numMsgsToTake)
       assert(before1.last === allH2.last)
       assert(before1 === allH2.takeRight(numMsgsToTake))
-      assert(before1 === tgDao.messagesBefore(tgChat, allTg.last.id, numMsgsToTake))
+      assert(before1 === tgDao.messagesBefore(tgChat, allTg.last, numMsgsToTake))
 
-      val before2 = h2dao.messagesBefore(h2Chat, allH2.dropRight(1).last.id, numMsgsToTake)
+      val before2 = h2dao.messagesBefore(h2Chat, allH2.dropRight(1).last, numMsgsToTake)
       assert(before2.last === allH2.dropRight(1).last)
       assert(before2 === allH2.dropRight(1).takeRight(numMsgsToTake))
-      assert(before2 === tgDao.messagesBefore(tgChat, allTg.dropRight(1).last.id, numMsgsToTake))
+      assert(before2 === tgDao.messagesBefore(tgChat, allTg.dropRight(1).last, numMsgsToTake))
 
-      val after1 = h2dao.messagesAfter(h2Chat, allH2.head.id, numMsgsToTake)
+      val after1 = h2dao.messagesAfter(h2Chat, allH2.head, numMsgsToTake)
       assert(after1.head === allH2.head)
       assert(after1 === allH2.take(numMsgsToTake))
-      assert(after1 === tgDao.messagesAfter(tgChat, allTg.head.id, numMsgsToTake))
+      assert(after1 === tgDao.messagesAfter(tgChat, allTg.head, numMsgsToTake))
 
-      val after2 = h2dao.messagesAfter(h2Chat, allH2(1).id, numMsgsToTake)
+      val after2 = h2dao.messagesAfter(h2Chat, allH2(1), numMsgsToTake)
       assert(after2.head === allH2(1))
       assert(after2 === allH2.tail.take(numMsgsToTake))
-      assert(after2 === tgDao.messagesAfter(tgChat, allTg(1).id, numMsgsToTake))
+      assert(after2 === tgDao.messagesAfter(tgChat, allTg(1), numMsgsToTake))
 
-      val between1 = h2dao.messagesBetween(h2Chat, allH2.head.id, allH2.last.id)
+      val between1 = h2dao.messagesBetween(h2Chat, allH2.head, allH2.last)
       assert(between1 === allH2)
-      assert(between1 === tgDao.messagesBetween(tgChat, allTg.head.id, allTg.last.id))
+      assert(between1 === tgDao.messagesBetween(tgChat, allTg.head, allTg.last))
 
-      val between2 = h2dao.messagesBetween(h2Chat, allH2(1).id, allH2.last.id)
+      val between2 = h2dao.messagesBetween(h2Chat, allH2(1), allH2.last)
       assert(between2 === allH2.tail)
-      assert(between2 === tgDao.messagesBetween(tgChat, allTg(1).id, allTg.last.id))
+      assert(between2 === tgDao.messagesBetween(tgChat, allTg(1), allTg.last))
 
-      val between3 = h2dao.messagesBetween(h2Chat, allH2.head.id, allH2.dropRight(1).last.id)
+      val between3 = h2dao.messagesBetween(h2Chat, allH2.head, allH2.dropRight(1).last)
       assert(between3 === allH2.dropRight(1))
-      assert(between3 === tgDao.messagesBetween(tgChat, allTg.head.id, allTg.dropRight(1).last.id))
+      assert(between3 === tgDao.messagesBetween(tgChat, allTg.head, allTg.dropRight(1).last))
 
-      val countBetween1 = h2dao.countMessagesBetween(h2Chat, allH2.head.id, allH2.last.id)
+      val countBetween1 = h2dao.countMessagesBetween(h2Chat, allH2.head, allH2.last)
       assert(countBetween1 === allH2.size - 2)
-      assert(countBetween1 === tgDao.countMessagesBetween(tgChat, allTg.head.id, allTg.last.id))
+      assert(countBetween1 === tgDao.countMessagesBetween(tgChat, allTg.head, allTg.last))
 
       if (countBetween1 > 0) {
-        val countBetween2 = h2dao.countMessagesBetween(h2Chat, allH2(1).id, allH2.last.id)
+        val countBetween2 = h2dao.countMessagesBetween(h2Chat, allH2(1), allH2.last)
         assert(countBetween2 === allH2.size - 3)
-        assert(countBetween2 === tgDao.countMessagesBetween(tgChat, allTg(1).id, allTg.last.id))
+        assert(countBetween2 === tgDao.countMessagesBetween(tgChat, allTg(1), allTg.last))
 
-        val countBetween3 = h2dao.countMessagesBetween(h2Chat, allH2.head.id, allH2.dropRight(1).last.id)
+        val countBetween3 = h2dao.countMessagesBetween(h2Chat, allH2.head, allH2.dropRight(1).last)
         assert(countBetween3 === allH2.size - 3)
-        assert(countBetween3 === tgDao.countMessagesBetween(tgChat, allTg.head.id, allTg.dropRight(1).last.id))
+        assert(countBetween3 === tgDao.countMessagesBetween(tgChat, allTg.head, allTg.dropRight(1).last))
       }
 
       val last = h2dao.lastMessages(h2Chat, numMsgsToTake)
@@ -206,36 +207,40 @@ class H2ChatHistoryDaoSpec //
   test("message fetching corner cases") {
     freeH2Dao()
 
-    val msgs  = (3 to 7) map (TestUtils.createRegularMessage(_, 1))
-    val tgDao = TestUtils.createSimpleDao("TG", msgs, 1)
+    val localTgDao = TestUtils.createSimpleDao("TG", {
+      (3 to 7) map (TestUtils.createRegularMessage(_, 1))
+    }, 1)
+    val localDsUuid = localTgDao.datasets.head.uuid
+    val chat        = localTgDao.chats(localDsUuid).head
+    val msgs        = localTgDao.firstMessages(chat, 999999)
     dir = Files.createTempDirectory(null).toFile
 
     manager.create(dir)
     h2dao = manager.loadData(dir)
-    h2dao.copyAllFrom(tgDao)
+    h2dao.copyAllFrom(localTgDao)
 
-    val dsUuid = tgDao.datasets.head.uuid
+    val dsUuid = localTgDao.datasets.head.uuid
     for {
-      dao  <- Seq(tgDao, h2dao)
-      chat <- dao.chats(dsUuid).sortBy(_.id)
+      dao  <- Seq(localTgDao, h2dao)
+      chat <- dao.chats(localDsUuid).sortBy(_.id)
     } {
-      assert(dao.messagesBefore(chat, 3, 10) === Seq(msgs.head))
-      assert(dao.messagesBefore(chat, 2, 10) === Seq.empty)
+      val clue                        = s"Dao is ${dao.getClass.getSimpleName}"
+      implicit def toMessage(i: Long) = msgs.find(_.sourceIdOption contains i).get
 
-      assert(dao.messagesAfter(chat, 7, 10) === Seq(msgs.last))
-      assert(dao.messagesAfter(chat, 8, 10) === Seq.empty)
+      assert(dao.messagesBefore(chat, 3L, 10) === Seq(msgs.head), clue)
 
-      assert(dao.messagesBetween(chat, 1, 3) === Seq(msgs.head))
-      assert(dao.messagesBetween(chat, 1, 2) === Seq.empty)
+      assert(dao.messagesAfter(chat, 7L, 10) === Seq(msgs.last), clue)
 
-      assert(dao.messagesBetween(chat, 7, 9) === Seq(msgs.last))
-      assert(dao.messagesBetween(chat, 8, 9) === Seq.empty)
+      assert(dao.messagesBetween(chat, 3L, 3L) === Seq(msgs.head), clue)
+      assert(dao.messagesBetween(chat, 7L, 7L) === Seq(msgs.last), clue)
 
-      assert(dao.countMessagesBetween(chat, 1, 4) === 1)
-      assert(dao.countMessagesBetween(chat, 1, 3) === 0)
+      assert(dao.countMessagesBetween(chat, 3L, 3L) === 0, clue)
+      assert(dao.countMessagesBetween(chat, 3L, 4L) === 0, clue)
+      assert(dao.countMessagesBetween(chat, 3L, 5L) === 1, clue)
 
-      assert(dao.countMessagesBetween(chat, 6, 9) === 1)
-      assert(dao.countMessagesBetween(chat, 7, 9) === 0)
+      assert(dao.countMessagesBetween(chat, 7L, 7L) === 0, clue)
+      assert(dao.countMessagesBetween(chat, 6L, 7L) === 0, clue)
+      assert(dao.countMessagesBetween(chat, 5L, 7L) === 1, clue)
     }
   }
 
@@ -260,6 +265,59 @@ class H2ChatHistoryDaoSpec //
       assert(h2dao.users(dsUuid).size === users.size - 1)
       assert(h2dao.firstMessages(chatToDelete, 10).isEmpty)
     }
+  }
+
+  test("merge (absorb) user") {
+    def fetchPersonalChat(u: User): Chat = {
+      h2dao.chats(dsUuid).find(c => c.tpe == ChatType.Personal && h2dao.interlocutors(c).contains(u)) getOrElse {
+        fail(s"Chat for user $u not found!")
+      }
+    }
+
+    val usersBefore = h2dao.users(dsUuid)
+    val chatsBefore = h2dao.chats(dsUuid)
+
+    val baseUser     = usersBefore.find(_.id == 777777777L).get
+    val absorbedUser = usersBefore.find(_.id == 32507588L).get
+
+    val baseUserPc     = fetchPersonalChat(baseUser)
+    val absorbedUserPc = fetchPersonalChat(absorbedUser)
+
+    val baseUserPcMsgs     = h2dao.firstMessages(baseUserPc, 99999)
+    val absorbedUserPcMsgs = h2dao.firstMessages(absorbedUserPc, 99999)
+
+    h2dao.mergeUsers(baseUser, absorbedUser.copy(firstNameOption = Some("new-name")))
+
+    val chatsAfter = h2dao.chats(dsUuid)
+    val usersAfter = h2dao.users(dsUuid)
+
+    // Verify users
+    assert(usersAfter.size === usersBefore.size - 1)
+    val expectedUser = absorbedUser.copy(
+      id                 = baseUser.id,
+      firstNameOption    = Some("new-name"),
+      lastSeenTimeOption = baseUser.lastSeenTimeOption
+    )
+    assert(usersAfter.find(_.id == baseUser.id) === Some(expectedUser))
+    assert(!usersAfter.exists(_.id == absorbedUser.id))
+
+    // Verify chats
+    assert(chatsAfter.size === chatsBefore.size - 1)
+    val expectedChat = baseUserPc.copy(
+      nameOption = expectedUser.firstNameOption,
+      msgCount   = baseUserPcMsgs.size + absorbedUserPcMsgs.size
+    )
+    assert(chatsAfter.find(_.id == baseUserPc.id) === Some(expectedChat))
+    assert(!chatsAfter.exists(_.id == absorbedUserPc.id))
+
+    // Verify messages
+    val expectedMessages =
+      (baseUserPcMsgs ++ absorbedUserPcMsgs.map(
+        _.asInstanceOf[Message.Regular].copy(
+          sourceIdOption = None,
+          fromId         = baseUser.id
+        ))).sortBy(_.time)
+    assert(h2dao.firstMessages(chatsAfter.find(_.id == baseUserPc.id).get, 99999) === expectedMessages)
   }
 
   private def freeH2Dao(): Unit = {

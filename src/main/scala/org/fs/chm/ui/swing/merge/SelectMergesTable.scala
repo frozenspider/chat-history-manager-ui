@@ -26,15 +26,6 @@ class SelectMergesTable[V, R](models: SelectMergesTable.MergeModels[V, R]) //
   }
 
   def selected: Seq[R] = models.selected
-
-  def wrapInScrollpane(): ScrollPane = {
-    new ScrollPane(this) {
-      verticalScrollBar.unitIncrement = ComfortableScrollSpeed
-      verticalScrollBarPolicy         = ScrollPane.BarPolicy.Always
-      horizontalScrollBarPolicy       = ScrollPane.BarPolicy.Never
-      this.preferredWidth             = thisTable.preferredWidth + verticalScrollBar.preferredWidth
-    }
-  }
 }
 
 object SelectMergesTable {
