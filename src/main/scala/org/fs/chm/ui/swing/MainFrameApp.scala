@@ -494,15 +494,17 @@ class MainFrameApp //
     }
   }
 
-  def tryLoadPreviousMessages(): Unit =
+  def tryLoadPreviousMessages(): Unit = {
+    log.debug("Trying to load previous messages")
     currentChatOption match {
-      case _ if loadMessagesInProgress.get => // NOOP
-      case None                            => // NOOP
+      case _ if loadMessagesInProgress.get => log.debug("Loading messages: Already in progress")
+      case None                            => log.debug("Loading messages: No chat selected")
       case Some(cc) =>
         MutationLock.synchronized {
           msgAreaContainer.caretUpdatesEnabled = false
           val cache      = loadedDaos(cc.dao)(cc.chat)
           val loadStatus = cache.loadStatusOption.get
+          log.debug(s"Loading messages: loadStatus = ${loadStatus}")
           if (!loadStatus.beginReached) {
             freezeTheWorld()
             loadMessagesInProgress set true
@@ -513,9 +515,10 @@ class MainFrameApp //
                 msgDoc.insert("<div id=\"loading\"><hr><p> Loading... </p><hr></div>", MessageInsertPosition.Leading)
                 assert(loadStatus.firstOption.isDefined)
                 val addedMessages = loadStatus.firstOption match {
-                  case Some(first) => cc.dao.messagesBefore(cc.chat, first, MsgBatchLoadSize).dropRight(1)
+                  case Some(first) => cc.dao.messagesBefore(cc.chat, first, MsgBatchLoadSize + 1).dropRight(1)
                   case None        => throw new MatchError("Uh-oh, this shouldn't happen!")
                 }
+                log.debug(s"Loading messages: Loaded ${addedMessages.size} previous messages")
                 updateCache(
                   cc.dao,
                   cc.chat,
@@ -537,6 +540,7 @@ class MainFrameApp //
                   val (_, viewSize2) = msgAreaContainer.view.posAndSize
                   val heightDiff     = viewSize2.height - viewSize1.height
                   msgAreaContainer.view.show(viewPos1.x, viewPos1.y + heightDiff)
+                  log.debug("Loading messages: Reloaded message container")
                 }
               }
             }
@@ -549,6 +553,7 @@ class MainFrameApp //
           }
         }
     }
+  }
 
   /** Asynchronously apply the given change (under mutation lock) and refresh UI to reflect it */
   def asyncChangeUsers(dao: ChatHistoryDao, applyChangeAndReturnChangedIds: => Seq[Long]): Unit = {
