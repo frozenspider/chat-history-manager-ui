@@ -9,6 +9,7 @@ import scala.util.Random
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao._
+import org.fs.chm.dao.merge.ChatHistoryMerger.TaggedMessage
 
 /**
  * Utility stuff used for testing, both automatically and manually
@@ -40,6 +41,10 @@ object TestUtils {
     )
 
   def createRegularMessage(idx: Int, userId: Int): Message = {
+    // Any previous message
+    val replyToMessageIdOption =
+      if (idx > 0) Some(rnd.nextInt(idx).toLong.asInstanceOf[Message.SourceId]) else None
+
     Message.Regular(
       internalId             = Message.NoInternalId,
       sourceIdOption         = Some(idx.toLong.asInstanceOf[Message.SourceId]),
@@ -47,7 +52,7 @@ object TestUtils {
       editTimeOption         = Some(baseDate.plusMinutes(idx).plusSeconds(5)),
       fromId                 = userId,
       forwardFromNameOption  = Some("u" + userId),
-      replyToMessageIdOption = if (idx > 0) Some(rnd.nextInt(idx).toLong.asInstanceOf[Message.SourceId]) else None, // Any previous message
+      replyToMessageIdOption = replyToMessageIdOption,
       textOption             = Some(RichText(Seq(RichText.Plain(s"Hello there, ${idx}!")))),
       contentOption          = Some(Content.Poll(s"Hey, ${idx}!"))
     )
@@ -73,12 +78,23 @@ object TestUtils {
     ) with EagerMutableDaoTrait
   }
 
-  def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, Seq[User], Chat) = {
+  def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, Seq[User], Chat, Seq[Message]) = {
     val ds    = dao.datasets.head
     val users = dao.users(ds.uuid)
     val chat  = dao.chats(ds.uuid).head
-    (ds, users, chat)
+    val msgs  = dao.firstMessages(chat, Int.MaxValue)
+    (ds, users, chat, msgs)
   }
+
+  implicit class RichMsgSeq(msgs: Seq[Message]) {
+    def bySrcId[TM <: Message with TaggedMessage](id: Long): TM =
+      tag(msgs.find(_.sourceIdOption.get == id).get)
+  }
+
+  def tag[TM <: Message with TaggedMessage](m: Message): TM = m.asInstanceOf[TM]
+
+  def tag[TM <: Message with TaggedMessage](id: Int)(implicit msgs: Seq[Message]): TM =
+    msgs.bySrcId(id)
 
   private trait EagerMutableDaoTrait extends MutableChatHistoryDao {
     override def renameDataset(dsUuid: UUID, newName: String): Dataset = ???

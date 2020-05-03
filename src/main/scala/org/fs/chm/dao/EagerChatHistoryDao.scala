@@ -58,45 +58,31 @@ class EagerChatHistoryDao(
 
   override def interlocutors(chat: Chat): Seq[User] = interlocutorsMap(chat)
 
-  override def messagesBefore(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
+  override def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
     val messages = chatsWithMessages(chat)
     val idx      = messages.lastIndexWhere(_.internalId <= msg.internalId)
-    if (idx == -1) {
-      IndexedSeq.empty
-    } else {
-      val lowerLimit = (idx - limit + 1) max 0
-      messages.slice(lowerLimit, idx + 1)
-    }
+    require(idx > -1, "Message not found!")
+    val lowerLimit = (idx - limit + 1) max 0
+    messages.slice(lowerLimit, idx + 1)
   }
 
-  override def messagesAfter(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
+  override def messagesAfterImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
     val messages = chatsWithMessages(chat)
     val idx      = messages.indexWhere(_.internalId >= msg.internalId)
-    if (idx == -1) {
-      IndexedSeq.empty
-    } else {
-      val upperLimit = (idx + limit) min messages.size
-      messages.slice(idx, upperLimit)
-    }
+    require(idx > -1, "Message not found!")
+    val upperLimit = (idx + limit) min messages.size
+    messages.slice(idx, upperLimit)
   }
 
-  override def messagesBetween(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] = {
+  override def messagesBetweenImpl(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] = {
     require(msg1.internalId <= msg2.internalId)
     val messages = chatsWithMessages(chat)
     val idx1     = messages.indexWhere(_.internalId >= msg1.internalId)
     val idx2     = messages.lastIndexWhere(_.internalId <= msg2.internalId)
-    if (idx1 == -1) {
-      // All messages are less than lower bound
-      assert(idx2 == messages.size - 1)
-      IndexedSeq.empty
-    } else if (idx2 == -1) {
-      // All messages are greater than upper bound
-      assert(idx1 == 0)
-      IndexedSeq.empty
-    } else {
-      assert(idx2 >= idx1)
-      messages.slice(idx1, idx2 + 1)
-    }
+    require(idx1 > -1, "Message 1 not found!")
+    require(idx2 > -1, "Message 2 not found!")
+    assert(idx2 >= idx1)
+    messages.slice(idx1, idx2 + 1)
   }
 
   override def countMessagesBetween(chat: Chat, msg1: Message, msg2: Message): Int = {

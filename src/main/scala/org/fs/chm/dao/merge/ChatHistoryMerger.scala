@@ -4,18 +4,20 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.fs.chm.dao._
-//import org.fs.chm.dao.merge.ChatHistoryMerger._
+import org.fs.chm.dao.merge.ChatHistoryMerger._
 import org.fs.chm.utility.EntityUtils._
-
 
 class ChatHistoryMerger(
     masterDao: MutableChatHistoryDao,
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset
-) /*
+) {
 
-  /** Analyze dataset mergeability, returning the map from slave chat to mismatches in order. */
+  /**
+   * Analyze dataset mergeability, returning the map from slave chat to mismatches in order.
+   * Note that we can only detect conflicts if data source supports source IDs.
+   */
   def analyzeMergingChats(mc: Chat, sc: Chat): Seq[Mismatch] = {
     def messagesStream[T <: TaggedMessage](dao: ChatHistoryDao, chat: Chat, offset: Int): Stream[T] = {
       if (offset >= chat.msgCount) {
@@ -34,18 +36,6 @@ class ChatHistoryMerger(
     mismatches.toVector
   }
 
-  private val msgOptionOrdering = new Ordering[Option[Message]] {
-    override def compare(xo: Option[Message], yo: Option[Message]): Int = {
-      (xo, yo) match {
-        case (None, None)                           => 0
-        case (None, _)                              => 1
-        case (_, None)                              => -1
-        case (Some(x), Some(y)) if x.time != y.time => x.time compareTo y.time
-        case (Some(x), Some(y))                     => x.id compareTo y.id
-      }
-    }
-  }
-
   /** Iterate through both master and slave streams using state machine like approach */
   @tailrec
   private def iterate(
@@ -54,28 +44,28 @@ class ChatHistoryMerger(
       onMismatch: Mismatch => Unit
   ): Unit = {
     import IterationState._
-    def prevMmId = cxt.prevMm map (_.id) getOrElse -1L
-    def prevSmId = cxt.prevSm map (_.id) getOrElse -1L
     def mismatchOptionAfterConflictEnd(state: StateInProgress): Option[Mismatch] = {
       state match {
-        case AdditionInProgress(prevMasterMsgId, startSlaveMsgId) =>
-          assert(prevMmId == prevMasterMsgId) // Master stream hasn't advanced
+        case AdditionInProgress(prevMasterMsgOption, startSlaveMsg) =>
+          assert(cxt.prevMm == prevMasterMsgOption) // Master stream hasn't advanced
+          assert(cxt.prevSm.isDefined)
           Some(
             Mismatch.Addition(
-              prevMasterMsgId = prevMasterMsgId,
-              slaveMsgIds     = (startSlaveMsgId, prevSmId)
+              prevMasterMsgOption = prevMasterMsgOption,
+              nextMasterMsgOption = cxt.mmStream.headOption,
+              slaveMsgs           = (startSlaveMsg, cxt.prevSm.get)
             )
           )
-        case ConflictInProgress(startMasterMsgId, startSlaveMsgId) =>
-          assert(startMasterMsgId != -1)
+        case ConflictInProgress(startMasterMsg, startSlaveMsg) =>
+          assert(cxt.prevMm.isDefined && cxt.prevSm.isDefined)
           Some(
             Mismatch.Conflict(
-              masterMsgIds = (startMasterMsgId, prevMmId),
-              slaveMsgIds  = (startSlaveMsgId, prevSmId)
+              masterMsgs = (startMasterMsg, cxt.prevMm.get),
+              slaveMsgs  = (startSlaveMsg, cxt.prevSm.get)
             )
           )
-        case RetentionInProgress(_, prevSlaveMsgId) =>
-          assert(prevSmId == prevSlaveMsgId) // Slave stream hasn't advanced
+        case RetentionInProgress(_, prevSlaveMsgOption) =>
+          assert(cxt.prevSm == prevSlaveMsgOption) // Slave stream hasn't advanced
           // We don't treat retention as a mismatch
           None
       }
@@ -97,28 +87,29 @@ class ChatHistoryMerger(
       // NoState
       //
 
-      case (Some(mm), Some(sm), NoState) if mm == sm =>
+      case (Some(mm), Some(sm), NoState) if mm =~= sm =>
         // Matching subsequence continues
         iterate(cxt.advanceBoth(), NoState, onMismatch)
-      case (Some(mm), Some(sm), NoState) if mm.id == sm.id =>
+      case (Some(mm), Some(sm), NoState) if mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption =>
         // Conflict started
-        val state2 = ConflictInProgress(mm.id, sm.id)
+        // (Conflicts are only detectable if data source supply source IDs)
+        val state2 = ConflictInProgress(mm, sm)
         iterate(cxt.advanceBoth(), state2, onMismatch)
       case (_, Some(sm), NoState) if cxt.cmpMasterSlave() > 0 =>
         // Addition started
-        val state2 = AdditionInProgress(prevMmId, sm.id)
+        val state2 = AdditionInProgress(cxt.prevMm, sm)
         iterate(cxt.advanceSlave(), state2, onMismatch)
       case (Some(mm), _, NoState) if cxt.cmpMasterSlave() < 0 =>
         // Retention started
-        val state2 = RetentionInProgress(mm.id, prevSmId)
+        val state2 = RetentionInProgress(mm, cxt.prevSm)
         iterate(cxt.advanceMaster(), state2, onMismatch)
 
       //
       // AdditionInProgress
       //
 
-      case (_, Some(sm), AdditionInProgress(prevMasterMsgId, _))
-          if prevMasterMsgId == prevMmId && cxt.cmpMasterSlave() > 0 =>
+      case (_, Some(sm), AdditionInProgress(prevMasterMsgOption, _))
+          if prevMasterMsgOption == cxt.prevMm && cxt.cmpMasterSlave() > 0 =>
         // Addition continues
         iterate(cxt.advanceSlave(), state, onMismatch)
       case (_, _, state: AdditionInProgress) =>
@@ -131,8 +122,8 @@ class ChatHistoryMerger(
       // RetentionInProgress
       //
 
-      case (Some(mm), _, RetentionInProgress(_, prevSlaveMsgId))
-          if prevSlaveMsgId == prevSmId && cxt.cmpMasterSlave() < 0 =>
+      case (Some(mm), _, RetentionInProgress(_, prevSlaveMsg))
+          if (cxt.prevSm contains prevSlaveMsg) && cxt.cmpMasterSlave() < 0 =>
         // Retention continues
         iterate(cxt.advanceMaster(), state, onMismatch)
       case (_, _, state: RetentionInProgress) =>
@@ -145,7 +136,7 @@ class ChatHistoryMerger(
       // ConflictInProgress
       //
 
-      case (Some(mm), Some(sm), state: ConflictInProgress) if mm != sm && mm.id == sm.id =>
+      case (Some(mm), Some(sm), state: ConflictInProgress) if mm !=~= sm =>
         // Conflict continues
         iterate(cxt.advanceBoth(), state, onMismatch)
       case (_, _, state: ConflictInProgress) =>
@@ -166,6 +157,37 @@ class ChatHistoryMerger(
      * Do the same as analyze, reuse as much as possible
      */
     ???
+  }
+
+  //
+  // Helpers
+  //
+
+  /** If message dates and plain strings are equal, we consider this enough */
+  private val msgOrdering = new Ordering[Message] {
+    override def compare(x: Message, y: Message): Int = {
+      (x, y) match {
+        case _ if x.time != y.time =>
+          x.time compareTo y.time
+        case _ if x.sourceIdOption.isDefined && y.sourceIdOption.isDefined =>
+          x.sourceIdOption.get compareTo y.sourceIdOption.get
+        case _ if x.plainSearchableString == y.plainSearchableString =>
+          0
+        case _ =>
+          throw new IllegalStateException(s"Cannot compare messages $x and $y!")
+      }
+    }
+  }
+
+  private val msgOptionOrdering = new Ordering[Option[Message]] {
+    override def compare(xo: Option[Message], yo: Option[Message]): Int = {
+      (xo, yo) match {
+        case (None, None)       => 0
+        case (None, _)          => 1
+        case (_, None)          => -1
+        case (Some(x), Some(y)) => msgOrdering.compare(x, y)
+      }
+    }
   }
 
   private type IterationContext =
@@ -194,32 +216,22 @@ class ChatHistoryMerger(
     }
   }
 
-  // Message tagged types
-  private sealed trait TaggedMessage
-  private object TaggedMessage {
-    sealed trait MasterMessageTag extends TaggedMessage
-    sealed trait SlaveMessageTag  extends TaggedMessage
-
-    type M = Message with MasterMessageTag
-    type S = Message with SlaveMessageTag
-  }
-
   private sealed trait IterationState
   private object IterationState {
     case object NoState extends IterationState
 
     sealed trait StateInProgress extends IterationState
     case class AdditionInProgress(
-        prevMasterMsgId: Long,
-        startSlaveMsgId: Long
+        prevMasterMsgOption: Option[TaggedMessage.M],
+        startSlaveMsg: TaggedMessage.S
     ) extends StateInProgress
     case class RetentionInProgress(
-        startMasterMsgId: Long,
-        prevSlaveMsgId: Long
+        startMasterMsg: TaggedMessage.M,
+        prevSlaveMsgOption: Option[TaggedMessage.S]
     ) extends StateInProgress
     case class ConflictInProgress(
-        startMasterMsgId: Long,
-        startSlaveMsgId: Long
+        startMasterMsg: TaggedMessage.M,
+        startSlaveMsg: TaggedMessage.S
     ) extends StateInProgress
   }
 }
@@ -227,6 +239,16 @@ class ChatHistoryMerger(
 object ChatHistoryMerger {
 
   protected[merge] val BatchSize = 1000
+
+  // Message tagged types
+  sealed trait TaggedMessage
+  object TaggedMessage {
+    sealed trait MasterMessageTag extends TaggedMessage
+    sealed trait SlaveMessageTag  extends TaggedMessage
+
+    type M = Message with MasterMessageTag
+    type S = Message with SlaveMessageTag
+  }
 
   /** Represents a single general merge option: a chat that should be added or merged (or skipped if no decision) */
   sealed trait ChatMergeOption
@@ -238,32 +260,31 @@ object ChatHistoryMerger {
   }
 
   sealed trait Mismatch {
-    def firstMasterMsgId: Long
-    def lastMasterMsgId: Long
-
-    def slaveMsgIds: (Long, Long)
-    def firstSlaveMsgId: Long = slaveMsgIds._1
-    def lastSlaveMsgId:  Long = slaveMsgIds._2
+    def firstMasterMsgOption: Option[TaggedMessage.M]
+    def lastMasterMsgOption: Option[TaggedMessage.M]
+    def slaveMsgs: (TaggedMessage.S, TaggedMessage.S)
+    def firstSlaveMsg: TaggedMessage.S = slaveMsgs._1
+    def lastSlaveMsg:  TaggedMessage.S = slaveMsgs._2
   }
   object Mismatch {
     case class Addition(
-        /** -1 if appended before first */
-        prevMasterMsgId: Long,
-        /** First and last ID*/
-        slaveMsgIds: (Long, Long)
+        prevMasterMsgOption: Option[TaggedMessage.M],
+        nextMasterMsgOption: Option[TaggedMessage.M],
+        /** First and last */
+        slaveMsgs: (TaggedMessage.S, TaggedMessage.S)
     ) extends Mismatch {
-      // Since this is an addition and we're sure slave IDs are not actually present in master, we use them as
-      // anchor points
-      override def firstMasterMsgId: Long = slaveMsgIds._1
-      override def lastMasterMsgId:  Long = slaveMsgIds._2
+      override def firstMasterMsgOption = prevMasterMsgOption
+      override def lastMasterMsgOption = nextMasterMsgOption
     }
 
     case class Conflict(
-        masterMsgIds: (Long, Long),
-        slaveMsgIds: (Long, Long)
+        masterMsgs: (TaggedMessage.M, TaggedMessage.M),
+        slaveMsgs: (TaggedMessage.S, TaggedMessage.S)
     ) extends Mismatch {
-      override def firstMasterMsgId: Long = masterMsgIds._1
-      override def lastMasterMsgId:  Long = masterMsgIds._2
+      def firstMasterMsg: TaggedMessage.M = masterMsgs._1
+      def lastMasterMsg:  TaggedMessage.M = masterMsgs._2
+      override def firstMasterMsgOption = Some(firstMasterMsg)
+      override def lastMasterMsgOption = Some(lastMasterMsg)
     }
   }
 
@@ -273,4 +294,3 @@ object ChatHistoryMerger {
     case object Reject extends MismatchResolution
   }
 }
-*/

@@ -46,16 +46,37 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
-  /** Return N messages before the one with the given ID (inclusive). Message might not exist. */
-  def messagesBefore(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message]
+  /**
+   * Return N messages before the given one (inclusive).
+   * Message must be present, so the result would contain at least one element.
+   */
+  final def messagesBefore(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] =
+    messagesBeforeImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit && seq.last =~= msg)
 
-  /** Return N messages after the one with the given ID (inclusive). Message might not exist. */
-  def messagesAfter(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message]
+  protected def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message]
 
-  /** Return N messages between the ones with the given IDs (inclusive). Message might not exist. */
-  def messagesBetween(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message]
+  /**
+   * Return N messages after the given one (inclusive).
+   * Message must be present, so the result would contain at least one element.
+   */
+  final def messagesAfter(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] =
+    messagesAfterImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit && seq.head =~= msg)
 
-  /** Count messages between the ones with the given IDs (exclusive, unlike messagesBetween) */
+  protected def messagesAfterImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message]
+
+  /**
+   * Return N messages between the given ones (inclusive).
+   * Messages must be present, so the result would contain at least one element (if both are the same message).
+   */
+  final def messagesBetween(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] =
+    messagesBetweenImpl(chat, msg1, msg2) ensuring (seq => seq.nonEmpty && seq.head =~= msg1 && seq.last =~= msg2)
+
+  protected def messagesBetweenImpl(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message]
+
+  /**
+   * Count messages between the given ones (exclusive, unlike messagesBetween).
+   * Messages must be present.
+   */
   def countMessagesBetween(chat: Chat, msg1: Message, msg2: Message): Int
 
   def messageOption(chat: Chat, id: Message.SourceId): Option[Message]
@@ -141,7 +162,8 @@ case class User(
     usernameOption: Option[String],
     phoneNumberOption: Option[String],
     lastSeenTimeOption: Option[DateTime]
-) extends PersonInfo with WithId
+) extends PersonInfo
+    with WithId
 
 sealed abstract class ChatType(val name: String)
 object ChatType {
@@ -238,8 +260,8 @@ object RichText {
  * Same applies to Content.
  */
 
-// Using F-bound type to implement withInternalId
-sealed trait Message extends Searchable  {
+sealed trait Message extends Searchable {
+
   /**
    * Unique ID assigned to this message by a DAO storage engine, should be -1 until saved.
    * No ordering guarantees are provided in general case.
@@ -247,6 +269,7 @@ sealed trait Message extends Searchable  {
    * Should NEVER be compared across different DAOs!
    */
   val internalId: Message.InternalId
+
   /**
    * Unique within a chat, serves as a persistent ID when merging with older/newer DB version.
    * If it's not useful for this purpose, should be empty.
@@ -267,6 +290,12 @@ sealed trait Message extends Searchable  {
     textOption map (_.plainSearchableString) getOrElse ""
 
   override val plainSearchableString = plainSearchableMsgString
+
+  /** Equals not regarding internal IDs */
+  def =~=(that: Message) =
+    this.withInternalId(Message.NoInternalId) == that.withInternalId(Message.NoInternalId)
+
+  def !=~=(that: Message) = !(this =~= that)
 }
 
 object Message {

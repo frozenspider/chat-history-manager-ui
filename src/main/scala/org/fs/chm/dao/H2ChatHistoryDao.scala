@@ -98,17 +98,17 @@ class H2ChatHistoryDao(
     raws map Raws.toMessage
   }
 
-  override def messagesBefore(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
+  override def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
     val raws = queries.rawMessages.selectBeforeInversedInc(chat, msg, limit).transact(txctr).unsafeRunSync().reverse
     raws map Raws.toMessage
-  }
+  } ensuring (seq => seq.nonEmpty && seq.last =~= msg)
 
-  override def messagesAfter(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
+  override def messagesAfterImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
     val raws = queries.rawMessages.selectAfterInc(chat, msg, limit).transact(txctr).unsafeRunSync()
     raws map Raws.toMessage
   }
 
-  override def messagesBetween(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] = {
+  override def messagesBetweenImpl(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] = {
     val raws = queries.rawMessages.selectBetweenInc(chat, msg1, msg2).transact(txctr).unsafeRunSync()
     raws map Raws.toMessage
   }
