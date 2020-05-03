@@ -47,18 +47,20 @@ trait ChatHistoryDao extends AutoCloseable {
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
   /** Return N messages before the one with the given ID (inclusive). Message might not exist. */
-  def messagesBefore(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
+  def messagesBefore(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message]
 
   /** Return N messages after the one with the given ID (inclusive). Message might not exist. */
-  def messagesAfter(chat: Chat, msgId: Long, limit: Int): IndexedSeq[Message]
+  def messagesAfter(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message]
 
   /** Return N messages between the ones with the given IDs (inclusive). Message might not exist. */
-  def messagesBetween(chat: Chat, msgId1: Long, msgId2: Long): IndexedSeq[Message]
+  def messagesBetween(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message]
 
   /** Count messages between the ones with the given IDs (exclusive, unlike messagesBetween) */
-  def countMessagesBetween(chat: Chat, msgId1: Long, msgId2: Long): Int
+  def countMessagesBetween(chat: Chat, msg1: Message, msg2: Message): Int
 
-  def messageOption(chat: Chat, id: Long): Option[Message]
+  def messageOption(chat: Chat, id: Message.SourceId): Option[Message]
+
+  def messageOptionByInternalId(chat: Chat, id: Message.InternalId): Option[Message]
 
   def isMutable: Boolean = this.isInstanceOf[MutableChatHistoryDao]
 
@@ -75,6 +77,12 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
 
   /** Sets the data (names and phone only) for a user with the given `id` and `dsUuid` to the given state */
   def updateUser(user: User): Unit
+
+  /**
+   * Merge absorbed user into base user, replacing base user's names and phone. Last "last seen time" is selected.
+   * Their personal chats will also be merged into one (named after the "new" user).
+   */
+  def mergeUsers(baseUser: User, absorbedUser: User): Unit
 
   def delete(chat: Chat): Unit
 
@@ -230,12 +238,29 @@ object RichText {
  * Same applies to Content.
  */
 
-sealed trait Message extends Searchable with WithId {
-  /** Unique within a chat */
-  val id: Long
+// Using F-bound type to implement withInternalId
+sealed trait Message extends Searchable  {
+  /**
+   * Unique ID assigned to this message by a DAO storage engine, should be -1 until saved.
+   * No ordering guarantees are provided in general case.
+   * Might change on dataset/chat mutation operations.
+   * Should NEVER be compared across different DAOs!
+   */
+  val internalId: Message.InternalId
+  /**
+   * Unique within a chat, serves as a persistent ID when merging with older/newer DB version.
+   * If it's not useful for this purpose, should be empty.
+   */
+  val sourceIdOption: Option[Message.SourceId]
   val time: DateTime
   val fromId: Long
   val textOption: Option[RichText]
+
+  /**
+   * Should return self type, but F-bound polymorphism turns type inference into pain - so no type-level enforcement, unfortunately.
+   * Just make sure subclasses have correct return type.
+   */
+  def withInternalId(internalId: Message.InternalId): Message
 
   /** We can't use "super" on vals/lazy vals, so... */
   protected val plainSearchableMsgString =
@@ -245,16 +270,27 @@ sealed trait Message extends Searchable with WithId {
 }
 
 object Message {
+  sealed trait InternalIdTag
+  type InternalId = Long with InternalIdTag
+
+  sealed trait SourceIdTag
+  type SourceId = Long with SourceIdTag
+
+  val NoInternalId: InternalId = -1L.asInstanceOf[InternalId]
+
   case class Regular(
-      id: Long,
+      internalId: InternalId,
+      sourceIdOption: Option[SourceId],
       time: DateTime,
       editTimeOption: Option[DateTime],
       fromId: Long,
       forwardFromNameOption: Option[String],
-      replyToMessageIdOption: Option[Long],
+      replyToMessageIdOption: Option[SourceId],
       textOption: Option[RichText],
       contentOption: Option[Content]
-  ) extends Message
+  ) extends Message {
+    override def withInternalId(internalId: Message.InternalId): Regular = copy(internalId = internalId)
+  }
 
   sealed trait Service extends Message
 
@@ -264,71 +300,92 @@ object Message {
     }
 
     case class PhoneCall(
-        id: Long,
+        internalId: InternalId,
+        sourceIdOption: Option[SourceId],
         time: DateTime,
         fromId: Long,
         textOption: Option[RichText],
         durationSecOption: Option[Int],
         discardReasonOption: Option[String]
-    ) extends Service
+    ) extends Service {
+      override def withInternalId(internalId: Message.InternalId): PhoneCall = copy(internalId = internalId)
+    }
 
     case class PinMessage(
-        id: Long,
+        internalId: InternalId,
+        sourceIdOption: Option[SourceId],
         time: DateTime,
         fromId: Long,
         textOption: Option[RichText],
-        messageId: Long
-    ) extends Service
+        messageId: SourceId
+    ) extends Service {
+      override def withInternalId(internalId: Message.InternalId): PinMessage = copy(internalId = internalId)
+    }
 
     /** Note: for Telegram, `from...` is not always meaningful */
     case class ClearHistory(
-        id: Long,
+        internalId: InternalId,
+        sourceIdOption: Option[SourceId],
         time: DateTime,
         fromId: Long,
         textOption: Option[RichText]
-    ) extends Service
+    ) extends Service {
+      override def withInternalId(internalId: Message.InternalId): ClearHistory = copy(internalId = internalId)
+    }
 
     case class EditPhoto(
-        id: Long,
+        internalId: InternalId,
+        sourceIdOption: Option[SourceId],
         time: DateTime,
         fromId: Long,
         textOption: Option[RichText],
         pathOption: Option[String],
         widthOption: Option[Int],
         heightOption: Option[Int]
-    ) extends Service
+    ) extends Service {
+      override def withInternalId(internalId: Message.InternalId): EditPhoto = copy(internalId = internalId)
+    }
 
     object Group {
       case class Create(
-          id: Long,
+          internalId: InternalId,
+          sourceIdOption: Option[SourceId],
           time: DateTime,
           fromId: Long,
           textOption: Option[RichText],
           title: String,
           members: Seq[String]
       ) extends MembershipChange {
+        override def withInternalId(internalId: Message.InternalId): Create = copy(internalId = internalId)
+
         override val plainSearchableString =
           (plainSearchableMsgString +: title +: members).mkString(" ").trim
       }
 
       case class InviteMembers(
-          id: Long,
+          internalId: InternalId,
+          sourceIdOption: Option[SourceId],
           time: DateTime,
           fromId: Long,
           textOption: Option[RichText],
           members: Seq[String]
       ) extends MembershipChange {
+        override def withInternalId(internalId: Message.InternalId): InviteMembers = copy(internalId = internalId)
+
         override val plainSearchableString =
           (plainSearchableMsgString +: members).mkString(" ").trim
       }
 
       case class RemoveMembers(
-          id: Long,
+          internalId: InternalId,
+          sourceIdOption: Option[SourceId],
           time: DateTime,
           fromId: Long,
           textOption: Option[RichText],
           members: Seq[String]
       ) extends MembershipChange {
+        override def withInternalId(internalId: Message.InternalId): RemoveMembers = copy(internalId = internalId)
+
         override val plainSearchableString =
           (plainSearchableMsgString +: members).mkString(" ").trim
       }

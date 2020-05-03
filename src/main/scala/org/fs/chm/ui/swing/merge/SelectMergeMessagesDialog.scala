@@ -211,27 +211,29 @@ private object SelectMergeMessagesDialog {
         dao.firstMessages(chat, MaxContinuousMsgsLength + 1)
       }) take MaxContinuousMsgsLength
 
-      if (fetch1.isEmpty) {
-        CxtFetchResult.Continuous(Seq.empty)
-      } else if (firstIdAfterOption.isDefined && (fetch1 exists (_.id >= firstIdAfterVal))) {
-        // Continuous sequence
-        CxtFetchResult.Continuous(fetch1 takeWhile (_.id < firstIdAfterVal))
-      } else {
-        val fetch1Ids = fetch1.map(_.id).toSet
-        val fetch2 = (firstIdAfterOption map { firstIdAfter =>
-          dao.messagesBefore(chat, firstIdAfter, MaxCutoffMsgsPartLength + 1)
-        } getOrElse {
-          dao.lastMessages(chat, MaxCutoffMsgsPartLength)
-        }) dropWhile (m => (m.id <= lastIdBeforeVal) || (fetch1Ids contains m.id)) takeRight MaxCutoffMsgsPartLength
-
-        if (fetch2.isEmpty) {
-          CxtFetchResult.Continuous(fetch1)
-        } else {
-          val subfetch1 = fetch1.take(MaxCutoffMsgsPartLength)
-          val nBetween  = dao.countMessagesBetween(chat, subfetch1.last.id, fetch2.head.id)
-          CxtFetchResult.Discrete(subfetch1, nBetween, fetch2)
-        }
-      }
+      ??? // FIXME
+//      if (fetch1.isEmpty) {
+//        CxtFetchResult.Continuous(Seq.empty)
+//      } else if (firstIdAfterOption.isDefined && (fetch1 exists (_.idOption exists (_ >= firstIdAfterVal)))) {
+//        // Continuous sequence
+//        CxtFetchResult.Continuous(fetch1 takeWhile (m => m.idOption.isDefined && m.idOption.get < firstIdAfterVal))
+//      } else {
+//        val fetch1Ids = fetch1.map(_.id).toSet
+//        val fetch2 = (firstIdAfterOption map { firstIdAfter =>
+//          dao.messagesBefore(chat, firstIdAfter, MaxCutoffMsgsPartLength + 1)
+//        } getOrElse {
+//          dao.lastMessages(chat, MaxCutoffMsgsPartLength)
+//        }) dropWhile (m => (m.id <= lastIdBeforeVal) || (fetch1Ids contains m.id)) takeRight MaxCutoffMsgsPartLength
+//
+//        if (fetch2.isEmpty) {
+//          CxtFetchResult.Continuous(fetch1)
+//        } else {
+//          val subfetch1 = fetch1.take(MaxCutoffMsgsPartLength)
+//          val nBetween  = dao.countMessagesBetween(chat, subfetch1.last.id, fetch2.head.id)
+//          CxtFetchResult.Discrete(subfetch1, nBetween, fetch2)
+//        }
+//      }
+      ???
     }
   }
 

@@ -17,7 +17,7 @@ import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.ChatHistoryMerger
-import org.fs.chm.dao.merge.ChatHistoryMerger._
+//import org.fs.chm.dao.merge.ChatHistoryMerger._
 import org.fs.chm.loader._
 import org.fs.chm.ui.swing.MessagesService._
 import org.fs.chm.ui.swing.general.ChatWithDao
@@ -260,7 +260,7 @@ class MainFrameApp //
         None, { ds =>
           dao.users(ds.uuid).zipWithIndex map {
             case (u, i) =>
-              val pane = new UserDetailsPane(u, dao, false, Some(this))
+              val pane = new UserDetailsPane(dao, u, false, Some(this))
               for (el <- Seq(pane.firstNameC, pane.lastNameC)) {
                 el.innerComponent.foreground = Colors.forIdx(i)
                 el.innerComponent.fontStyle  = Font.Style.Bold
@@ -290,6 +290,7 @@ class MainFrameApp //
   }
 
   def showSelectDatasetsToMergeDialog(): Unit = {
+    /*
     if (loadedDaos.isEmpty) {
       showWarning("Load a database first!")
     } else if (!loadedDaos.exists(_._1.isMutable)) {
@@ -312,12 +313,15 @@ class MainFrameApp //
           }
       }
     }
+     */
+    ???
   }
 
   //
   // Other stuff
   //
 
+  /*
   def mergeDatasets(
       masterDao: H2ChatHistoryDao,
       masterDs: Dataset,
@@ -361,7 +365,7 @@ class MainFrameApp //
       }
     }
   }
-
+*/
   def loadDaoInEDT(dao: ChatHistoryDao, daoToReplaceOption: Option[ChatHistoryDao] = None): Unit = {
     checkEdt()
     MutationLock.synchronized {
@@ -416,37 +420,21 @@ class MainFrameApp //
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     freezeTheWorld()
-    Swing.onEDT { // To release UI lock
-      MutationLock.synchronized {
-        dao.mutable.updateUser(user)
-        chatList.replaceWith(loadedDaos.keys.toSeq)
-      }
-      chatsOuterPanel.revalidate()
-      chatsOuterPanel.repaint()
-      MutationLock.synchronized {
-        // Evict chats containing edited user from cache
-        val chatsToEvict = for {
-          (chat, _) <- loadedDaos(dao)
-          if dao.interlocutors(chat) exists (_.id == user.id)
-        } yield chat
-        chatsToEvict foreach (c => evictFromCache(dao, c))
+    asyncChangeUsers(dao, {
+      dao.mutable.updateUser(user)
+      Seq(user.id)
+    })
+  }
 
-        // Reload currently selected chat
-        val chatItemToReload = for {
-          cwd  <- currentChatOption
-          item <- chatList.innerItems.find(i => i.chat.id == cwd.chat.id && i.chat.dsUuid == cwd.dsUuid)
-        } yield item
-
-        chatItemToReload match {
-          case Some(chatItem) =>
-            // Redo current chat layout
-            chatItem.select()
-          case None =>
-            // No need to do anything
-            unfreezeTheWorld()
-        }
-      }
-    }
+  override def usersMerged(baseUser: User, absorbedUser: User, dao: ChatHistoryDao): Unit = {
+    checkEdt()
+    require(dao.isMutable, "DAO is immutable!")
+    require(baseUser.dsUuid == absorbedUser.dsUuid, "Users are from different datasets!")
+    freezeTheWorld()
+    asyncChangeUsers(dao, {
+      dao.mutable.mergeUsers(baseUser, absorbedUser)
+      Seq(baseUser.id, absorbedUser.id)
+    })
   }
 
   override def deleteChat(cc: ChatWithDao): Unit = {
@@ -487,8 +475,8 @@ class MainFrameApp //
             msgDoc.insert(msgService.renderMessageHtml(cc, m), MessageInsertPosition.Trailing)
           }
           val loadStatus = LoadStatus(
-            firstId      = messages.headOption map (_.id) getOrElse (-1),
-            lastId       = messages.lastOption map (_.id) getOrElse (-1),
+            firstOption  = messages.headOption,
+            lastOption   = messages.lastOption,
             beginReached = messages.size < MsgBatchLoadSize,
             endReached   = true
           )
@@ -506,15 +494,17 @@ class MainFrameApp //
     }
   }
 
-  def tryLoadPreviousMessages(): Unit =
+  def tryLoadPreviousMessages(): Unit = {
+    log.debug("Trying to load previous messages")
     currentChatOption match {
-      case _ if loadMessagesInProgress.get => // NOOP
-      case None                            => // NOOP
+      case _ if loadMessagesInProgress.get => log.debug("Loading messages: Already in progress")
+      case None                            => log.debug("Loading messages: No chat selected")
       case Some(cc) =>
         MutationLock.synchronized {
           msgAreaContainer.caretUpdatesEnabled = false
           val cache      = loadedDaos(cc.dao)(cc.chat)
           val loadStatus = cache.loadStatusOption.get
+          log.debug(s"Loading messages: loadStatus = ${loadStatus}")
           if (!loadStatus.beginReached) {
             freezeTheWorld()
             loadMessagesInProgress set true
@@ -523,14 +513,18 @@ class MainFrameApp //
               MutationLock.synchronized {
                 val (viewPos1, viewSize1) = msgAreaContainer.view.posAndSize
                 msgDoc.insert("<div id=\"loading\"><hr><p> Loading... </p><hr></div>", MessageInsertPosition.Leading)
-                val addedMessages =
-                  cc.dao.messagesBefore(cc.chat, loadStatus.firstId, MsgBatchLoadSize).dropRight(1)
+                assert(loadStatus.firstOption.isDefined)
+                val addedMessages = loadStatus.firstOption match {
+                  case Some(first) => cc.dao.messagesBefore(cc.chat, first, MsgBatchLoadSize + 1).dropRight(1)
+                  case None        => throw new MatchError("Uh-oh, this shouldn't happen!")
+                }
+                log.debug(s"Loading messages: Loaded ${addedMessages.size} previous messages")
                 updateCache(
                   cc.dao,
                   cc.chat,
                   cache.copy(loadStatusOption = Some {
                     loadStatus.copy(
-                      firstId      = addedMessages.headOption map (_.id) getOrElse (-1),
+                      firstOption  = addedMessages.headOption,
                       beginReached = addedMessages.size < MsgBatchLoadSize
                     )
                   })
@@ -546,6 +540,7 @@ class MainFrameApp //
                   val (_, viewSize2) = msgAreaContainer.view.posAndSize
                   val heightDiff     = viewSize2.height - viewSize1.height
                   msgAreaContainer.view.show(viewPos1.x, viewPos1.y + heightDiff)
+                  log.debug("Loading messages: Reloaded message container")
                 }
               }
             }
@@ -558,6 +553,55 @@ class MainFrameApp //
           }
         }
     }
+  }
+
+  /** Asynchronously apply the given change (under mutation lock) and refresh UI to reflect it */
+  def asyncChangeUsers(dao: ChatHistoryDao, applyChangeAndReturnChangedIds: => Seq[Long]): Unit = {
+    Future { // To release UI lock
+      try {
+        val userIds = MutationLock.synchronized {
+          val userIds = applyChangeAndReturnChangedIds
+          Swing.onEDTWait {
+            chatList.replaceWith(loadedDaos.keys.toSeq)
+          }
+          userIds
+        }
+        chatsOuterPanel.revalidate()
+        chatsOuterPanel.repaint()
+        MutationLock.synchronized {
+          // Evict chats containing edited user from cache
+          val chatsToEvict = for {
+            (chat, _) <- loadedDaos(dao)
+            if dao.interlocutors(chat) exists (u => userIds contains u.id)
+          } yield chat
+          chatsToEvict foreach (c => evictFromCache(dao, c))
+
+          // Reload currently selected chat
+          val chatItemToReload = for {
+            cwd  <- currentChatOption
+            item <- chatList.innerItems.find(i => i.chat.id == cwd.chat.id && i.chat.dsUuid == cwd.dsUuid)
+          } yield item
+
+          chatItemToReload match {
+            case Some(chatItem) =>
+              // Redo current chat layout
+              chatItem.select()
+            case None =>
+              // No need to do anything
+              Swing.onEDT {
+                unfreezeTheWorld()
+              }
+          }
+        }
+      } catch {
+        case ex: Exception =>
+          SwingUtils.showError(ex.getMessage)
+          Swing.onEDT {
+            unfreezeTheWorld()
+          }
+      }
+    }
+  }
 
   def updateCache(dao: ChatHistoryDao, chat: Chat, cache: ChatCache): Unit =
     MutationLock.synchronized {
@@ -601,8 +645,8 @@ class MainFrameApp //
   )
 
   private case class LoadStatus(
-      firstId: Long,
-      lastId: Long,
+      firstOption: Option[Message],
+      lastOption: Option[Message],
       beginReached: Boolean,
       endReached: Boolean
   )

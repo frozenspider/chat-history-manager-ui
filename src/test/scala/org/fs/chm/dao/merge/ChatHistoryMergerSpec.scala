@@ -12,7 +12,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.FunSuite
 import org.slf4s.Logging
 import com.github.nscala_time.time.Imports._
-import org.fs.chm.dao.merge.ChatHistoryMerger._
+//import org.fs.chm.dao.merge.ChatHistoryMerger._
 import org.fs.chm.utility.TestUtils._
 
 @RunWith(classOf[org.scalatest.junit.JUnitRunner])
@@ -22,6 +22,7 @@ class ChatHistoryMergerSpec //
     with Logging
     with BeforeAndAfter {
 
+  /*
   val maxId     = (ChatHistoryMerger.BatchSize * 3)
   val maxUserId = 3
   def rndUserId = 1 + rnd.nextInt(maxUserId)
@@ -227,4 +228,6 @@ class ChatHistoryMergerSpec //
       (dao, ds, users, chat)
     }
   }
+
+   */
 }

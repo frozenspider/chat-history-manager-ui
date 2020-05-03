@@ -31,7 +31,7 @@ class SelectMergeUsersDialog(
     new BorderPanel {
       import BorderPanel.Position._
       layout(new Label("Note: New users will me merged regardless")) = North
-      layout(table.wrapInScrollpane())                               = Center
+      layout(table.wrapInScrollpaneAndAdjustWidth())                 = Center
     }
   }
 
@@ -77,7 +77,7 @@ class SelectMergeUsersDialog(
     }
 
     override val renderer = (renderable: ChatRenderable[UserWithDao]) => {
-      val r = new UserDetailsPane(renderable.v.user, renderable.v.dao, false, None)
+      val r = new UserDetailsPane(renderable.v.dao, renderable.v.user, false, None)
       if (!renderable.isSelectable) {
         r.background = Color.WHITE
       } else if (renderable.isCombine) {
