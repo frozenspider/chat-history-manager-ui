@@ -17,7 +17,7 @@ import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.ChatHistoryMerger
-//import org.fs.chm.dao.merge.ChatHistoryMerger._
+import org.fs.chm.dao.merge.ChatHistoryMerger._
 import org.fs.chm.loader._
 import org.fs.chm.ui.swing.MessagesService._
 import org.fs.chm.ui.swing.general.ChatWithDao
@@ -290,7 +290,6 @@ class MainFrameApp //
   }
 
   def showSelectDatasetsToMergeDialog(): Unit = {
-    /*
     if (loadedDaos.isEmpty) {
       showWarning("Load a database first!")
     } else if (!loadedDaos.exists(_._1.isMutable)) {
@@ -313,15 +312,12 @@ class MainFrameApp //
           }
       }
     }
-     */
-    ???
   }
 
   //
   // Other stuff
   //
 
-  /*
   def mergeDatasets(
       masterDao: H2ChatHistoryDao,
       masterDs: Dataset,
@@ -365,7 +361,7 @@ class MainFrameApp //
       }
     }
   }
-*/
+
   def loadDaoInEDT(dao: ChatHistoryDao, daoToReplaceOption: Option[ChatHistoryDao] = None): Unit = {
     checkEdt()
     MutationLock.synchronized {

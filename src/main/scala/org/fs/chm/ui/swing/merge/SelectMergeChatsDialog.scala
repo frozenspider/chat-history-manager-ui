@@ -5,7 +5,7 @@ import java.awt.Color
 import scala.swing._
 
 import org.fs.chm.dao._
-//import org.fs.chm.dao.merge.ChatHistoryMerger._
+import org.fs.chm.dao.merge.ChatHistoryMerger._
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
@@ -18,7 +18,7 @@ class SelectMergeChatsDialog(
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset,
-) /*extends CustomDialog[Seq[ChangedChatMergeOption]] {
+) extends CustomDialog[Seq[ChangedChatMergeOption]] {
   {
     title = "Select chats to merge"
   }
@@ -104,4 +104,3 @@ class SelectMergeChatsDialog(
     }
   }
 }
-*/
