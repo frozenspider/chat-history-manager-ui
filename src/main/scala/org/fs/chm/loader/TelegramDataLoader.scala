@@ -309,6 +309,10 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
         case "strikethrough" =>
           require(values.keys == Set("type", "text"), s"Unexpected strikethrough format: $jo")
           RichText.Strikethrough(values("text").asInstanceOf[String])
+        case "unknown" =>
+          require(values.keys == Set("type", "text"), s"Unexpected unknown format: $jo")
+          // Unknown is rendered as plaintext in telegram
+          RichText.Plain(values("text").asInstanceOf[String])
         case "code" =>
           require(values.keys == Set("type", "text"), s"Unexpected code format: $jo")
           RichText.PrefmtInline(values("text").asInstanceOf[String])
