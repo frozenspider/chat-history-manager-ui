@@ -224,6 +224,12 @@ object RichText {
     override val plainSearchableString = text.trim
   }
 
+  case class Strikethrough(
+      text: String
+  ) extends Element {
+    override val plainSearchableString = text.trim
+  }
+
   case class Link(
       /** Empty text would mean that this link is hidden - but it can still be hidden even if it's not */
       text: String,
@@ -417,6 +423,30 @@ object Message {
 
         override val plainSearchableString =
           (plainSearchableMsgString +: members).mkString(" ").trim
+      }
+
+      case class MigrateFrom(
+          internalId: InternalId,
+          sourceIdOption: Option[SourceId],
+          time: DateTime,
+          fromId: Long,
+          titleOption: Option[String],
+          textOption: Option[RichText]
+      ) extends Service {
+        override def withInternalId(internalId: Message.InternalId): MigrateFrom = copy(internalId = internalId)
+
+        override val plainSearchableString =
+          (plainSearchableMsgString + " " + titleOption.getOrElse("")).trim
+      }
+
+      case class MigrateTo(
+          internalId: InternalId,
+          sourceIdOption: Option[SourceId],
+          time: DateTime,
+          fromId: Long,
+          textOption: Option[RichText]
+      ) extends Service {
+        override def withInternalId(internalId: Message.InternalId): MigrateTo = copy(internalId = internalId)
       }
     }
   }

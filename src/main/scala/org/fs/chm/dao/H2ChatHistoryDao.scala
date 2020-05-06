@@ -882,6 +882,23 @@ class H2ChatHistoryDao(
             textOption     = textOption,
             members        = rm.members
           )
+        case "service_group_migrate_from" =>
+          Message.Service.Group.MigrateFrom(
+            internalId     = rm.internalId,
+            sourceIdOption = rm.sourceIdOption,
+            time           = rm.time,
+            fromId         = rm.fromId,
+            titleOption    = rm.titleOption,
+            textOption     = textOption
+          )
+        case "service_group_migrate_to" =>
+          Message.Service.Group.MigrateTo(
+            internalId     = rm.internalId,
+            sourceIdOption = rm.sourceIdOption,
+            time           = rm.time,
+            fromId         = rm.fromId,
+            textOption     = textOption
+          )
       }
     }
 
@@ -893,6 +910,8 @@ class H2ChatHistoryDao(
           RichText.Bold(text = r.text)
         case "italic" =>
           RichText.Italic(text = r.text)
+        case "strikethrough" =>
+          RichText.Strikethrough(text = r.text)
         case "link" =>
           RichText.Link(text = r.text, href = r.hrefOption.get, hidden = r.hiddenOption.get)
         case "prefmt_inline" =>
@@ -1047,6 +1066,15 @@ class H2ChatHistoryDao(
             messageType = "service_group_remove_members",
             members     = m.members
           ) -> None
+        case m: Message.Service.Group.MigrateFrom =>
+          template.copy(
+            messageType = "service_group_migrate_from",
+            titleOption = m.titleOption
+          ) -> None
+        case m: Message.Service.Group.MigrateTo =>
+          template.copy(
+            messageType = "service_group_migrate_to",
+          ) -> None
       }
       (rawMessage, rawContentOption, rawRichTextEls)
     }
@@ -1061,9 +1089,10 @@ class H2ChatHistoryDao(
           languageOption = None
         )
         el match {
-          case el: RichText.Plain  => template.copy(elementType = "plain")
-          case el: RichText.Bold   => template.copy(elementType = "bold")
-          case el: RichText.Italic => template.copy(elementType = "italic")
+          case el: RichText.Plain         => template.copy(elementType = "plain")
+          case el: RichText.Bold          => template.copy(elementType = "bold")
+          case el: RichText.Italic        => template.copy(elementType = "italic")
+          case el: RichText.Strikethrough => template.copy(elementType = "strikethrough")
           case el: RichText.Link =>
             template.copy(
               elementType  = "link",
