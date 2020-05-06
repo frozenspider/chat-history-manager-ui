@@ -46,25 +46,31 @@ class ChatHistoryMerger(
     import IterationState._
     def mismatchOptionAfterConflictEnd(state: StateInProgress): Option[Mismatch] = {
       state match {
-        case AdditionInProgress(prevMasterMsgOption, startSlaveMsg) =>
+        case AdditionInProgress(prevMasterMsgOption, prevSlaveMsgOption, startSlaveMsg) =>
           assert(cxt.prevMm == prevMasterMsgOption) // Master stream hasn't advanced
           assert(cxt.prevSm.isDefined)
           Some(
             Mismatch.Addition(
               prevMasterMsgOption = prevMasterMsgOption,
               nextMasterMsgOption = cxt.mmStream.headOption,
-              slaveMsgs           = (startSlaveMsg, cxt.prevSm.get)
+              prevSlaveMsgOption  = prevSlaveMsgOption,
+              slaveMsgs           = (startSlaveMsg, cxt.prevSm.get),
+              nextSlaveMsgOption  = cxt.smStream.headOption
             )
           )
-        case ConflictInProgress(startMasterMsg, startSlaveMsg) =>
+        case ConflictInProgress(prevMasterMsgOption, startMasterMsg, prevSlaveMsgOption, startSlaveMsg) =>
           assert(cxt.prevMm.isDefined && cxt.prevSm.isDefined)
           Some(
             Mismatch.Conflict(
-              masterMsgs = (startMasterMsg, cxt.prevMm.get),
-              slaveMsgs  = (startSlaveMsg, cxt.prevSm.get)
+              prevMasterMsgOption = prevMasterMsgOption,
+              masterMsgs          = (startMasterMsg, cxt.prevMm.get),
+              nextMasterMsgOption = cxt.mmStream.headOption,
+              prevSlaveMsgOption  = prevSlaveMsgOption,
+              slaveMsgs           = (startSlaveMsg, cxt.prevSm.get),
+              nextSlaveMsgOption  = cxt.smStream.headOption
             )
           )
-        case RetentionInProgress(_, prevSlaveMsgOption) =>
+        case RetentionInProgress(_, _, prevSlaveMsgOption) =>
           assert(cxt.prevSm == prevSlaveMsgOption) // Slave stream hasn't advanced
           // We don't treat retention as a mismatch
           None
@@ -93,23 +99,23 @@ class ChatHistoryMerger(
       case (Some(mm), Some(sm), NoState) if mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption =>
         // Conflict started
         // (Conflicts are only detectable if data source supply source IDs)
-        val state2 = ConflictInProgress(mm, sm)
+        val state2 = ConflictInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
         iterate(cxt.advanceBoth(), state2, onMismatch)
       case (_, Some(sm), NoState) if cxt.cmpMasterSlave() > 0 =>
         // Addition started
-        val state2 = AdditionInProgress(cxt.prevMm, sm)
+        val state2 = AdditionInProgress(cxt.prevMm, cxt.prevSm, sm)
         iterate(cxt.advanceSlave(), state2, onMismatch)
       case (Some(mm), _, NoState) if cxt.cmpMasterSlave() < 0 =>
         // Retention started
-        val state2 = RetentionInProgress(mm, cxt.prevSm)
+        val state2 = RetentionInProgress(cxt.prevMm, mm, cxt.prevSm)
         iterate(cxt.advanceMaster(), state2, onMismatch)
 
       //
       // AdditionInProgress
       //
 
-      case (_, Some(sm), AdditionInProgress(prevMasterMsgOption, _))
-          if prevMasterMsgOption == cxt.prevMm && cxt.cmpMasterSlave() > 0 =>
+      case (_, Some(sm), state: AdditionInProgress)
+          if state.prevMasterMsgOption == cxt.prevMm && cxt.cmpMasterSlave() > 0 =>
         // Addition continues
         iterate(cxt.advanceSlave(), state, onMismatch)
       case (_, _, state: AdditionInProgress) =>
@@ -122,8 +128,8 @@ class ChatHistoryMerger(
       // RetentionInProgress
       //
 
-      case (Some(mm), _, RetentionInProgress(_, prevSlaveMsg))
-          if (cxt.prevSm contains prevSlaveMsg) && cxt.cmpMasterSlave() < 0 =>
+      case (Some(mm), _, RetentionInProgress(_, _, prevSlaveMsgOption))
+          if (cxt.prevSm == prevSlaveMsgOption) && cxt.cmpMasterSlave() < 0 =>
         // Retention continues
         iterate(cxt.advanceMaster(), state, onMismatch)
       case (_, _, state: RetentionInProgress) =>
@@ -223,14 +229,18 @@ class ChatHistoryMerger(
     sealed trait StateInProgress extends IterationState
     case class AdditionInProgress(
         prevMasterMsgOption: Option[TaggedMessage.M],
+        prevSlaveMsgOption: Option[TaggedMessage.S],
         startSlaveMsg: TaggedMessage.S
     ) extends StateInProgress
     case class RetentionInProgress(
+        prevMasterMsgOption: Option[TaggedMessage.M],
         startMasterMsg: TaggedMessage.M,
         prevSlaveMsgOption: Option[TaggedMessage.S]
     ) extends StateInProgress
     case class ConflictInProgress(
+        prevMasterMsgOption: Option[TaggedMessage.M],
         startMasterMsg: TaggedMessage.M,
+        prevSlaveMsgOption: Option[TaggedMessage.S],
         startSlaveMsg: TaggedMessage.S
     ) extends StateInProgress
   }
@@ -260,26 +270,37 @@ object ChatHistoryMerger {
   }
 
   sealed trait Mismatch {
+    def prevMasterMsgOption: Option[TaggedMessage.M]
     def firstMasterMsgOption: Option[TaggedMessage.M]
     def lastMasterMsgOption: Option[TaggedMessage.M]
-    def slaveMsgs: (TaggedMessage.S, TaggedMessage.S)
+    def nextMasterMsgOption: Option[TaggedMessage.M]
+    protected def slaveMsgs: (TaggedMessage.S, TaggedMessage.S)
+    def prevSlaveMsgOption: Option[TaggedMessage.S]
     def firstSlaveMsg: TaggedMessage.S = slaveMsgs._1
     def lastSlaveMsg:  TaggedMessage.S = slaveMsgs._2
+    def nextSlaveMsgOption: Option[TaggedMessage.S]
   }
   object Mismatch {
     case class Addition(
         prevMasterMsgOption: Option[TaggedMessage.M],
         nextMasterMsgOption: Option[TaggedMessage.M],
+        prevSlaveMsgOption: Option[TaggedMessage.S],
         /** First and last */
-        slaveMsgs: (TaggedMessage.S, TaggedMessage.S)
+        slaveMsgs: (TaggedMessage.S, TaggedMessage.S),
+        nextSlaveMsgOption: Option[TaggedMessage.S]
     ) extends Mismatch {
-      override def firstMasterMsgOption = prevMasterMsgOption
-      override def lastMasterMsgOption = nextMasterMsgOption
+      override def firstMasterMsgOption = None
+      override def lastMasterMsgOption = None
     }
 
     case class Conflict(
+        prevMasterMsgOption: Option[TaggedMessage.M],
         masterMsgs: (TaggedMessage.M, TaggedMessage.M),
-        slaveMsgs: (TaggedMessage.S, TaggedMessage.S)
+        nextMasterMsgOption: Option[TaggedMessage.M],
+        prevSlaveMsgOption: Option[TaggedMessage.S],
+        /** First and last */
+        slaveMsgs: (TaggedMessage.S, TaggedMessage.S),
+        nextSlaveMsgOption: Option[TaggedMessage.S]
     ) extends Mismatch {
       def firstMasterMsg: TaggedMessage.M = masterMsgs._1
       def lastMasterMsg:  TaggedMessage.M = masterMsgs._2

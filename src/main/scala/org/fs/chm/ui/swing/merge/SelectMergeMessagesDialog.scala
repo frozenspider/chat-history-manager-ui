@@ -78,7 +78,7 @@ class SelectMergeMessagesDialog(
         val slaveMessages = slaveDao
           .messagesBetween(slaveChat, mismatch.firstSlaveMsg, mismatch.lastSlaveMsg) map Right.apply
         mismatch match {
-          case Mismatch.Addition(_, _, _) =>
+          case mismatch: Mismatch.Addition =>
             RowData.InSlaveOnly(RenderableMismatch(Some(mismatch), slaveMessages, slaveCwd))
           case mismatch: Mismatch.Conflict =>
             val masterMessages = masterDao
@@ -95,25 +95,43 @@ class SelectMergeMessagesDialog(
 
       val acc = ArrayBuffer.empty[RowData[RenderableMismatch]]
 
-      val masterCxtBefore = masterCxtFetcher(None, mismatches.head.firstMasterMsgOption)
-      val slaveCxtBefore = slaveCxtFetcher(None, Some(mismatches.head.firstSlaveMsg))
+      val masterCxtBefore = masterCxtFetcher(None, mismatches.head.prevMasterMsgOption)
+      val slaveCxtBefore = slaveCxtFetcher(None, mismatches.head.prevSlaveMsgOption)
       cxtToRowDataOption(masterCxtBefore, slaveCxtBefore) foreach (acc += _)
 
       if (mismatches.size >= 2) {
         // Display message with its following context
         mismatches.sliding(2).foreach {
           case Seq(currMismatch, nextMismatch) =>
+            assert(currMismatch.nextSlaveMsgOption.isDefined)
+
             val current = messageToRowData(currMismatch)
             acc += current
 
-            val masterCxtAfter = masterCxtFetcher(
-              currMismatch.lastMasterMsgOption,
-              nextMismatch.firstMasterMsgOption
-            )
-            val slaveCxtAfter = slaveCxtFetcher(
-              Some(currMismatch.lastSlaveMsg),
-              Some(nextMismatch.firstSlaveMsg)
-            )
+            val masterCxtAfter =
+              if (// Addition immediately followed by conflict
+                  currMismatch.prevMasterMsgOption == nextMismatch.prevMasterMsgOption ||
+                  // Conflict immediately followed by addition
+                  currMismatch.nextMasterMsgOption == nextMismatch.nextMasterMsgOption) {
+                CxtFetchResult.Continuous(Seq.empty)
+              } else {
+                masterCxtFetcher(
+                  currMismatch.nextMasterMsgOption,
+                  nextMismatch.prevMasterMsgOption
+                )
+              }
+
+            val slaveCxtAfter =
+              if (// One block immediately followed by the other
+                  currMismatch.nextSlaveMsgOption contains nextMismatch.firstSlaveMsg) {
+                CxtFetchResult.Continuous(Seq.empty)
+              } else {
+                slaveCxtFetcher(
+                  currMismatch.nextSlaveMsgOption,
+                  nextMismatch.prevSlaveMsgOption
+                )
+              }
+
             cxtToRowDataOption(masterCxtAfter, slaveCxtAfter) foreach (acc += _)
         }
       }
@@ -122,14 +140,15 @@ class SelectMergeMessagesDialog(
       val current = messageToRowData(mismatches.last)
       acc += current
 
-      val masterCxtAfter = masterCxtFetcher(mismatches.last.lastMasterMsgOption, None)
-      val slaveCxtAfter = slaveCxtFetcher(Some(mismatches.last.lastSlaveMsg), None)
+      val masterCxtAfter = masterCxtFetcher(mismatches.last.nextMasterMsgOption, None)
+      val slaveCxtAfter = slaveCxtFetcher(mismatches.last.nextSlaveMsgOption, None)
       cxtToRowDataOption(masterCxtAfter, slaveCxtAfter) foreach (acc += _)
 
       acc.toIndexedSeq
     }
 
     override val renderer = (renderable: ChatRenderable[RenderableMismatch]) => {
+      // FIXME: Figure out what to do with a shitty layout!
       val msgAreaContainer = new MessagesAreaContainer(htmlKit)
 //      msgAreaContainer.textPane.peer.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.box(true))
       val msgDoc = msgService.createStubDoc
@@ -200,27 +219,28 @@ private object SelectMergeMessagesDialog {
     val cacheLock = new Object
 
     def apply(
-        lastBeforeOption: Option[FirstMsg],
-        firstAfterOption: Option[LastMsg]
+        firstOption: Option[FirstMsg],
+        lastOption: Option[LastMsg]
     ): CxtFetchResult = {
-      if (lastBeforeOption.isEmpty && firstAfterOption.isEmpty) {
+      if (firstOption.isEmpty && lastOption.isEmpty) {
         CxtFetchResult.Continuous(Seq.empty)
       } else {
-        val fetch1 = fetchMsgsAfterExc(lastBeforeOption, MaxContinuousMsgsLength)
+        val fetch1 = fetchMsgsAfterInc(firstOption, MaxContinuousMsgsLength)
 
         if (fetch1.isEmpty) {
           CxtFetchResult.Continuous(Seq.empty)
-        } else if (firstAfterOption.isDefined && (fetch1 contains firstAfterOption.get)) {
+        } else if (lastOption.isDefined && (fetch1 contains lastOption.get)) {
           // Continuous sequence
-          CxtFetchResult.Continuous(fetch1 takeWhile (_ != firstAfterOption.get))
+          CxtFetchResult.Continuous(fetch1 dropRightWhile (_ != lastOption.get))
         } else {
           val subfetch1 = fetch1.take(MaxCutoffMsgsPartLength)
           val subfetch1Set = subfetch1.toSet
-          val fetch2 = fetchMsgsBeforeExc(firstAfterOption, MaxCutoffMsgsPartLength).dropWhile { m =>
+          val fetch2 = fetchMsgsBeforeInc(lastOption, MaxCutoffMsgsPartLength).dropWhile { m =>
             (subfetch1Set contains m) || m.time < subfetch1.last.time
           }
 
           if (fetch2.isEmpty) {
+            assert(lastOption.isEmpty)
             CxtFetchResult.Continuous(fetch1)
           } else {
             val nBetween = dao.countMessagesBetween(chat, subfetch1.last, fetch2.head)
@@ -230,17 +250,17 @@ private object SelectMergeMessagesDialog {
       }
     }
 
-    private def fetchMsgsAfterExc(lastBeforeOption: Option[FirstMsg], howMany: Int): Seq[Message] = {
-      lastBeforeOption map { lastBefore =>
-        dao.messagesAfter(chat, lastBefore, howMany + 1).drop(1)
+    private def fetchMsgsAfterInc(firstOption: Option[FirstMsg], howMany: Int): Seq[Message] = {
+      firstOption map { first =>
+        dao.messagesAfter(chat, first, howMany)
       } getOrElse {
         dao.firstMessages(chat, howMany)
       }
     }
 
-    private def fetchMsgsBeforeExc(firstAfterOption: Option[LastMsg], howMany: Int): Seq[Message] = {
-      firstAfterOption map { firstAfter =>
-        dao.messagesBefore(chat, firstAfter, howMany + 1).dropRight(1)
+    private def fetchMsgsBeforeInc(lastOption: Option[LastMsg], howMany: Int): Seq[Message] = {
+      lastOption map { last =>
+        dao.messagesBefore(chat, last, howMany)
       } getOrElse {
         dao.lastMessages(chat, howMany)
       }
@@ -266,17 +286,25 @@ private object SelectMergeMessagesDialog {
     val msgs = (0 to 9) map (id => createRegularMessage(id, (id % numUsers) + 1))
 
     val (mMsgs, sMsgs) = {
-      // Addtion before first
-      val mMsgs = msgs filter (Seq(4, 5) contains _.sourceIdOption.get)
-      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.sourceIdOption.get)
+//      // Addtion before first
+//      val mMsgs = msgs filter (Seq(4, 5) contains _.sourceIdOption.get)
+//      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.sourceIdOption.get)
 
 //      // Conflicts
 //      val mMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.sourceIdOption.get)
 //      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.sourceIdOption.get)
 
+//      // Addition + conflict + addition, has before and after
+//      val mMsgs = msgs filter (Seq(1, 3, 5) contains _.sourceIdOption.get)
+//      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.sourceIdOption.get)
+
+      // Addition + conflict + addition, no before and after
+      val mMsgs = msgs filter (Seq(3) contains _.sourceIdOption.get)
+      val sMsgs = msgs filter (Seq(2, 3, 4) contains _.sourceIdOption.get)
+
 //      // Master had no messages
 //      val mMsgs = msgs filter (Seq() contains _.sourceIdOption.get)
-//      val sMsgs = msgs filter (Seq(0, 1, 2, 3, 4, 5) contains _.sourceIdOption.get)
+//      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.sourceIdOption.get)
 
       (mMsgs, sMsgs)
     }
@@ -287,28 +315,88 @@ private object SelectMergeMessagesDialog {
     val (_, _, sChat, sMsgsI) = getSimpleDaoEntities(sDao)
 
     val mismatches = IndexedSeq(
-      // Addtion before first
-      Mismatch.Addition(
-        prevMasterMsgOption = None,
-        nextMasterMsgOption = Some(mMsgsI.bySrcId(4)),
-        slaveMsgs           = (sMsgsI.bySrcId(1), sMsgsI.bySrcId(3))
-      )
+//      // Addtion before first
+//      Mismatch.Addition(
+//        prevMasterMsgOption = None,
+//        nextMasterMsgOption = Some(mMsgsI.bySrcId(4)),
+//        prevSlaveMsgOption  = None,
+//        slaveMsgs           = (sMsgsI.bySrcId(1), sMsgsI.bySrcId(3)),
+//        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(4))
+//      )
 
 //      // Conflicts
 //      Mismatch.Conflict(
-//        masterMsgs = (mMsgsI.bySrcId(2), mMsgsI.bySrcId(3)),
-//        slaveMsgs  = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(3))
+//        prevMasterMsgOption = Some(mMsgsI.bySrcId(1)),
+//        masterMsgs          = (mMsgsI.bySrcId(2), mMsgsI.bySrcId(2)),
+//        nextMasterMsgOption = Some(mMsgsI.bySrcId(3)),
+//        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(1)),
+//        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(2)),
+//        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(3))
 //      ),
 //      Mismatch.Conflict(
-//        masterMsgs = (mMsgsI.bySrcId(4), mMsgsI.bySrcId(5)),
-//        slaveMsgs  = (sMsgsI.bySrcId(4), sMsgsI.bySrcId(5))
+//        prevMasterMsgOption = Some(mMsgsI.bySrcId(3)),
+//        masterMsgs          = (mMsgsI.bySrcId(4), mMsgsI.bySrcId(5)),
+//        nextMasterMsgOption = None,
+//        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(3)),
+//        slaveMsgs           = (sMsgsI.bySrcId(4), sMsgsI.bySrcId(5)),
+//        nextSlaveMsgOption  = None
 //      )
+
+//      // Addition + conflict + addition, has before and after
+//      Mismatch.Addition(
+//        prevMasterMsgOption = Some(mMsgsI.bySrcId(1)),
+//        nextMasterMsgOption = Some(mMsgsI.bySrcId(3)),
+//        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(1)),
+//        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(2)),
+//        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(3))
+//      ),
+//      Mismatch.Conflict(
+//        prevMasterMsgOption = Some(mMsgsI.bySrcId(1)),
+//        masterMsgs          = (mMsgsI.bySrcId(3), mMsgsI.bySrcId(3)),
+//        nextMasterMsgOption = Some(mMsgsI.bySrcId(5)),
+//        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(2)),
+//        slaveMsgs           = (sMsgsI.bySrcId(3), sMsgsI.bySrcId(3)),
+//        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(4))
+//      ),
+//      Mismatch.Addition(
+//        prevMasterMsgOption = Some(mMsgsI.bySrcId(3)),
+//        nextMasterMsgOption = Some(mMsgsI.bySrcId(5)),
+//        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(3)),
+//        slaveMsgs           = (sMsgsI.bySrcId(4), sMsgsI.bySrcId(4)),
+//        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(5))
+//      )
+
+      // Addition + conflict + addition, no before and after
+      Mismatch.Addition(
+        prevMasterMsgOption = None,
+        nextMasterMsgOption = Some(mMsgsI.bySrcId(3)),
+        prevSlaveMsgOption  = None,
+        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(2)),
+        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(3))
+      ),
+      Mismatch.Conflict(
+        prevMasterMsgOption = None,
+        masterMsgs          = (mMsgsI.bySrcId(3), mMsgsI.bySrcId(3)),
+        nextMasterMsgOption = None,
+        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(2)),
+        slaveMsgs           = (sMsgsI.bySrcId(3), sMsgsI.bySrcId(3)),
+        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(4))
+      ),
+      Mismatch.Addition(
+        prevMasterMsgOption = Some(mMsgsI.bySrcId(3)),
+        nextMasterMsgOption = None,
+        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(3)),
+        slaveMsgs           = (sMsgsI.bySrcId(4), sMsgsI.bySrcId(4)),
+        nextSlaveMsgOption  = None
+      )
 
 //      // Master had no messages
 //      Mismatch.Addition(
 //        prevMasterMsgOption = None,
 //        nextMasterMsgOption = None,
-//        slaveMsgs           = (sMsgsI.bySrcId(0), sMsgsI.bySrcId(5))
+//        prevSlaveMsgOption  = None,
+//        slaveMsgs           = (sMsgsI.bySrcId(1), sMsgsI.bySrcId(5)),
+//        nextSlaveMsgOption  = None
 //      )
     )
 
