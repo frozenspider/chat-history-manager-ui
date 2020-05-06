@@ -217,12 +217,13 @@ class MessagesService(htmlKit: HTMLEditorKit) {
 
     private def renderComponent(rtel: RichText.Element): String = {
       rtel match {
-        case rtel: RichText.Plain        => rtel.text replace ("\n", "<br>")
-        case rtel: RichText.Bold         => s"<b>${rtel.text replace ("\n", "<br>")}</b>"
-        case rtel: RichText.Italic       => s"<i>${rtel.text replace ("\n", "<br>")}</i>"
-        case rtel: RichText.Link         => renderLink(rtel)
-        case rtel: RichText.PrefmtBlock  => s"""<pre>${rtel.text}</pre>"""
-        case rtel: RichText.PrefmtInline => s"""<code>${rtel.text}</code>"""
+        case rtel: RichText.Plain         => rtel.text replace ("\n", "<br>")
+        case rtel: RichText.Bold          => s"<b>${rtel.text replace ("\n", "<br>")}</b>"
+        case rtel: RichText.Italic        => s"<i>${rtel.text replace ("\n", "<br>")}</i>"
+        case rtel: RichText.Strikethrough => s"<strike>${rtel.text replace ("\n", "<br>")}</strike>"
+        case rtel: RichText.Link          => renderLink(rtel)
+        case rtel: RichText.PrefmtBlock   => s"""<pre>${rtel.text}</pre>"""
+        case rtel: RichText.PrefmtInline  => s"""<code>${rtel.text}</code>"""
       }
     }
 

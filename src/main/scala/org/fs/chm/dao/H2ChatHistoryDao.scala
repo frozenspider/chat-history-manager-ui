@@ -893,6 +893,8 @@ class H2ChatHistoryDao(
           RichText.Bold(text = r.text)
         case "italic" =>
           RichText.Italic(text = r.text)
+        case "strikethrough" =>
+          RichText.Strikethrough(text = r.text)
         case "link" =>
           RichText.Link(text = r.text, href = r.hrefOption.get, hidden = r.hiddenOption.get)
         case "prefmt_inline" =>
@@ -1061,9 +1063,10 @@ class H2ChatHistoryDao(
           languageOption = None
         )
         el match {
-          case el: RichText.Plain  => template.copy(elementType = "plain")
-          case el: RichText.Bold   => template.copy(elementType = "bold")
-          case el: RichText.Italic => template.copy(elementType = "italic")
+          case el: RichText.Plain         => template.copy(elementType = "plain")
+          case el: RichText.Bold          => template.copy(elementType = "bold")
+          case el: RichText.Italic        => template.copy(elementType = "italic")
+          case el: RichText.Strikethrough => template.copy(elementType = "strikethrough")
           case el: RichText.Link =>
             template.copy(
               elementType  = "link",

@@ -202,6 +202,12 @@ object RichText {
     override val plainSearchableString = text.trim
   }
 
+  case class Strikethrough(
+      text: String
+  ) extends Element {
+    override val plainSearchableString = text.trim
+  }
+
   case class Link(
       /** Empty text would mean that this link is hidden - but it can still be hidden even if it's not */
       text: String,

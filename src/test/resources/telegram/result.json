@@ -266,6 +266,18 @@
         "text": "Уважаемый(ая) NNNNNN MMMMMMM ,\nОплата ГУП ГАВС НАК \"Узбекистон хаво йуллари\" 86815 сум за авиабилет номер 1231231231231 успешно произведена.\nSchet UZCARD (EOPC-0000). Номер платежа 987654321. Дата 19901231.",
         "language": ""
        },
+       {
+        "type": "bold",
+        "text": "bold text"
+       },
+       {
+        "type": "italic",
+        "text": "italic text"
+       },
+       {
+        "type": "strikethrough",
+        "text": "strikethrough text"
+       },
        ""
       ]
      },
