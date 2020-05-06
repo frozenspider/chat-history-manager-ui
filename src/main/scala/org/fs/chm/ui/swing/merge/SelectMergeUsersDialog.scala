@@ -19,12 +19,17 @@ class SelectMergeUsersDialog(
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset,
 ) extends CustomDialog[ListMap[User, User]] {
+  private lazy val originalTitle = "Select users to merge"
+
   {
-    title = "Select users to merge"
+    title = originalTitle
   }
 
+  private lazy val models =  new Models(masterDao.users(masterDs.uuid), slaveDao.users(slaveDs.uuid))
+
   private lazy val table = new SelectMergesTable[UserWithDao, (User, User)](
-    new Models(masterDao.users(masterDs.uuid), slaveDao.users(slaveDs.uuid))
+    models,
+    (() => title = s"$originalTitle (${models.currentlySelectedCount} of ${models.totalSelectableCount})")
   )
 
   override protected lazy val dialogComponent: Component = {
@@ -81,9 +86,9 @@ class SelectMergeUsersDialog(
       if (!renderable.isSelectable) {
         r.background = Color.WHITE
       } else if (renderable.isCombine) {
-        r.background = Color.YELLOW
+        r.background = Colors.CombineBg
       } else if (renderable.isAdd) {
-        r.background = Color.GREEN
+        r.background = Colors.AdditionBg
       } else {
         r.background = Color.WHITE
       }

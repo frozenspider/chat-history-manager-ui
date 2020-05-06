@@ -19,12 +19,17 @@ class SelectMergeChatsDialog(
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset,
 ) extends CustomDialog[Seq[ChangedChatMergeOption]] {
+  private lazy val originalTitle = "Select chats to merge"
+
   {
-    title = "Select chats to merge"
+    title = originalTitle
   }
 
+  private lazy val models = new Models(masterDao.chats(masterDs.uuid), slaveDao.chats(slaveDs.uuid))
+
   private lazy val table = new SelectMergesTable[ChatWithDao, ChangedChatMergeOption](
-    new Models(masterDao.chats(masterDs.uuid), slaveDao.chats(slaveDs.uuid))
+    models,
+    (() => title = s"$originalTitle (${models.currentlySelectedCount} of ${models.totalSelectableCount})")
   )
 
   override protected lazy val dialogComponent: Component = {
@@ -79,9 +84,9 @@ class SelectMergeChatsDialog(
     override val renderer = (renderable: ChatRenderable[ChatWithDao]) => {
       val r = new ChatListItem(renderable.v, None, None)
       if (renderable.isCombine) {
-        r.inactiveColor = Color.YELLOW
+        r.inactiveColor = Colors.CombineBg
       } else if (renderable.isAdd) {
-        r.inactiveColor = Color.GREEN
+        r.inactiveColor = Colors.AdditionBg
       }
       r.markDeselected()
       r

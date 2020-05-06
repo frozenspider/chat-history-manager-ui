@@ -30,11 +30,18 @@ class SelectMergeMessagesDialog(
 ) extends CustomDialog[Map[Mismatch, MismatchResolution]] {
   import SelectMergeMessagesDialog._
 
+  private lazy val originalTitle = "Select messages to merge"
+
   {
-    title = "Select messages to merge"
+    title = originalTitle
   }
 
-  private lazy val table = new SelectMergesTable[RenderableMismatch, (Mismatch, MismatchResolution)](new Models)
+  private lazy val models = new Models
+
+  private lazy val table = new SelectMergesTable[RenderableMismatch, (Mismatch, MismatchResolution)](
+    models,
+    (() => title = s"$originalTitle (${models.currentlySelectedCount} of ${models.totalSelectableCount})")
+  )
 
   override protected lazy val dialogComponent: Component = {
     table.wrapInScrollpane()
