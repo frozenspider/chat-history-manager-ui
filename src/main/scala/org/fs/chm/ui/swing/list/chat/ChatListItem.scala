@@ -177,6 +177,8 @@ class ChatListItem(
       case _: Message.Service.Group.Create        => "(group created)"
       case _: Message.Service.Group.InviteMembers => "(invited members)"
       case _: Message.Service.Group.RemoveMembers => "(removed members)"
+      case _: Message.Service.Group.MigrateFrom   => "(migrated from group)"
+      case _: Message.Service.Group.MigrateTo     => "(migrated to group)"
     }
     prefix + text.take(50)
   }

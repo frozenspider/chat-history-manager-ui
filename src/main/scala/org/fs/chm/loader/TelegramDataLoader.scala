@@ -259,6 +259,23 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
             members        = getCheckedField[Seq[String]](jv, "members"),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
+        case "migrate_from_group" =>
+          Message.Service.Group.MigrateFrom(
+            internalId     = Message.NoInternalId,
+            sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
+            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId         = getCheckedField[Long](jv, "actor_id"),
+            titleOption    = Some(getCheckedField[String](jv, "title")),
+            textOption     = RichTextParser.parseRichTextOption(jv)
+          )
+        case "migrate_to_supergroup" =>
+          Message.Service.Group.MigrateTo(
+            internalId     = Message.NoInternalId,
+            sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
+            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId         = getCheckedField[Long](jv, "actor_id"),
+            textOption     = RichTextParser.parseRichTextOption(jv)
+          )
         case other =>
           throw new IllegalArgumentException(
             s"Don't know how to parse service message for action '$other' for ${jv.toString.take(500)}")
@@ -272,13 +289,6 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
       jText match {
         case arr: JArray =>
           val elements = arr.extract[Seq[JValue]] map parseElement
-          // Make sure there no more than one hidden link
-          val links = elements collect {
-            case l: RichText.Link => l
-          }
-          if (links.size > 1) {
-            require(links.tail forall (!_.hidden), s"Only the first link can be hidden! ${jv}")
-          }
           Some(RichText(elements))
         case JString("") =>
           None
@@ -494,9 +504,10 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
         id         = getCheckedField[Long](jv, "id"),
         nameOption = getStringOpt(jv, "name", true),
         tpe = getCheckedField[String](jv, "type") match {
-          case "personal_chat" => ChatType.Personal
-          case "private_group" => ChatType.PrivateGroup
-          case s               => throw new IllegalArgumentException("Illegal format, unknown chat type '$s'")
+          case "personal_chat"      => ChatType.Personal
+          case "private_group"      => ChatType.PrivateGroup
+          case "private_supergroup" => ChatType.PrivateGroup
+          case s                    => throw new IllegalArgumentException(s"Illegal format, unknown chat type '$s'")
         },
         imgPathOption = None,
         msgCount      = msgCount

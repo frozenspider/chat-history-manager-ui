@@ -395,6 +395,30 @@ object Message {
         override val plainSearchableString =
           (plainSearchableMsgString +: members).mkString(" ").trim
       }
+
+      case class MigrateFrom(
+          internalId: InternalId,
+          sourceIdOption: Option[SourceId],
+          time: DateTime,
+          fromId: Long,
+          titleOption: Option[String],
+          textOption: Option[RichText]
+      ) extends Service {
+        override def withInternalId(internalId: Message.InternalId): MigrateFrom = copy(internalId = internalId)
+
+        override val plainSearchableString =
+          (plainSearchableMsgString + " " + titleOption.getOrElse("")).trim
+      }
+
+      case class MigrateTo(
+          internalId: InternalId,
+          sourceIdOption: Option[SourceId],
+          time: DateTime,
+          fromId: Long,
+          textOption: Option[RichText]
+      ) extends Service {
+        override def withInternalId(internalId: Message.InternalId): MigrateTo = copy(internalId = internalId)
+      }
     }
   }
 }

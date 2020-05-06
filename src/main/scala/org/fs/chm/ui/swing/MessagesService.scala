@@ -168,11 +168,13 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     def render(cc: ChatWithDao, sm: Message.Service): String = {
       val textHtmlOption = renderTextOption(sm.textOption)
       val content = sm match {
-        case sm: Message.Service.PhoneCall        => renderPhoneCall(sm)
-        case sm: Message.Service.PinMessage       => "Pinned message" + renderSourceMessage(cc, sm.messageId)
-        case sm: Message.Service.MembershipChange => renderMembershipChangeMessage(cc, sm)
-        case sm: Message.Service.ClearHistory     => s"History cleared"
-        case sm: Message.Service.EditPhoto        => renderEditPhotoMessage(sm, cc.dao, cc.dsUuid)
+        case sm: Message.Service.PhoneCall         => renderPhoneCall(sm)
+        case sm: Message.Service.PinMessage        => "Pinned message" + renderSourceMessage(cc, sm.messageId)
+        case sm: Message.Service.MembershipChange  => renderMembershipChangeMessage(cc, sm)
+        case sm: Message.Service.ClearHistory      => s"History cleared"
+        case sm: Message.Service.EditPhoto         => renderEditPhotoMessage(sm, cc.dao, cc.dsUuid)
+        case sm: Message.Service.Group.MigrateFrom => renderMigratedFrom(sm)
+        case sm: Message.Service.Group.MigrateTo   => "Migrated to another group"
       }
       Seq(Some(s"""<div class="system-message">$content</div>"""), textHtmlOption).yieldDefined.mkString
     }
@@ -188,6 +190,10 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     private def renderEditPhotoMessage(sm: Service.EditPhoto, dao: ChatHistoryDao, dsUuid: UUID) = {
       val image = renderImage(sm.pathOption, sm.widthOption, sm.heightOption, None, "Photo", dao, dsUuid)
       s"Changed group photo<br>$image"
+    }
+
+    private def renderMigratedFrom(sm: Service.Group.MigrateFrom) = {
+      ("Migrated" + sm.titleOption.map(s => s" from $s").getOrElse("")).trim
     }
 
     private def renderMembershipChangeMessage(cc: ChatWithDao, sm: Service.MembershipChange) = {

@@ -882,6 +882,23 @@ class H2ChatHistoryDao(
             textOption     = textOption,
             members        = rm.members
           )
+        case "service_group_migrate_from" =>
+          Message.Service.Group.MigrateFrom(
+            internalId     = rm.internalId,
+            sourceIdOption = rm.sourceIdOption,
+            time           = rm.time,
+            fromId         = rm.fromId,
+            titleOption    = rm.titleOption,
+            textOption     = textOption
+          )
+        case "service_group_migrate_to" =>
+          Message.Service.Group.MigrateTo(
+            internalId     = rm.internalId,
+            sourceIdOption = rm.sourceIdOption,
+            time           = rm.time,
+            fromId         = rm.fromId,
+            textOption     = textOption
+          )
       }
     }
 
@@ -1048,6 +1065,15 @@ class H2ChatHistoryDao(
           template.copy(
             messageType = "service_group_remove_members",
             members     = m.members
+          ) -> None
+        case m: Message.Service.Group.MigrateFrom =>
+          template.copy(
+            messageType = "service_group_migrate_from",
+            titleOption = m.titleOption
+          ) -> None
+        case m: Message.Service.Group.MigrateTo =>
+          template.copy(
+            messageType = "service_group_migrate_to",
           ) -> None
       }
       (rawMessage, rawContentOption, rawRichTextEls)
