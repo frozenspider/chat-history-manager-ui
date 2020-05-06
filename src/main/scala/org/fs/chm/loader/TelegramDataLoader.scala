@@ -123,6 +123,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
         chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
         if (getCheckedField[String](chat, "type") != "saved_messages")
         message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
+        if (getCheckedField[String](message, "type") != "unsupported")
       } yield parseShortUserFromMessage(message)
     ).toSet
 
@@ -167,6 +168,10 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
         getCheckedField[String](jv, "type") match {
           case "message" => Some(parseRegular(jv))
           case "service" => Some(parseService(jv))
+          case "unsupported" =>
+            // Not enough data is provided even for a placeholder
+            tracker.markUsed("id")
+            None
           case other =>
             throw new IllegalArgumentException(
               s"Don't know how to parse message of type '$other' for ${jv.toString.take(500)}")
@@ -544,7 +549,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
       implicit tracker: FieldUsageTracker): JValue = {
     val res = jv \ fieldName
     tracker.markUsed(fieldName)
-    if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in $jv")
+    if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in ${jv.toString.take(500)}")
     res
   }
 
@@ -560,7 +565,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
       tracker: FieldUsageTracker): Option[String] = {
     val res = jv \ fieldName
     tracker.markUsed(fieldName)
-    if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in $jv")
+    if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in ${jv.toString.take(500)}")
     res.extractOpt[String] flatMap stringToOption
   }
 
