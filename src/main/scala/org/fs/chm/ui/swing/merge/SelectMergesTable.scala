@@ -91,7 +91,6 @@ object SelectMergesTable {
     lazy val columnModel = new DefaultTableColumnModel {
       addColumn(new TableColumn(0) {
         setMinWidth(maxItemWidth)
-        getCellRenderer
       })
       addColumn(new TableColumn(1) {
         // To make sure header fits

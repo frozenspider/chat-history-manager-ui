@@ -45,7 +45,8 @@ object SwingUtils extends Logging {
   implicit class RichComponent(el: Component) {
     def wrapInScrollpaneAndAdjustWidth(): ScrollPane = {
       val sp = wrapInScrollpane()
-      el.preferredWidth = el.preferredWidth + sp.verticalScrollBar.preferredWidth
+      el.preferredWidth += sp.verticalScrollBar.preferredWidth
+      sp.preferredWidth = el.preferredWidth
       sp
     }
 
