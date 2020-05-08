@@ -81,7 +81,7 @@ class SelectMergeChatsDialog(
       mergesAcc
     }
 
-    override val renderer = (renderable: ChatRenderable[ChatWithDao]) => {
+    override val renderer = (renderable: ListItemRenderable[ChatWithDao]) => {
       val r = new ChatListItem(renderable.v, None, None)
       if (renderable.isCombine) {
         r.inactiveColor = Colors.CombineBg

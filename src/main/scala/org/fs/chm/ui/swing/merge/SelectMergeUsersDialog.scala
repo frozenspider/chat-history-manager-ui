@@ -1,8 +1,5 @@
 package org.fs.chm.ui.swing.merge
 
-import java.awt.Color
-import java.util.UUID
-
 import scala.collection.immutable.ListMap
 import scala.swing._
 
@@ -81,16 +78,16 @@ class SelectMergeUsersDialog(
       mergesAcc
     }
 
-    override val renderer = (renderable: ChatRenderable[UserWithDao]) => {
+    override val renderer = (renderable: ListItemRenderable[UserWithDao]) => {
       val r = new UserDetailsPane(renderable.v.dao, renderable.v.user, false, None)
       if (!renderable.isSelectable) {
-        r.background = Color.WHITE
+        r.background = Colors.NoBg
       } else if (renderable.isCombine) {
         r.background = Colors.CombineBg
       } else if (renderable.isAdd) {
         r.background = Colors.AdditionBg
       } else {
-        r.background = Color.WHITE
+        r.background = Colors.NoBg
       }
       new BorderPanel {
         layout(r) = BorderPanel.Position.West

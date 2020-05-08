@@ -4,10 +4,12 @@ import java.awt.{ Component => AwtComponent }
 
 import scala.swing._
 
+import javax.swing.DefaultCellEditor
 import javax.swing.DefaultListSelectionModel
 import javax.swing.JCheckBox
 import javax.swing.JTable
 import javax.swing.ListSelectionModel
+import javax.swing.SwingConstants
 import javax.swing.table._
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.utility.Imports._
@@ -17,12 +19,17 @@ class SelectMergesTable[V, R](models: SelectMergesTable.MergeModels[V, R], onChe
 
   {
     peer.setDefaultRenderer(
-      classOf[SelectMergesTable.ChatRenderable[V]],
+      classOf[SelectMergesTable.ListItemRenderable[V]],
       models.renderer
     )
+    val checkboxComponent = new CheckboxComponent(peer.getDefaultRenderer(classOf[java.lang.Boolean]))
     peer.setDefaultRenderer(
-      classOf[java.lang.Boolean],
-      new BooleanRenderer(peer.getDefaultRenderer(classOf[java.lang.Boolean]))
+      classOf[SelectMergesTable.CheckboxBoolean],
+      checkboxComponent
+    )
+    peer.setDefaultEditor(
+      classOf[SelectMergesTable.CheckboxBoolean],
+      checkboxComponent
     )
     peer.setSelectionModel(models.selectionModel)
     peer.setColumnModel(models.columnModel)
@@ -35,9 +42,32 @@ class SelectMergesTable[V, R](models: SelectMergesTable.MergeModels[V, R], onChe
 
   def selected: Seq[R] = models.selected
 
-  private class BooleanRenderer(_oldRenderer: TableCellRenderer) extends TableCellRenderer {
-    private val checkbox = _oldRenderer.asInstanceOf[JCheckBox with TableCellRenderer]
-    checkbox.addItemListener(e => onCheckboxClick())
+  private class CheckboxComponent(defaultRenderer: TableCellRenderer)
+      extends DefaultCellEditor(new JCheckBox)
+      with TableCellRenderer {
+    private val checkboxRn = defaultRenderer.asInstanceOf[JCheckBox with TableCellRenderer]
+    private val checkboxEd = editorComponent.asInstanceOf[JCheckBox]
+
+    {
+      checkboxEd.setHorizontalAlignment(SwingConstants.CENTER);
+      checkboxEd.removeActionListener(delegate)
+      delegate = new EditorDelegate() {
+        var typedValue: SelectMergesTable.CheckboxBoolean = _
+
+        override def setValue(value: Any): Unit = {
+          typedValue = value.asInstanceOf[SelectMergesTable.CheckboxBoolean]
+          checkboxEd.setSelected(typedValue.v)
+        }
+
+        override def getCellEditorValue: AnyRef = {
+          typedValue.copy(v = checkboxEd.isSelected)
+        }
+      }
+      checkboxEd.addActionListener(delegate)
+      checkboxEd.setRequestFocusEnabled(false)
+
+      checkboxRn.addItemListener(e => onCheckboxClick())
+    }
 
     override def getTableCellRendererComponent(
         table: JTable,
@@ -47,7 +77,21 @@ class SelectMergesTable[V, R](models: SelectMergesTable.MergeModels[V, R], onChe
         row: Int,
         column: Int
     ): AwtComponent = {
-      checkbox.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
+      val typedValue = value.asInstanceOf[SelectMergesTable.CheckboxBoolean]
+      val jlbValue = java.lang.Boolean.valueOf(typedValue.v)
+      val res = checkboxRn.getTableCellRendererComponent(table, jlbValue, isSelected, hasFocus, row, column)
+      if (typedValue.v) {
+        if (typedValue.isAdd) {
+          res.setBackground(Colors.AdditionBg)
+        } else if (typedValue.isCombine) {
+          res.setBackground(Colors.CombineBg)
+        } else {
+          res.setBackground(Colors.NoBg)
+        }
+      } else {
+        res.setBackground(Colors.ConflictBg)
+      }
+      res
     }
   }
 }
@@ -72,7 +116,7 @@ object SelectMergesTable {
       val uiItems = for {
         r  <- 0 until tableModel.getRowCount
         c  <- 0 until tableModel.getColumnCount
-        cr = tableModel.getValueAt(r, c) if cr.isInstanceOf[ChatRenderable[V]]
+        cr = tableModel.getValueAt(r, c) if cr.isInstanceOf[ListItemRenderable[V]]
       } yield {
         renderer.getTableCellRendererComponent(null, cr, false, false, r, c)
       }
@@ -111,31 +155,31 @@ object SelectMergesTable {
 
     lazy val tableModel: TableModel = new DefaultTableModel(Array[AnyRef]("Base", "Apply?", "Added"), 0) {
       allElems.foreachWithIndex { (merge, i) =>
-        def checkboxOrEmpty(isSelectable: Boolean) = {
+        def checkboxOrEmpty(isSelectable: Boolean, isCombine: Boolean = false, isAdd: Boolean = false) = {
           if (isSelectable) {
             _totalSelectableCount += 1
-            (true: java.lang.Boolean)
+            CheckboxBoolean(v = isSelectable, isCombine = isCombine, isAdd = isAdd)
           } else ""
         }
         val row: Array[AnyRef] = merge match {
           case RowData.InBoth(mv, sv) =>
             val isSelectable = isInBothSelectable(mv, sv)
             Array(
-              ChatRenderable[V](mv, isSelectable, isCombine = true),
-              checkboxOrEmpty(isSelectable),
-              ChatRenderable[V](sv, isSelectable, isCombine = true)
+              ListItemRenderable[V](mv, isSelectable, isCombine = true),
+              checkboxOrEmpty(isSelectable, isCombine = true),
+              ListItemRenderable[V](sv, isSelectable, isCombine = true)
             )
           case RowData.InSlaveOnly(sv) =>
             val isSelectable = isInSlaveSelectable(sv)
             Array(
               "",
-              checkboxOrEmpty(isSelectable),
-              ChatRenderable[V](sv, isSelectable, isAdd = true)
+              checkboxOrEmpty(isSelectable, isAdd = true),
+              ListItemRenderable[V](sv, isSelectable, isAdd = true)
             )
           case RowData.InMasterOnly(mv) =>
             val isSelectable = isInMasterSelectable(mv)
             Array(
-              ChatRenderable[V](mv, isSelectable),
+              ListItemRenderable[V](mv, isSelectable),
               checkboxOrEmpty(isSelectable),
               ""
             )
@@ -147,16 +191,16 @@ object SelectMergesTable {
         columnIndex == 1
 
       override def getColumnClass(i: Int): Class[_] = i match {
-        case 0 => classOf[ChatRenderable[V]]
-        case 1 => classOf[java.lang.Boolean]
-        case 2 => classOf[ChatRenderable[V]]
+        case 0 => classOf[ListItemRenderable[V]]
+        case 1 => classOf[CheckboxBoolean]
+        case 2 => classOf[ListItemRenderable[V]]
       }
     }
 
     protected def isSelected(rowIdx: Int): Boolean = {
       tableModel.getValueAt(rowIdx, 1) match {
-        case b: java.lang.Boolean => b.booleanValue
-        case _                    => false
+        case b: CheckboxBoolean => b.v
+        case _                  => false
       }
     }
 
@@ -174,7 +218,7 @@ object SelectMergesTable {
   }
 
   trait ListItemRenderer[V, C <: Component] extends TableCellRenderer {
-    private var componentsCache: Map[ChatRenderable[V], C] = Map.empty
+    private var componentsCache: Map[ListItemRenderable[V], C] = Map.empty
 
     override def getTableCellRendererComponent(
         table: JTable,
@@ -184,7 +228,7 @@ object SelectMergesTable {
         row: Int,
         column: Int
     ): AwtComponent = {
-      val renderable = value.asInstanceOf[ChatRenderable[V]]
+      val renderable = value.asInstanceOf[ListItemRenderable[V]]
       val renderer = if (componentsCache.contains(renderable)) {
         componentsCache(renderable)
       } else {
@@ -195,7 +239,7 @@ object SelectMergesTable {
       renderer.peer
     }
 
-    def setUpComponent(renderable: ChatRenderable[V]): C
+    def setUpComponent(renderable: ListItemRenderable[V]): C
   }
 
   sealed trait RowData[V]
@@ -205,5 +249,7 @@ object SelectMergesTable {
     sealed case class InSlaveOnly[V](slaveValue: V)            extends RowData[V]
   }
 
-  case class ChatRenderable[V](v: V, isSelectable: Boolean, isCombine: Boolean = false, isAdd: Boolean = false)
+  case class ListItemRenderable[V](v: V, isSelectable: Boolean, isCombine: Boolean = false, isAdd: Boolean = false)
+
+  case class CheckboxBoolean(v: Boolean, isCombine: Boolean = false, isAdd: Boolean = false)
 }

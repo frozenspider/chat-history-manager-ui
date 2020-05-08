@@ -109,6 +109,9 @@ object SwingUtils extends Logging {
     /** Light red */
     val ConflictBg: Color = Color.decode("#FFF0F0")
 
+    /** White */
+    val NoBg: Color = Color.WHITE
+
     val CyclingStrings = Seq(
       // User
       "#6495ED", // CornflowerBlue

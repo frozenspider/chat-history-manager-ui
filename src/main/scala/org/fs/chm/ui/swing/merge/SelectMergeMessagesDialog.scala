@@ -30,6 +30,8 @@ class SelectMergeMessagesDialog(
 ) extends CustomDialog[Map[Mismatch, MismatchResolution]] {
   import SelectMergeMessagesDialog._
 
+  private val MaxMessageWidth = 500
+
   private lazy val originalTitle = "Select messages to merge"
 
   {
@@ -44,7 +46,7 @@ class SelectMergeMessagesDialog(
   )
 
   override protected lazy val dialogComponent: Component = {
-    table.wrapInScrollpane()
+    table.wrapInScrollpaneAndAdjustWidth()
   }
 
   override protected def validateChoices(): Option[Map[Mismatch, MismatchResolution]] = {
@@ -154,7 +156,7 @@ class SelectMergeMessagesDialog(
       acc.toIndexedSeq
     }
 
-    override val renderer = (renderable: ChatRenderable[RenderableMismatch]) => {
+    override val renderer = (renderable: ListItemRenderable[RenderableMismatch]) => {
       // FIXME: Figure out what to do with a shitty layout!
       val msgAreaContainer = new MessagesAreaContainer(htmlKit)
 //      msgAreaContainer.textPane.peer.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.box(true))
@@ -177,12 +179,14 @@ class SelectMergeMessagesDialog(
       val rootView = ui.getRootView(null)
       val view = rootView.getView(0)
 
-      val prefSize = msgAreaContainer.textPane.preferredSize
-      rootView.setSize(prefSize.width, prefSize.height)
+//      val prefSize = msgAreaContainer.textPane.preferredSize
+//      rootView.setSize(prefSize.width, prefSize.height)
 //      val height = view.getPreferredSpan(1).round
       // = height
 
 //      msgAreaContainer.textPane.preferredHeight = 1639
+
+      msgAreaContainer.textPane.maximumWidth = MaxMessageWidth
       msgAreaContainer.textPane
     }
 
@@ -290,9 +294,23 @@ private object SelectMergeMessagesDialog {
     val msgService = new MessagesService(htmlKit)
 
     val numUsers = 3
-    val msgs = (0 to 9) map (id => createRegularMessage(id, (id % numUsers) + 1))
+    val msgs = (0 to 1000) map (id => {
+      val msg = createRegularMessage(id, (id % numUsers) + 1)
+      if (id == 1) {
+        val longText = (
+          Seq.fill(100)("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").mkString(" ") + " " + Seq.fill(100)("abcdefg").mkString
+        )
+        msg.asInstanceOf[Message.Regular].copy(textOption = Some(RichText(Seq(RichText.Plain(longText)))))
+      } else {
+        msg
+      }
+    })
 
     val (mMsgs, sMsgs) = {
+//      // Addtion
+//      val mMsgs = msgs filter (Seq(1) contains _.sourceIdOption.get)
+//      val sMsgs = msgs filter ((2 to 100) contains _.sourceIdOption.get)
+
 //      // Addtion before first
 //      val mMsgs = msgs filter (Seq(4, 5) contains _.sourceIdOption.get)
 //      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.sourceIdOption.get)
@@ -322,6 +340,15 @@ private object SelectMergeMessagesDialog {
     val (_, _, sChat, sMsgsI) = getSimpleDaoEntities(sDao)
 
     val mismatches = IndexedSeq(
+//      // Addtion
+//      Mismatch.Addition(
+//        prevMasterMsgOption = Some(mMsgsI.bySrcId(1)),
+//        nextMasterMsgOption = None,
+//        prevSlaveMsgOption  = None,
+//        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(10)),
+//        nextSlaveMsgOption  = None
+//      )
+
 //      // Addtion before first
 //      Mismatch.Addition(
 //        prevMasterMsgOption = None,
