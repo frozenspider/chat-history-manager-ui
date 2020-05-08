@@ -84,17 +84,25 @@ class SelectMergeMessagesDialog(
       }
 
       def messageToRowData(mismatch: Mismatch): RowData[RenderableMismatch] = {
-        val slaveMessages = slaveDao
-          .messagesBetween(slaveChat, mismatch.firstSlaveMsg, mismatch.lastSlaveMsg) map Right.apply
+        def abbreviateMessages(msgs: IndexedSeq[Message]): Seq[Either[Int, Message]] = {
+          if (msgs.length <= MaxContinuousMsgsLength) {
+            msgs map Right.apply
+          } else {
+            val l = MaxCutoffMsgsPartLength
+            val between = msgs.length - (l * 2)
+            ((msgs.take(l) map Right.apply) ++ Seq(Left(between)) ++ (msgs.takeRight(l) map Right.apply))
+          }
+        }
+
+        val slaveMessages = slaveDao.messagesBetween(slaveChat, mismatch.firstSlaveMsg, mismatch.lastSlaveMsg)
         mismatch match {
           case mismatch: Mismatch.Addition =>
-            RowData.InSlaveOnly(RenderableMismatch(Some(mismatch), slaveMessages, slaveCwd))
+            RowData.InSlaveOnly(RenderableMismatch(Some(mismatch), abbreviateMessages(slaveMessages), slaveCwd))
           case mismatch: Mismatch.Conflict =>
-            val masterMessages = masterDao
-              .messagesBetween(masterChat, mismatch.firstMasterMsg, mismatch.lastMasterMsg) map Right.apply
+            val masterMessages = masterDao.messagesBetween(masterChat, mismatch.firstMasterMsg, mismatch.lastMasterMsg)
             RowData.InBoth(
-              masterValue = RenderableMismatch(Some(mismatch), masterMessages, masterCwd),
-              slaveValue  = RenderableMismatch(Some(mismatch), slaveMessages, slaveCwd)
+              masterValue = RenderableMismatch(Some(mismatch), masterMessages map Right.apply, masterCwd),
+              slaveValue  = RenderableMismatch(Some(mismatch), slaveMessages map Right.apply, slaveCwd)
             )
         }
       }
@@ -349,7 +357,7 @@ private object SelectMergeMessagesDialog {
         prevMasterMsgOption = Some(mMsgsI.bySrcId(1)),
         nextMasterMsgOption = None,
         prevSlaveMsgOption  = None,
-        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(10)),
+        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(100)),
         nextSlaveMsgOption  = None
       )
 
