@@ -1,6 +1,7 @@
 package org.fs.chm.ui.swing.merge
 
 import java.awt.{ Component => AwtComponent }
+import java.util.EventObject
 
 import scala.swing._
 
@@ -10,17 +11,25 @@ import javax.swing.JCheckBox
 import javax.swing.JTable
 import javax.swing.ListSelectionModel
 import javax.swing.SwingConstants
+import javax.swing.event.CellEditorListener
 import javax.swing.table._
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.utility.Imports._
 
-class SelectMergesTable[V, R](models: SelectMergesTable.MergeModels[V, R], onCheckboxClick: () => _) //
-    extends Table(models.tableModel) { thisTable =>
+class SelectMergesTable[V, R](
+    models: SelectMergesTable.MergeModels[V, R],
+    onCheckboxClick: () => _
+) extends Table(models.tableModel) { thisTable =>
 
   {
+    val renderer = models.renderer
     peer.setDefaultRenderer(
       classOf[SelectMergesTable.ListItemRenderable[V]],
-      models.renderer
+      renderer
+    )
+    peer.setDefaultEditor(
+      classOf[SelectMergesTable.ListItemRenderable[V]],
+      new SelectMergesTable.ListItemEditor(renderer)
     )
     val checkboxComponent = new CheckboxComponent(peer.getDefaultRenderer(classOf[java.lang.Boolean]))
     peer.setDefaultRenderer(
@@ -101,6 +110,8 @@ object SelectMergesTable {
   abstract class MergeModels[V, R] {
 
     def allElems: Seq[RowData[V]]
+
+    def cellsAreInteractive: Boolean
 
     def renderer: ListItemRenderer[V, _]
 
@@ -188,7 +199,7 @@ object SelectMergesTable {
       }
 
       override def isCellEditable(rowIndex: Int, columnIndex: Int): Boolean =
-        columnIndex == 1
+        cellsAreInteractive || columnIndex == 1
 
       override def getColumnClass(i: Int): Class[_] = i match {
         case 0 => classOf[ListItemRenderable[V]]
@@ -240,6 +251,27 @@ object SelectMergesTable {
     }
 
     def setUpComponent(renderable: ListItemRenderable[V]): C
+  }
+
+  /** A simple wrapper around ListItemRenderer to allow selecting text */
+  private class ListItemEditor(renderer: ListItemRenderer[_, _]) extends TableCellEditor {
+    override def getTableCellEditorComponent(
+        table: JTable,
+        value: Any,
+        isSelected: Boolean,
+        row: Int,
+        column: Int
+    ): AwtComponent = {
+      renderer.getTableCellRendererComponent(table, value, isSelected, true, row, column)
+    }
+
+    override def getCellEditorValue:                              AnyRef = null
+    override def isCellEditable(anEvent: EventObject):            Boolean = true
+    override def shouldSelectCell(anEvent: EventObject):          Boolean = true
+    override def stopCellEditing():                               Boolean = true
+    override def cancelCellEditing():                             Unit = {}
+    override def addCellEditorListener(l: CellEditorListener):    Unit = {}
+    override def removeCellEditorListener(l: CellEditorListener): Unit = {}
   }
 
   sealed trait RowData[V]

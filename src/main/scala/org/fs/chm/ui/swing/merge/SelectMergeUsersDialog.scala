@@ -78,6 +78,8 @@ class SelectMergeUsersDialog(
       mergesAcc
     }
 
+    override val cellsAreInteractive = false
+
     override val renderer = (renderable: ListItemRenderable[UserWithDao]) => {
       val r = new UserDetailsPane(renderable.v.dao, renderable.v.user, false, None)
       if (!renderable.isSelectable) {

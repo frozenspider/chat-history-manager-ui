@@ -19,6 +19,9 @@ class MessagesService(htmlKit: HTMLEditorKit) {
   import org.fs.chm.ui.swing.MessagesService._
 
   def createStubDoc: MessageDocument = {
+    // TODO: How to limit width and do word wraps?
+    //       width, max-width acts weird,
+    //       word-wrap, word-break, overflow-wrap are ignored
     val doc     = htmlKit.createDefaultDocument().asInstanceOf[HTMLDocument]
     val content = """<div id="messages"></div>"""
     htmlKit.read(new StringReader(content), doc, 0)
@@ -40,14 +43,14 @@ class MessagesService(htmlKit: HTMLEditorKit) {
                  |  font-weight: bold;
                  |}
                  |blockquote {
-                 |   border-left: 1px solid #ccc;
-                 |   margin: 5px 10px;
-                 |   padding: 5px 10px;
+                 |  border-left: 1px solid #ccc;
+                 |  margin: 5px 10px;
+                 |  padding: 5px 10px;
                  |}
                  |.system-message {
-                 |   border: 1px solid #A0A0A0;
-                 |   margin: 5px 10px;
-                 |   padding: 5px 10px;
+                 |  border: 1px solid #A0A0A0;
+                 |  margin: 5px 10px;
+                 |  padding: 5px 10px;
                  |}""".stripMargin
     doc.getStyleSheet.addRule(css)
     doc.getStyleSheet.addRule("W3C_LENGTH_UNITS_ENABLE")

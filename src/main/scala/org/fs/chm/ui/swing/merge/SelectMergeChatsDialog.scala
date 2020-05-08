@@ -81,6 +81,8 @@ class SelectMergeChatsDialog(
       mergesAcc
     }
 
+    override val cellsAreInteractive = false
+
     override val renderer = (renderable: ListItemRenderable[ChatWithDao]) => {
       val r = new ChatListItem(renderable.v, None, None)
       if (renderable.isCombine) {
