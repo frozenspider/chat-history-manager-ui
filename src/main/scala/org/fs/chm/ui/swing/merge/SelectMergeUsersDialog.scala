@@ -24,10 +24,7 @@ class SelectMergeUsersDialog(
 
   private lazy val models =  new Models(masterDao.users(masterDs.uuid), slaveDao.users(slaveDs.uuid))
 
-  private lazy val table = new SelectMergesTable[UserWithDao, (User, User)](
-    models,
-    (() => title = s"$originalTitle (${models.currentlySelectedCount} of ${models.totalSelectableCount})")
-  )
+  private lazy val table = new SelectMergesTable[UserWithDao, (User, User)](models)
 
   override protected lazy val dialogComponent: Component = {
     new BorderPanel {

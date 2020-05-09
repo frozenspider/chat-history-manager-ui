@@ -1,5 +1,9 @@
 package org.fs.chm.ui.swing.merge
 
+import java.awt.BorderLayout
+import java.awt.event.ActionListener
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 import java.awt.{ Component => AwtComponent }
 import java.util.EventObject
 
@@ -7,19 +11,24 @@ import scala.swing._
 
 import javax.swing.DefaultCellEditor
 import javax.swing.DefaultListSelectionModel
+import javax.swing.JButton
 import javax.swing.JCheckBox
+import javax.swing.JComponent
+import javax.swing.JPanel
 import javax.swing.JTable
 import javax.swing.ListSelectionModel
 import javax.swing.SwingConstants
+import javax.swing.UIManager
 import javax.swing.event.CellEditorListener
 import javax.swing.table._
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.utility.Imports._
 
 class SelectMergesTable[V, R](
-    models: SelectMergesTable.MergeModels[V, R],
-    onCheckboxClick: () => _
+    models: SelectMergesTable.MergeModels[V, R]
 ) extends Table(models.tableModel) { thisTable =>
+
+  private val header = peer.getTableHeader
 
   {
     val renderer = models.renderer
@@ -43,13 +52,36 @@ class SelectMergesTable[V, R](
     peer.setSelectionModel(models.selectionModel)
     peer.setColumnModel(models.columnModel)
     peer.setFillsViewportHeight(true)
-    val header = peer.getTableHeader
+
     header.setReorderingAllowed(false)
     header.setResizingAllowed(false)
+
+    val headerColumnModel = header.getColumnModel
+    headerColumnModel
+      .getColumn(0)
+      .setHeaderRenderer(new CheckboxHeaderRenderer(false, _ => {
+        models.changeSelected(false)
+        updateSelectedCount()
+      }))
+    headerColumnModel
+      .getColumn(2)
+      .setHeaderRenderer(new CheckboxHeaderRenderer(true, _ => {
+        models.changeSelected(true)
+        updateSelectedCount()
+      }))
+
     rowHeight = models.maxItemHeight
+    updateSelectedCount()
   }
 
   def selected: Seq[R] = models.selected
+
+  private def updateSelectedCount(): Unit = {
+    header.getColumnModel
+      .getColumn(1)
+      .setHeaderValue(s"${models.currentlySelectedCount} of ${models.totalSelectableCount}")
+    header.repaint()
+  }
 
   private class CheckboxComponent(defaultRenderer: TableCellRenderer)
       extends DefaultCellEditor(new JCheckBox)
@@ -75,7 +107,7 @@ class SelectMergesTable[V, R](
       checkboxEd.addActionListener(delegate)
       checkboxEd.setRequestFocusEnabled(false)
 
-      checkboxRn.addItemListener(e => onCheckboxClick())
+      checkboxRn.addItemListener(e => updateSelectedCount())
     }
 
     override def getTableCellRendererComponent(
@@ -87,8 +119,8 @@ class SelectMergesTable[V, R](
         column: Int
     ): AwtComponent = {
       val typedValue = value.asInstanceOf[SelectMergesTable.CheckboxBoolean]
-      val jlbValue = java.lang.Boolean.valueOf(typedValue.v)
-      val res = checkboxRn.getTableCellRendererComponent(table, jlbValue, isSelected, hasFocus, row, column)
+      val jlbValue   = java.lang.Boolean.valueOf(typedValue.v)
+      val res        = checkboxRn.getTableCellRendererComponent(table, jlbValue, isSelected, hasFocus, row, column)
       if (typedValue.v) {
         if (typedValue.isAdd) {
           res.setBackground(Colors.AdditionBg)
@@ -101,6 +133,72 @@ class SelectMergesTable[V, R](
         res.setBackground(Colors.ConflictBg)
       }
       res
+    }
+  }
+
+  private class CheckboxHeaderRenderer(isAll: Boolean, listener: ActionListener) extends JPanel with TableCellRenderer {
+    private val defaultRenderer = header.getDefaultRenderer
+    private val colIdx          = if (isAll) 2 else 0
+
+    {
+      val button = new JButton(if (isAll) "All" else "None")
+      button.setPreferredSize(new Dimension(button.getPreferredSize.width, button.getPreferredSize.height * 2 / 3))
+      button.addActionListener(listener)
+
+      this.setLayout(new BorderLayout())
+      this.add(button, if (isAll) BorderLayout.WEST else BorderLayout.EAST)
+
+      header.addMouseListener(new MouseAdapter {
+        val colModel  = peer.getColumnModel
+        var isPressed = false
+
+        /** Should be dynamic*/
+        def widthOfPrevCols: Int = {
+          ((0 until colIdx) map (colModel.getColumn) map (_.getWidth)).sum
+        }
+
+        def isButtonLeftClicked(e: MouseEvent): Boolean = {
+          e.getButton == MouseEvent.BUTTON1 && colModel.getColumnIndexAtX(e.getX) == colIdx && {
+            val xLocal = e.getX - widthOfPrevCols
+            xLocal >= button.getX && xLocal <= (button.getX + button.getWidth)
+          }
+        }
+
+        override def mousePressed(e: MouseEvent): Unit = {
+          if (isButtonLeftClicked(e)) {
+            isPressed = true
+            button.getModel.setPressed(true)
+            header.repaint()
+          }
+        }
+
+        override def mouseReleased(e: MouseEvent): Unit = {
+          if (e.getClickCount == 1 && isButtonLeftClicked(e) && isPressed) {
+            button.doClick()
+          }
+          button.getModel.setPressed(false)
+          header.repaint()
+          isPressed = false
+        }
+      })
+    }
+
+    override def getTableCellRendererComponent(
+        table: JTable,
+        value: Any,
+        isSelected: Boolean,
+        hasFocus: Boolean,
+        row: Int,
+        column: Int
+    ): AwtComponent = {
+      val border = UIManager.getBorder(if (hasFocus) "TableHeader.focusCellBorder" else "TableHeader.cellBorder")
+      val rc = defaultRenderer
+        .getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
+        .asInstanceOf[JComponent]
+      rc.setBorder(null)
+      this.add(rc, BorderLayout.CENTER)
+      this.setBorder(border)
+      this
     }
   }
 }
@@ -164,7 +262,7 @@ object SelectMergesTable {
       })
     }
 
-    lazy val tableModel: TableModel = new DefaultTableModel(Array[AnyRef]("Base", "Apply?", "Added"), 0) {
+    lazy val tableModel: TableModel = new DefaultTableModel(Array[AnyRef]("Base", "999 of 999", "Added"), 0) {
       allElems.foreachWithIndex { (merge, i) =>
         def checkboxOrEmpty(isSelectable: Boolean, isCombine: Boolean = false, isAdd: Boolean = false) = {
           if (isSelectable) {
@@ -215,13 +313,22 @@ object SelectMergesTable {
       }
     }
 
+    def changeSelected(newValue: Boolean): Unit = {
+      (0 until tableModel.getRowCount) foreach { rowIdx =>
+        tableModel.getValueAt(rowIdx, 1) match {
+          case b: CheckboxBoolean => tableModel.setValueAt(b.copy(v = newValue), rowIdx, 1)
+          case _                  => // NOOP
+        }
+      }
+    }
+
     def selected: Seq[R] = {
       allElems.zipWithIndex.map {
         case (rd, rowIdx) => rowDataToResultOption(rd, isSelected(rowIdx))
       }.yieldDefined
     }
 
-    def totalSelectableCount:   Int = _totalSelectableCount
+    def totalSelectableCount: Int = _totalSelectableCount
 
     def currentlySelectedCount: Int = {
       (0 until tableModel.getRowCount).count(isSelected)
@@ -265,13 +372,13 @@ object SelectMergesTable {
       renderer.getTableCellRendererComponent(table, value, isSelected, true, row, column)
     }
 
-    override def getCellEditorValue:                              AnyRef = null
+    override def getCellEditorValue:                              AnyRef  = null
     override def isCellEditable(anEvent: EventObject):            Boolean = true
     override def shouldSelectCell(anEvent: EventObject):          Boolean = true
     override def stopCellEditing():                               Boolean = true
-    override def cancelCellEditing():                             Unit = {}
-    override def addCellEditorListener(l: CellEditorListener):    Unit = {}
-    override def removeCellEditorListener(l: CellEditorListener): Unit = {}
+    override def cancelCellEditing():                             Unit    = {}
+    override def addCellEditorListener(l: CellEditorListener):    Unit    = {}
+    override def removeCellEditorListener(l: CellEditorListener): Unit    = {}
   }
 
   sealed trait RowData[V]

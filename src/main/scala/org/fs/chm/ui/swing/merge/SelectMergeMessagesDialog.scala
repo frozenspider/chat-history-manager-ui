@@ -40,10 +40,7 @@ class SelectMergeMessagesDialog(
 
   private lazy val models = new Models
 
-  private lazy val table = new SelectMergesTable[RenderableMismatch, (Mismatch, MismatchResolution)](
-    models,
-    (() => title = s"$originalTitle (${models.currentlySelectedCount} of ${models.totalSelectableCount})")
-  )
+  private lazy val table = new SelectMergesTable[RenderableMismatch, (Mismatch, MismatchResolution)](models)
 
   override protected lazy val dialogComponent: Component = {
     table.wrapInScrollpaneAndAdjustWidth()
@@ -319,9 +316,9 @@ private object SelectMergeMessagesDialog {
     })
 
     val (mMsgs, sMsgs) = {
-      // Addtion
-      val mMsgs = msgs filter (Seq(1) contains _.sourceIdOption.get)
-      val sMsgs = msgs filter ((2 to 100) contains _.sourceIdOption.get)
+//      // Addtion
+//      val mMsgs = msgs filter (Seq(1) contains _.sourceIdOption.get)
+//      val sMsgs = msgs filter ((2 to 100) contains _.sourceIdOption.get)
 
 //      // Addtion before first
 //      val mMsgs = msgs filter (Seq(4, 5) contains _.sourceIdOption.get)
@@ -335,9 +332,9 @@ private object SelectMergeMessagesDialog {
 //      val mMsgs = msgs filter (Seq(1, 3, 5) contains _.sourceIdOption.get)
 //      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.sourceIdOption.get)
 
-//      // Addition + conflict + addition, no before and after
-//      val mMsgs = msgs filter (Seq(3) contains _.sourceIdOption.get)
-//      val sMsgs = msgs filter (Seq(2, 3, 4) contains _.sourceIdOption.get)
+      // Addition + conflict + addition, no before and after
+      val mMsgs = msgs filter (Seq(3) contains _.sourceIdOption.get)
+      val sMsgs = msgs filter (Seq(2, 3, 4) contains _.sourceIdOption.get)
 
 //      // Master had no messages
 //      val mMsgs = msgs filter (Seq() contains _.sourceIdOption.get)
@@ -352,14 +349,14 @@ private object SelectMergeMessagesDialog {
     val (_, _, sChat, sMsgsI) = getSimpleDaoEntities(sDao)
 
     val mismatches = IndexedSeq(
-      // Addtion
-      Mismatch.Addition(
-        prevMasterMsgOption = Some(mMsgsI.bySrcId(1)),
-        nextMasterMsgOption = None,
-        prevSlaveMsgOption  = None,
-        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(100)),
-        nextSlaveMsgOption  = None
-      )
+//      // Addtion
+//      Mismatch.Addition(
+//        prevMasterMsgOption = Some(mMsgsI.bySrcId(1)),
+//        nextMasterMsgOption = None,
+//        prevSlaveMsgOption  = None,
+//        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(100)),
+//        nextSlaveMsgOption  = None
+//      )
 
 //      // Addtion before first
 //      Mismatch.Addition(
@@ -412,29 +409,29 @@ private object SelectMergeMessagesDialog {
 //        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(5))
 //      )
 
-//      // Addition + conflict + addition, no before and after
-//      Mismatch.Addition(
-//        prevMasterMsgOption = None,
-//        nextMasterMsgOption = Some(mMsgsI.bySrcId(3)),
-//        prevSlaveMsgOption  = None,
-//        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(2)),
-//        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(3))
-//      ),
-//      Mismatch.Conflict(
-//        prevMasterMsgOption = None,
-//        masterMsgs          = (mMsgsI.bySrcId(3), mMsgsI.bySrcId(3)),
-//        nextMasterMsgOption = None,
-//        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(2)),
-//        slaveMsgs           = (sMsgsI.bySrcId(3), sMsgsI.bySrcId(3)),
-//        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(4))
-//      ),
-//      Mismatch.Addition(
-//        prevMasterMsgOption = Some(mMsgsI.bySrcId(3)),
-//        nextMasterMsgOption = None,
-//        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(3)),
-//        slaveMsgs           = (sMsgsI.bySrcId(4), sMsgsI.bySrcId(4)),
-//        nextSlaveMsgOption  = None
-//      )
+      // Addition + conflict + addition, no before and after
+      Mismatch.Addition(
+        prevMasterMsgOption = None,
+        nextMasterMsgOption = Some(mMsgsI.bySrcId(3)),
+        prevSlaveMsgOption  = None,
+        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(2)),
+        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(3))
+      ),
+      Mismatch.Conflict(
+        prevMasterMsgOption = None,
+        masterMsgs          = (mMsgsI.bySrcId(3), mMsgsI.bySrcId(3)),
+        nextMasterMsgOption = None,
+        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(2)),
+        slaveMsgs           = (sMsgsI.bySrcId(3), sMsgsI.bySrcId(3)),
+        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(4))
+      ),
+      Mismatch.Addition(
+        prevMasterMsgOption = Some(mMsgsI.bySrcId(3)),
+        nextMasterMsgOption = None,
+        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(3)),
+        slaveMsgs           = (sMsgsI.bySrcId(4), sMsgsI.bySrcId(4)),
+        nextSlaveMsgOption  = None
+      )
 
 //      // Master had no messages
 //      Mismatch.Addition(

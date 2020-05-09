@@ -27,10 +27,7 @@ class SelectMergeChatsDialog(
 
   private lazy val models = new Models(masterDao.chats(masterDs.uuid), slaveDao.chats(slaveDs.uuid))
 
-  private lazy val table = new SelectMergesTable[ChatWithDao, ChangedChatMergeOption](
-    models,
-    (() => title = s"$originalTitle (${models.currentlySelectedCount} of ${models.totalSelectableCount})")
-  )
+  private lazy val table = new SelectMergesTable[ChatWithDao, ChangedChatMergeOption](models)
 
   override protected lazy val dialogComponent: Component = {
     table.wrapInScrollpaneAndAdjustWidth()
