@@ -91,9 +91,14 @@ class MainFrameApp //
   val ui = new BorderPanel {
     import scala.swing.BorderPanel.Position._
 
-    layout(menuBar)                = North
-    layout(chatsOuterPanel)        = West
+    layout(menuBar) = North
+    layout(chatsOuterPanel) = West
     layout(msgAreaContainer.panel) = Center
+    layout {
+      new BorderPanel {
+        layout(statusLabel) = West
+      }
+    } = South
   }
 
   lazy val (menuBar, dbEmbeddedMenu) = {
@@ -116,6 +121,8 @@ class MainFrameApp //
   }
 
   lazy val chatList = new DaoList(dao => new DaoChatItem(dao))
+
+  lazy val statusLabel = new Label(" ")
 
   lazy val chatsOuterPanel = {
     new BorderPanel {
@@ -161,12 +168,14 @@ class MainFrameApp //
     m
   }
 
-  def freezeTheWorld(): Unit = {
+  def freezeTheWorld(statusMsg: String): Unit = {
+    statusLabel.text = statusMsg
     menuBar.contents foreach (_.enabled = false)
     changeChatsClickable(false)
   }
 
   def unfreezeTheWorld(): Unit = {
+    statusLabel.text = " " // Empty string to prevent collapse
     menuBar.contents foreach (_.enabled = true)
     changeChatsClickable(true)
   }
@@ -199,7 +208,7 @@ class MainFrameApp //
       case FileChooser.Result.Approve if loadedDaos.keys.exists(_ isLoaded chooser.selectedFile.getParentFile) =>
         showWarning(s"File '${chooser.selectedFile}' is already loaded")
       case FileChooser.Result.Approve => {
-        freezeTheWorld()
+        freezeTheWorld("Loading data...")
         config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
         Future { // To release UI lock
           Swing.onEDT {
@@ -235,7 +244,7 @@ class MainFrameApp //
       case FileChooser.Result.Cancel => // NOOP
       case FileChooser.Result.Error  => // Mostly means that dialog was dismissed, also NOOP
       case FileChooser.Result.Approve => {
-        freezeTheWorld()
+        freezeTheWorld("Saving data...")
         config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
         Future { // To release UI lock
           try {
@@ -327,11 +336,16 @@ class MainFrameApp //
       chatsToMerge: Seq[ChangedChatMergeOption]
   ): Unit = {
     val merger = new ChatHistoryMerger(masterDao, masterDs, slaveDao, slaveDs)
-    val chatsMergeAnalysis = chatsToMerge.collect {
-      case ChatMergeOption.Combine(mc, sc) => (mc, sc, merger.analyzeMergingChats(mc, sc))
+    Swing.onEDT {
+      freezeTheWorld("Analyzing chat messages...")
     }
-    // TODO: Make lazy and async
-    val chatsMergeResolutionsOption: Option[Seq[(Chat, Chat, Map[Mismatch, MismatchResolution])]] =
+    Future {
+      // Analyze
+      chatsToMerge.collect {
+        case ChatMergeOption.Combine(mc, sc) => (mc, sc, merger.analyzeMergingChats(mc, sc))
+      }
+    } map { chatsMergeAnalysis =>
+      // Resolve mismatches
       chatsMergeAnalysis.foldLeft(Option(Seq.empty[(Chat, Chat, Map[Mismatch, MismatchResolution])])) {
         case (None, _) =>
           // Some selection has been cancelled, ignore everything else
@@ -347,17 +361,28 @@ class MainFrameApp //
             acc :+ (mc, sc, resolutions)
           }
       }
-    chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
-      val newDs = Dataset(
-        uuid       = UUID.randomUUID(),
-        alias      = masterDs.alias,
-        sourceType = masterDs.sourceType
-      )
-      ???
-      // FIXE: Add users, merge users
-      // FIXE: Add chats
-      chatsMergeResolutions foreach {
-        case (mc, sc, resolutions) => merger.mergeChats(newDs, mc, sc, resolutions)
+    } map { chatsMergeResolutionsOption: Option[Seq[(Chat, Chat, Map[Mismatch, MismatchResolution])]] =>
+      // Merge
+      Swing.onEDTWait {
+        freezeTheWorld("Merging...")
+      }
+      chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
+        val newDs = Dataset(
+          uuid = UUID.randomUUID(),
+          alias = masterDs.alias,
+          sourceType = masterDs.sourceType
+        )
+        ???
+        // FIXE: Add users, merge users
+        // FIXE: Add chats
+        chatsMergeResolutions foreach {
+          case (mc, sc, resolutions) => merger.mergeChats(newDs, mc, sc, resolutions)
+        }
+      }
+    } onComplete { res =>
+      res.failed.foreach(handleException)
+      Swing.onEDT {
+        unfreezeTheWorld()
       }
     }
   }
@@ -397,7 +422,7 @@ class MainFrameApp //
   override def renameDataset(dsUuid: UUID, newName: String, dao: ChatHistoryDao): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
-    freezeTheWorld()
+    freezeTheWorld("Renaming...")
     Swing.onEDT { // To release UI lock
       try {
         MutationLock.synchronized {
@@ -415,7 +440,7 @@ class MainFrameApp //
   override def userEdited(user: User, dao: ChatHistoryDao): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
-    freezeTheWorld()
+    freezeTheWorld("Modifying...")
     asyncChangeUsers(dao, {
       dao.mutable.updateUser(user)
       Seq(user.id)
@@ -426,7 +451,7 @@ class MainFrameApp //
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     require(baseUser.dsUuid == absorbedUser.dsUuid, "Users are from different datasets!")
-    freezeTheWorld()
+    freezeTheWorld("Modifying...")
     asyncChangeUsers(dao, {
       dao.mutable.mergeUsers(baseUser, absorbedUser)
       Seq(baseUser.id, absorbedUser.id)
@@ -434,7 +459,7 @@ class MainFrameApp //
   }
 
   override def deleteChat(cc: ChatWithDao): Unit = {
-    freezeTheWorld()
+    freezeTheWorld("Deleting...")
     Swing.onEDT {
       try {
         MutationLock.synchronized {
@@ -457,7 +482,7 @@ class MainFrameApp //
       if (!loadedDaos(cc.dao).contains(cc.chat)) {
         updateCache(cc.dao, cc.chat, ChatCache(None, None))
       }
-      freezeTheWorld()
+      freezeTheWorld("Loading chat...")
     }
     val f = Future {
       val cache = loadedDaos(cc.dao)(cc.chat)
@@ -502,7 +527,7 @@ class MainFrameApp //
           val loadStatus = cache.loadStatusOption.get
           log.debug(s"Loading messages: loadStatus = ${loadStatus}")
           if (!loadStatus.beginReached) {
-            freezeTheWorld()
+            freezeTheWorld("Loading messages...")
             loadMessagesInProgress set true
             val msgDoc = cache.msgDocOption.get
             val f = Future {
@@ -611,10 +636,13 @@ class MainFrameApp //
       }
     }
 
-  @tailrec
   private def handleException(thread: Thread, ex: Throwable): Unit =
+    handleException(ex)
+
+  @tailrec
+  private def handleException(ex: Throwable): Unit =
     if (ex.getCause != null && ex.getCause != ex) {
-      handleException(thread, ex.getCause)
+      handleException(ex.getCause)
     } else {
       ex match {
         case ex: IllegalArgumentException =>

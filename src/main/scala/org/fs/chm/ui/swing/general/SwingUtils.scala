@@ -73,12 +73,10 @@ object SwingUtils extends Logging {
     }
 
   def showWarning(msg: String): Unit = {
-    log.warn(msg)
     Dialog.showMessage(title = "Warining", message = msg, messageType = Dialog.Message.Warning)
   }
 
   def showError(msg: String): Unit = {
-    log.error(msg)
     Dialog.showMessage(title = "Error", message = msg, messageType = Dialog.Message.Error)
   }
 
