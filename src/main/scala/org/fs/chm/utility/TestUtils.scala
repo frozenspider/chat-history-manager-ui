@@ -107,7 +107,7 @@ object TestUtils {
 
     override def insertChat(chat: Chat): Unit = ???
 
-    override def delete(chat: Chat): Unit = ???
+    override def deleteChat(chat: Chat): Unit = ???
 
     override def disableBackups(): Unit = ???
 

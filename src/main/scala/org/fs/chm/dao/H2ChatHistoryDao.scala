@@ -306,7 +306,7 @@ class H2ChatHistoryDao(
     }
   }
 
-  override def delete(chat: Chat): Unit = {
+  override def deleteChat(chat: Chat): Unit = {
     backup()
     val query = for {
       _ <- queries.rawContent.deleteByChat(chat.dsUuid, chat.id)

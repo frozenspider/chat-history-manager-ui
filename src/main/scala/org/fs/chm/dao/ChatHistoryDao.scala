@@ -111,7 +111,7 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
   /** Insert a new chat. It should not yet exist. */
   def insertChat(chat: Chat): Unit
 
-  def delete(chat: Chat): Unit
+  def deleteChat(chat: Chat): Unit
 
   /** Don't do automatic backups on data changes until re-enabled */
   def disableBackups(): Unit

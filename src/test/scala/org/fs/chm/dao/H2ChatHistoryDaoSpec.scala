@@ -251,7 +251,7 @@ class H2ChatHistoryDaoSpec //
     {
       // User is not deleted because it participates in another chat
       val chatToDelete = chats.find(c => c.tpe == ChatType.Personal && c.id == 9777777777L).get
-      h2dao.delete(chatToDelete)
+      h2dao.deleteChat(chatToDelete)
       assert(h2dao.chats(dsUuid).size === chats.size - 1)
       assert(h2dao.users(dsUuid).size === users.size)
       assert(h2dao.firstMessages(chatToDelete, 10).isEmpty)
@@ -260,7 +260,7 @@ class H2ChatHistoryDaoSpec //
     {
       // User is deleted
       val chatToDelete = chats.find(c => c.tpe == ChatType.Personal && c.id == 4321012345L).get
-      h2dao.delete(chatToDelete)
+      h2dao.deleteChat(chatToDelete)
       assert(h2dao.chats(dsUuid).size === chats.size - 2)
       assert(h2dao.users(dsUuid).size === users.size - 1)
       assert(h2dao.firstMessages(chatToDelete, 10).isEmpty)

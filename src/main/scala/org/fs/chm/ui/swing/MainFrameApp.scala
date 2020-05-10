@@ -456,7 +456,7 @@ class MainFrameApp //
     Swing.onEDT {
       try {
         MutationLock.synchronized {
-          cc.dao.mutable.delete(cc.chat)
+          cc.dao.mutable.deleteChat(cc.chat)
           evictFromCache(cc.dao, cc.chat)
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
