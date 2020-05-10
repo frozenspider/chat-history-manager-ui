@@ -32,6 +32,7 @@ class H2ChatHistoryDao(
   private val Lock = new Object
 
   private var _interlocutorsCacheOption: Option[Map[UUID, Map[ChatId, Seq[User]]]] = None
+  private var _backupsEnabled = true
 
   override def name: String = s"${dataPathRoot.getName} database"
 
@@ -247,6 +248,16 @@ class H2ChatHistoryDao(
     datasets.find(_.uuid == dsUuid).get
   }
 
+  override def insertUser(user: User): Unit = {
+    require(user.id > 0, "ID should be positive!")
+    backup()
+    val isMyself = myself(user.dsUuid).id == user.id
+    queries.users.insert(user, isMyself).transact(txctr).unsafeRunSync()
+    Lock.synchronized {
+      _interlocutorsCacheOption = None
+    }
+  }
+
   override def updateUser(user: User): Unit = {
     backup()
     val isMyself = myself(user.dsUuid).id == user.id
@@ -286,6 +297,15 @@ class H2ChatHistoryDao(
     }
   }
 
+  override def insertChat(chat: Chat): Unit = {
+    require(chat.id > 0, "ID should be positive!")
+    backup()
+    queries.chats.insert(chat).transact(txctr).unsafeRunSync()
+    Lock.synchronized {
+      _interlocutorsCacheOption = None
+    }
+  }
+
   override def delete(chat: Chat): Unit = {
     backup()
     val query = for {
@@ -302,22 +322,38 @@ class H2ChatHistoryDao(
     }
   }
 
+  override def disableBackups(): Unit = {
+    Lock.synchronized {
+      _backupsEnabled = false
+    }
+  }
+
+  override def enableBackups(): Unit = {
+    Lock.synchronized {
+      _backupsEnabled = true
+    }
+    backup()
+  }
+
   override protected def backup(): Unit = {
-    val backupDir = new File(dataPathRoot, H2ChatHistoryDao.BackupsDir)
-    backupDir.mkdir()
-    val backups =
-      backupDir
-        .listFiles((dir, name) => name.matches("""backup_(\d\d\d\d)-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d).zip"""))
-        .sortBy(f => Files.getAttribute(f.toPath, "creationTime").asInstanceOf[FileTime].toMillis)
-    val newBackupName = "backup_" + DateTime.now.toString("yyyy-MM-dd_HH-mm-ss") + ".zip"
-    StopWatch.measureAndCall {
-      queries
-        .backup(new File(backupDir, newBackupName).getAbsolutePath.replace("\\", "/"))
-        .transact(txctr)
-        .unsafeRunSync()
-    }((_, t) => log.info(s"Backup ${newBackupName} done in $t ms"))
-    for (oldBackup <- backups.dropRight(H2ChatHistoryDao.MaxBackups - 1)) {
-      oldBackup.delete()
+    val backupsEnabled = Lock.synchronized { _backupsEnabled }
+    if (backupsEnabled) {
+      val backupDir = new File(dataPathRoot, H2ChatHistoryDao.BackupsDir)
+      backupDir.mkdir()
+      val backups =
+        backupDir
+          .listFiles((dir, name) => name.matches("""backup_(\d\d\d\d)-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d).zip"""))
+          .sortBy(f => Files.getAttribute(f.toPath, "creationTime").asInstanceOf[FileTime].toMillis)
+      val newBackupName = "backup_" + DateTime.now.toString("yyyy-MM-dd_HH-mm-ss") + ".zip"
+      StopWatch.measureAndCall {
+        queries
+          .backup(new File(backupDir, newBackupName).getAbsolutePath.replace("\\", "/"))
+          .transact(txctr)
+          .unsafeRunSync()
+      }((_, t) => log.info(s"Backup ${newBackupName} done in $t ms"))
+      for (oldBackup <- backups.dropRight(H2ChatHistoryDao.MaxBackups - 1)) {
+        oldBackup.delete()
+      }
     }
   }
 

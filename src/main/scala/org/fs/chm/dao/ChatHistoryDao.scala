@@ -96,6 +96,9 @@ trait ChatHistoryDao extends AutoCloseable {
 trait MutableChatHistoryDao extends ChatHistoryDao {
   def renameDataset(dsUuid: UUID, newName: String): Dataset
 
+  /** Insert a new user. It should not yet exist. */
+  def insertUser(user: User): Unit
+
   /** Sets the data (names and phone only) for a user with the given `id` and `dsUuid` to the given state */
   def updateUser(user: User): Unit
 
@@ -105,8 +108,18 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
    */
   def mergeUsers(baseUser: User, absorbedUser: User): Unit
 
+  /** Insert a new chat. It should not yet exist. */
+  def insertChat(chat: Chat): Unit
+
   def delete(chat: Chat): Unit
 
+  /** Don't do automatic backups on data changes until re-enabled */
+  def disableBackups(): Unit
+
+  /** Start doing backups automatically once again. Do a backup immediately. */
+  def enableBackups(): Unit
+
+  /** Create a backup, if enabled, otherwise do nothing */
   protected def backup(): Unit
 }
 
