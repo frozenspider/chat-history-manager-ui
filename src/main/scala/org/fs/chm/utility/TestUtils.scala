@@ -96,7 +96,7 @@ object TestUtils {
   def tag[TM <: Message with TaggedMessage](id: Int)(implicit msgs: Seq[Message]): TM =
     msgs.bySrcId(id)
 
-  private trait EagerMutableDaoTrait extends MutableChatHistoryDao {
+  trait EagerMutableDaoTrait extends MutableChatHistoryDao {
     override def renameDataset(dsUuid: UUID, newName: String): Dataset = ???
 
     override def insertUser(user: User): Unit = ???

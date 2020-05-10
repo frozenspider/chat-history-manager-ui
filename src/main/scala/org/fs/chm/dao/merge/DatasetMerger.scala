@@ -64,10 +64,9 @@ object DatasetMerger {
 
   /** Represents a single general merge option: a chat that should be added or merged (or skipped if no decision) */
   sealed trait ChatMergeOption
-  sealed trait ChangedChatMergeOption extends ChatMergeOption
   object ChatMergeOption {
-    case class Combine(masterChat: Chat, slaveChat: Chat) extends ChangedChatMergeOption
-    case class Add(slaveChat: Chat)                       extends ChangedChatMergeOption
+    case class Combine(masterChat: Chat, slaveChat: Chat) extends ChatMergeOption
+    case class Add(slaveChat: Chat)                       extends ChatMergeOption
     case class Retain(masterChat: Chat)                   extends ChatMergeOption
   }
 

@@ -334,7 +334,7 @@ class MainFrameApp //
       slaveDao: ChatHistoryDao,
       slaveDs: Dataset,
       usersToMerge: Map[User, User],
-      chatsToMerge: Seq[ChangedChatMergeOption]
+      chatsToMerge: Seq[ChatMergeOption]
   ): Unit = {
     val merger = new ChatHistoryMerger(masterDao, masterDs, slaveDao, slaveDs)
     Swing.onEDT {
