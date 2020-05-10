@@ -11,7 +11,7 @@ import org.fs.chm.utility.EntityUtils._
 import org.fs.utility.Imports._
 
 class SelectMergeUsersDialog(
-    masterDao: H2ChatHistoryDao,
+    masterDao: MutableChatHistoryDao,
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset,

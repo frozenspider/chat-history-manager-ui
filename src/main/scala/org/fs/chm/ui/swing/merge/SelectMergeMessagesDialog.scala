@@ -8,8 +8,8 @@ import scala.swing._
 import com.github.nscala_time.time.Imports._
 import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao._
-import org.fs.chm.dao.merge.ChatHistoryMerger.Mismatch
-import org.fs.chm.dao.merge.ChatHistoryMerger.MismatchResolution
+import org.fs.chm.dao.merge.DatasetMerger.MessagesMismatch
+import org.fs.chm.dao.merge.DatasetMerger.MismatchResolution
 import org.fs.chm.ui.swing.MessagesAreaContainer
 import org.fs.chm.ui.swing.MessagesService
 import org.fs.chm.ui.swing.MessagesService.MessageInsertPosition
@@ -24,10 +24,10 @@ class SelectMergeMessagesDialog(
     masterChat: Chat,
     slaveDao: ChatHistoryDao,
     slaveChat: Chat,
-    mismatches: IndexedSeq[Mismatch],
+    mismatches: IndexedSeq[MessagesMismatch],
     htmlKit: HTMLEditorKit,
     msgService: MessagesService
-) extends CustomDialog[Map[Mismatch, MismatchResolution]] {
+) extends CustomDialog[Map[MessagesMismatch, MismatchResolution]] {
   import SelectMergeMessagesDialog._
 
   private lazy val MaxMessageWidth = 500
@@ -40,19 +40,19 @@ class SelectMergeMessagesDialog(
 
   private lazy val models = new Models
 
-  private lazy val table = new SelectMergesTable[RenderableMismatch, (Mismatch, MismatchResolution)](models)
+  private lazy val table = new SelectMergesTable[RenderableMismatch, (MessagesMismatch, MismatchResolution)](models)
 
   override protected lazy val dialogComponent: Component = {
     table.wrapInScrollpaneAndAdjustWidth()
   }
 
-  override protected def validateChoices(): Option[Map[Mismatch, MismatchResolution]] = {
+  override protected def validateChoices(): Option[Map[MessagesMismatch, MismatchResolution]] = {
     Some(table.selected.toMap)
   }
 
   import SelectMergesTable._
 
-  private class Models extends MergeModels[RenderableMismatch, (Mismatch, MismatchResolution)] {
+  private class Models extends MergeModels[RenderableMismatch, (MessagesMismatch, MismatchResolution)] {
     override val allElems: Seq[RowData[RenderableMismatch]] = {
       require(mismatches.nonEmpty)
       val masterCwd = ChatWithDao(masterChat, masterDao)
@@ -80,7 +80,7 @@ class SelectMergeMessagesDialog(
         }
       }
 
-      def messageToRowData(mismatch: Mismatch): RowData[RenderableMismatch] = {
+      def messageToRowData(mismatch: MessagesMismatch): RowData[RenderableMismatch] = {
         def abbreviateMessages(msgs: IndexedSeq[Message]): Seq[Either[Int, Message]] = {
           if (msgs.length <= MaxContinuousMsgsLength) {
             msgs map Right.apply
@@ -93,9 +93,9 @@ class SelectMergeMessagesDialog(
 
         val slaveMessages = slaveDao.messagesBetween(slaveChat, mismatch.firstSlaveMsg, mismatch.lastSlaveMsg)
         mismatch match {
-          case mismatch: Mismatch.Addition =>
+          case mismatch: MessagesMismatch.Addition =>
             RowData.InSlaveOnly(RenderableMismatch(Some(mismatch), abbreviateMessages(slaveMessages), slaveCwd))
-          case mismatch: Mismatch.Conflict =>
+          case mismatch: MessagesMismatch.Conflict =>
             val masterMessages = masterDao.messagesBetween(masterChat, mismatch.firstMasterMsg, mismatch.lastMasterMsg)
             RowData.InBoth(
               masterValue = RenderableMismatch(Some(mismatch), masterMessages map Right.apply, masterCwd),
@@ -206,7 +206,7 @@ class SelectMergeMessagesDialog(
     override protected def rowDataToResultOption(
         rd: RowData[RenderableMismatch],
         isSelected: Boolean
-    ): Option[(Mismatch, MismatchResolution)] = {
+    ): Option[(MessagesMismatch, MismatchResolution)] = {
       val res = if (isSelected) MismatchResolution.Apply else MismatchResolution.Reject
       rd match {
         case RowData.InBoth(mmd, _)   => mmd.mismatchOption map (_ -> res)
@@ -218,7 +218,7 @@ class SelectMergeMessagesDialog(
 
   private case class RenderableMismatch(
       /** Mismatch to be rendered, None means this only a context */
-      mismatchOption: Option[Mismatch],
+      mismatchOption: Option[MessagesMismatch],
       /** Messages to be rendered, or number of messages abbreviated out */
       messageOptions: Seq[Either[Int, Message]],
       cwd: ChatWithDao
@@ -350,7 +350,7 @@ private object SelectMergeMessagesDialog {
 
     val mismatches = IndexedSeq(
 //      // Addtion
-//      Mismatch.Addition(
+//      MessagesMismatch.Addition(
 //        prevMasterMsgOption = Some(mMsgsI.bySrcId(1)),
 //        nextMasterMsgOption = None,
 //        prevSlaveMsgOption  = None,
@@ -359,7 +359,7 @@ private object SelectMergeMessagesDialog {
 //      )
 
 //      // Addtion before first
-//      Mismatch.Addition(
+//      MessagesMismatch.Addition(
 //        prevMasterMsgOption = None,
 //        nextMasterMsgOption = Some(mMsgsI.bySrcId(4)),
 //        prevSlaveMsgOption  = None,
@@ -368,7 +368,7 @@ private object SelectMergeMessagesDialog {
 //      )
 
 //      // Conflicts
-//      Mismatch.Conflict(
+//      MessagesMismatch.Conflict(
 //        prevMasterMsgOption = Some(mMsgsI.bySrcId(1)),
 //        masterMsgs          = (mMsgsI.bySrcId(2), mMsgsI.bySrcId(2)),
 //        nextMasterMsgOption = Some(mMsgsI.bySrcId(3)),
@@ -376,7 +376,7 @@ private object SelectMergeMessagesDialog {
 //        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(2)),
 //        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(3))
 //      ),
-//      Mismatch.Conflict(
+//      MessagesMismatch.Conflict(
 //        prevMasterMsgOption = Some(mMsgsI.bySrcId(3)),
 //        masterMsgs          = (mMsgsI.bySrcId(4), mMsgsI.bySrcId(5)),
 //        nextMasterMsgOption = None,
@@ -386,14 +386,14 @@ private object SelectMergeMessagesDialog {
 //      )
 
 //      // Addition + conflict + addition, has before and after
-//      Mismatch.Addition(
+//      MessagesMismatch.Addition(
 //        prevMasterMsgOption = Some(mMsgsI.bySrcId(1)),
 //        nextMasterMsgOption = Some(mMsgsI.bySrcId(3)),
 //        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(1)),
 //        slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(2)),
 //        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(3))
 //      ),
-//      Mismatch.Conflict(
+//      MessagesMismatch.Conflict(
 //        prevMasterMsgOption = Some(mMsgsI.bySrcId(1)),
 //        masterMsgs          = (mMsgsI.bySrcId(3), mMsgsI.bySrcId(3)),
 //        nextMasterMsgOption = Some(mMsgsI.bySrcId(5)),
@@ -401,7 +401,7 @@ private object SelectMergeMessagesDialog {
 //        slaveMsgs           = (sMsgsI.bySrcId(3), sMsgsI.bySrcId(3)),
 //        nextSlaveMsgOption  = Some(sMsgsI.bySrcId(4))
 //      ),
-//      Mismatch.Addition(
+//      MessagesMismatch.Addition(
 //        prevMasterMsgOption = Some(mMsgsI.bySrcId(3)),
 //        nextMasterMsgOption = Some(mMsgsI.bySrcId(5)),
 //        prevSlaveMsgOption  = Some(sMsgsI.bySrcId(3)),
@@ -410,14 +410,14 @@ private object SelectMergeMessagesDialog {
 //      )
 
       // Addition + conflict + addition, no before and after
-      Mismatch.Addition(
+      MessagesMismatch.Addition(
         prevMasterMsgOption = None,
         nextMasterMsgOption = Some(mMsgsI.bySrcId(3)),
         prevSlaveMsgOption  = None,
         slaveMsgs           = (sMsgsI.bySrcId(2), sMsgsI.bySrcId(2)),
         nextSlaveMsgOption  = Some(sMsgsI.bySrcId(3))
       ),
-      Mismatch.Conflict(
+      MessagesMismatch.Conflict(
         prevMasterMsgOption = None,
         masterMsgs          = (mMsgsI.bySrcId(3), mMsgsI.bySrcId(3)),
         nextMasterMsgOption = None,
@@ -425,7 +425,7 @@ private object SelectMergeMessagesDialog {
         slaveMsgs           = (sMsgsI.bySrcId(3), sMsgsI.bySrcId(3)),
         nextSlaveMsgOption  = Some(sMsgsI.bySrcId(4))
       ),
-      Mismatch.Addition(
+      MessagesMismatch.Addition(
         prevMasterMsgOption = Some(mMsgsI.bySrcId(3)),
         nextMasterMsgOption = None,
         prevSlaveMsgOption  = Some(sMsgsI.bySrcId(3)),
@@ -434,7 +434,7 @@ private object SelectMergeMessagesDialog {
       )
 
 //      // Master had no messages
-//      Mismatch.Addition(
+//      MessagesMismatch.Addition(
 //        prevMasterMsgOption = None,
 //        nextMasterMsgOption = None,
 //        prevSlaveMsgOption  = None,

@@ -9,7 +9,7 @@ import scala.util.Random
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao._
-import org.fs.chm.dao.merge.ChatHistoryMerger.TaggedMessage
+import org.fs.chm.dao.merge.DatasetMerger.TaggedMessage
 
 /**
  * Utility stuff used for testing, both automatically and manually
@@ -99,11 +99,19 @@ object TestUtils {
   private trait EagerMutableDaoTrait extends MutableChatHistoryDao {
     override def renameDataset(dsUuid: UUID, newName: String): Dataset = ???
 
+    override def insertUser(user: User): Unit = ???
+
     override def updateUser(user: User): Unit = ???
 
     override def mergeUsers(baseUser: User, absorbedUser: User): Unit = ???
 
+    override def insertChat(chat: Chat): Unit = ???
+
     override def delete(chat: Chat): Unit = ???
+
+    override def disableBackups(): Unit = ???
+
+    override def enableBackups(): Unit = ???
 
     override protected def backup(): Unit = ???
   }

@@ -13,12 +13,13 @@ class ChatHistoryMerger(
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset
 ) {
+  import DatasetMerger._
 
   /**
    * Analyze dataset mergeability, returning the map from slave chat to mismatches in order.
    * Note that we can only detect conflicts if data source supports source IDs.
    */
-  def analyzeMergingChats(mc: Chat, sc: Chat): Seq[Mismatch] = {
+  def analyzeMergingChats(mc: Chat, sc: Chat): Seq[MessagesMismatch] = {
     def messagesStream[T <: TaggedMessage](dao: ChatHistoryDao, chat: Chat, offset: Int): Stream[T] = {
       if (offset >= chat.msgCount) {
         Stream.empty
@@ -27,7 +28,7 @@ class ChatHistoryMerger(
         batch.toStream #::: messagesStream[T](dao, chat, offset + batch.size)
       }
     }
-    var mismatches = ArrayBuffer.empty[Mismatch]
+    var mismatches = ArrayBuffer.empty[MessagesMismatch]
     iterate(
       ((messagesStream(masterDao, mc, 0), None), (messagesStream(slaveDao, sc, 0), None)),
       IterationState.NoState,
@@ -41,16 +42,16 @@ class ChatHistoryMerger(
   private def iterate(
       cxt: IterationContext,
       state: IterationState,
-      onMismatch: Mismatch => Unit
+      onMismatch: MessagesMismatch => Unit
   ): Unit = {
     import IterationState._
-    def mismatchOptionAfterConflictEnd(state: StateInProgress): Option[Mismatch] = {
+    def mismatchOptionAfterConflictEnd(state: StateInProgress): Option[MessagesMismatch] = {
       state match {
         case AdditionInProgress(prevMasterMsgOption, prevSlaveMsgOption, startSlaveMsg) =>
           assert(cxt.prevMm == prevMasterMsgOption) // Master stream hasn't advanced
           assert(cxt.prevSm.isDefined)
           Some(
-            Mismatch.Addition(
+            MessagesMismatch.Addition(
               prevMasterMsgOption = prevMasterMsgOption,
               nextMasterMsgOption = cxt.mmStream.headOption,
               prevSlaveMsgOption  = prevSlaveMsgOption,
@@ -61,7 +62,7 @@ class ChatHistoryMerger(
         case ConflictInProgress(prevMasterMsgOption, startMasterMsg, prevSlaveMsgOption, startSlaveMsg) =>
           assert(cxt.prevMm.isDefined && cxt.prevSm.isDefined)
           Some(
-            Mismatch.Conflict(
+            MessagesMismatch.Conflict(
               prevMasterMsgOption = prevMasterMsgOption,
               masterMsgs          = (startMasterMsg, cxt.prevMm.get),
               nextMasterMsgOption = cxt.mmStream.headOption,
@@ -153,11 +154,15 @@ class ChatHistoryMerger(
     }
   }
 
+  /**
+   * Merge messages from the given chats into the new dataset.
+   * New dataset should already contain a chat with the given ID.
+   */
   def mergeChats(
       newDs: Dataset,
       masterChat: Chat,
       slaveChat: Chat,
-      resolutions: Map[Mismatch, MismatchResolution]
+      resolutions: Map[MessagesMismatch, MismatchResolution]
   ): Unit = {
     /*
      * Do the same as analyze, reuse as much as possible
@@ -247,71 +252,5 @@ class ChatHistoryMerger(
 }
 
 object ChatHistoryMerger {
-
   protected[merge] val BatchSize = 1000
-
-  // Message tagged types
-  sealed trait TaggedMessage
-  object TaggedMessage {
-    sealed trait MasterMessageTag extends TaggedMessage
-    sealed trait SlaveMessageTag  extends TaggedMessage
-
-    type M = Message with MasterMessageTag
-    type S = Message with SlaveMessageTag
-  }
-
-  /** Represents a single general merge option: a chat that should be added or merged (or skipped if no decision) */
-  sealed trait ChatMergeOption
-  sealed trait ChangedChatMergeOption extends ChatMergeOption
-  object ChatMergeOption {
-    case class Combine(masterChat: Chat, slaveChat: Chat) extends ChangedChatMergeOption
-    case class Add(slaveChat: Chat)                       extends ChangedChatMergeOption
-    case class Retain(masterChat: Chat)                   extends ChatMergeOption
-  }
-
-  sealed trait Mismatch {
-    def prevMasterMsgOption: Option[TaggedMessage.M]
-    def firstMasterMsgOption: Option[TaggedMessage.M]
-    def lastMasterMsgOption: Option[TaggedMessage.M]
-    def nextMasterMsgOption: Option[TaggedMessage.M]
-    protected def slaveMsgs: (TaggedMessage.S, TaggedMessage.S)
-    def prevSlaveMsgOption: Option[TaggedMessage.S]
-    def firstSlaveMsg: TaggedMessage.S = slaveMsgs._1
-    def lastSlaveMsg:  TaggedMessage.S = slaveMsgs._2
-    def nextSlaveMsgOption: Option[TaggedMessage.S]
-  }
-  object Mismatch {
-    case class Addition(
-        prevMasterMsgOption: Option[TaggedMessage.M],
-        nextMasterMsgOption: Option[TaggedMessage.M],
-        prevSlaveMsgOption: Option[TaggedMessage.S],
-        /** First and last */
-        slaveMsgs: (TaggedMessage.S, TaggedMessage.S),
-        nextSlaveMsgOption: Option[TaggedMessage.S]
-    ) extends Mismatch {
-      override def firstMasterMsgOption = None
-      override def lastMasterMsgOption = None
-    }
-
-    case class Conflict(
-        prevMasterMsgOption: Option[TaggedMessage.M],
-        masterMsgs: (TaggedMessage.M, TaggedMessage.M),
-        nextMasterMsgOption: Option[TaggedMessage.M],
-        prevSlaveMsgOption: Option[TaggedMessage.S],
-        /** First and last */
-        slaveMsgs: (TaggedMessage.S, TaggedMessage.S),
-        nextSlaveMsgOption: Option[TaggedMessage.S]
-    ) extends Mismatch {
-      def firstMasterMsg: TaggedMessage.M = masterMsgs._1
-      def lastMasterMsg:  TaggedMessage.M = masterMsgs._2
-      override def firstMasterMsgOption = Some(firstMasterMsg)
-      override def lastMasterMsgOption = Some(lastMasterMsg)
-    }
-  }
-
-  sealed trait MismatchResolution
-  object MismatchResolution {
-    case object Apply  extends MismatchResolution
-    case object Reject extends MismatchResolution
-  }
 }

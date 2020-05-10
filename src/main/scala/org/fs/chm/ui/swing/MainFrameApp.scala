@@ -17,7 +17,8 @@ import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.ChatHistoryMerger
-import org.fs.chm.dao.merge.ChatHistoryMerger._
+import org.fs.chm.dao.merge.DatasetMerger
+import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.loader._
 import org.fs.chm.ui.swing.MessagesService._
 import org.fs.chm.ui.swing.general.ChatWithDao
@@ -328,7 +329,7 @@ class MainFrameApp //
   //
 
   def mergeDatasets(
-      masterDao: H2ChatHistoryDao,
+      masterDao: MutableChatHistoryDao,
       masterDs: Dataset,
       slaveDao: ChatHistoryDao,
       slaveDs: Dataset,
@@ -346,13 +347,13 @@ class MainFrameApp //
       }
     } map { chatsMergeAnalysis =>
       // Resolve mismatches
-      chatsMergeAnalysis.foldLeft(Option(Seq.empty[(Chat, Chat, Map[Mismatch, MismatchResolution])])) {
+      chatsMergeAnalysis.foldLeft(Option(Seq.empty[(Chat, Chat, Map[MessagesMismatch, MismatchResolution])])) {
         case (None, _) =>
           // Some selection has been cancelled, ignore everything else
           None
         case (Some(acc), (mc, sc, analysis)) if analysis.isEmpty =>
           // No mismatches, nothing to ask user about
-          Some(acc :+ (mc, sc, Map.empty[Mismatch, MismatchResolution]))
+          Some(acc :+ (mc, sc, Map.empty[MessagesMismatch, MismatchResolution]))
         case (Some(acc), (mc, sc, analysis)) =>
           val dialog =
             new SelectMergeMessagesDialog(masterDao, mc, slaveDao, sc, analysis.toIndexedSeq, htmlKit, msgService)
@@ -361,23 +362,15 @@ class MainFrameApp //
             acc :+ (mc, sc, resolutions)
           }
       }
-    } map { chatsMergeResolutionsOption: Option[Seq[(Chat, Chat, Map[Mismatch, MismatchResolution])]] =>
+    } map { chatsMergeResolutionsOption: Option[Seq[(Chat, Chat, Map[MessagesMismatch, MismatchResolution])]] =>
       // Merge
       Swing.onEDTWait {
         freezeTheWorld("Merging...")
       }
       chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
-        val newDs = Dataset(
-          uuid = UUID.randomUUID(),
-          alias = masterDs.alias,
-          sourceType = masterDs.sourceType
-        )
+        val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
         ???
-        // FIXE: Add users, merge users
-        // FIXE: Add chats
-        chatsMergeResolutions foreach {
-          case (mc, sc, resolutions) => merger.mergeChats(newDs, mc, sc, resolutions)
-        }
+//        merger.merge()
       }
     } onComplete { res =>
       res.failed.foreach(handleException)

@@ -9,7 +9,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.FunSuite
 import org.slf4s.Logging
 import com.github.nscala_time.time.Imports._
-import org.fs.chm.dao.merge.ChatHistoryMerger._
+import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.utility.TestUtils._
 
 @RunWith(classOf[org.scalatest.junit.JUnitRunner])
@@ -47,7 +47,7 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(
       analysis === Seq(
-        Mismatch.Addition(
+        MessagesMismatch.Addition(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(1)),
           nextMasterMsgOption = Some(helper.d1msgs.bySrcId(3)),
           prevSlaveMsgOption  = Some(helper.d2msgs.bySrcId(1)),
@@ -66,7 +66,7 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(
       analysis === Seq(
-        Mismatch.Conflict(
+        MessagesMismatch.Conflict(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(1)),
           masterMsgs          = (helper.d1msgs.bySrcId(2), helper.d1msgs.bySrcId(2)),
           nextMasterMsgOption = Some(helper.d1msgs.bySrcId(3)),
@@ -91,7 +91,7 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(
       analysis === Seq(
-        Mismatch.Addition(
+        MessagesMismatch.Addition(
           prevMasterMsgOption = None,
           nextMasterMsgOption = Some(helper.d1msgs.bySrcId(maxId)),
           prevSlaveMsgOption  = None,
@@ -116,7 +116,7 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(
       analysis === Seq(
-        Mismatch.Conflict(
+        MessagesMismatch.Conflict(
           prevMasterMsgOption = None,
           masterMsgs          = (helper.d1msgs.bySrcId(1), helper.d1msgs.bySrcId(maxId - 1)),
           nextMasterMsgOption = Some(helper.d1msgs.bySrcId(maxId)),
@@ -141,7 +141,7 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(
       analysis === Seq(
-        Mismatch.Addition(
+        MessagesMismatch.Addition(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(1)),
           nextMasterMsgOption = Some(helper.d1msgs.bySrcId(maxId)),
           prevSlaveMsgOption  = Some(helper.d2msgs.bySrcId(1)),
@@ -166,7 +166,7 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(
       analysis === Seq(
-        Mismatch.Conflict(
+        MessagesMismatch.Conflict(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(1)),
           masterMsgs          = (helper.d1msgs.bySrcId(2), helper.d1msgs.bySrcId(maxId - 1)),
           nextMasterMsgOption = Some(helper.d1msgs.bySrcId(maxId)),
@@ -191,7 +191,7 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(
       analysis === Seq(
-        Mismatch.Addition(
+        MessagesMismatch.Addition(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(1)),
           nextMasterMsgOption = None,
           prevSlaveMsgOption  = Some(helper.d2msgs.bySrcId(1)),
@@ -216,7 +216,7 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(
       analysis === Seq(
-        Mismatch.Conflict(
+        MessagesMismatch.Conflict(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(1)),
           masterMsgs          = (helper.d1msgs.bySrcId(2), helper.d1msgs.bySrcId(maxId)),
           nextMasterMsgOption = None,
@@ -242,7 +242,7 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(
       analysis === Seq(
-        Mismatch.Conflict(
+        MessagesMismatch.Conflict(
           prevMasterMsgOption = None,
           masterMsgs          = (helper.d1msgs.bySrcId(1), helper.d1msgs.bySrcId(maxId)),
           nextMasterMsgOption = None,
@@ -287,14 +287,14 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(
       analysis === Seq(
-        Mismatch.Addition(
+        MessagesMismatch.Addition(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(2)),
           nextMasterMsgOption = Some(helper.d1msgs.bySrcId(5)),
           prevSlaveMsgOption = None,
           slaveMsgs = (helper.d2msgs.bySrcId(3), helper.d2msgs.bySrcId(4)),
           nextSlaveMsgOption = Some(helper.d2msgs.bySrcId(5))
         ),
-        Mismatch.Conflict(
+        MessagesMismatch.Conflict(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(2)),
           masterMsgs = (helper.d1msgs.bySrcId(5), helper.d1msgs.bySrcId(6)),
           nextMasterMsgOption = Some(helper.d1msgs.bySrcId(7)),
@@ -302,7 +302,7 @@ class ChatHistoryMergerSpec //
           slaveMsgs = (helper.d2msgs.bySrcId(5), helper.d2msgs.bySrcId(6)),
           nextSlaveMsgOption = Some(helper.d2msgs.bySrcId(7))
         ),
-        Mismatch.Conflict(
+        MessagesMismatch.Conflict(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(8)),
           masterMsgs = (helper.d1msgs.bySrcId(9), helper.d1msgs.bySrcId(10)),
           nextMasterMsgOption = None,
@@ -310,7 +310,7 @@ class ChatHistoryMergerSpec //
           slaveMsgs = (helper.d2msgs.bySrcId(9), helper.d2msgs.bySrcId(10)),
           nextSlaveMsgOption = Some(helper.d2msgs.bySrcId(11))
         ),
-        Mismatch.Addition(
+        MessagesMismatch.Addition(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(10)),
           nextMasterMsgOption = None,
           prevSlaveMsgOption = Some(helper.d2msgs.bySrcId(10)),
@@ -338,14 +338,14 @@ class ChatHistoryMergerSpec //
     val analysis = helper.merger.analyzeMergingChats(helper.d1chat, helper.d2chat)
     assert(
       analysis === Seq(
-        Mismatch.Addition(
+        MessagesMismatch.Addition(
           prevMasterMsgOption = None,
           nextMasterMsgOption = Some(helper.d1msgs.bySrcId(3)),
           prevSlaveMsgOption  = None,
           slaveMsgs           = (helper.d2msgs.bySrcId(1), helper.d2msgs.bySrcId(2)),
           nextSlaveMsgOption  = Some(helper.d2msgs.bySrcId(5))
         ),
-        Mismatch.Conflict(
+        MessagesMismatch.Conflict(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(4)),
           masterMsgs          = (helper.d1msgs.bySrcId(5), helper.d1msgs.bySrcId(6)),
           nextMasterMsgOption = Some(helper.d1msgs.bySrcId(7)),
@@ -353,7 +353,7 @@ class ChatHistoryMergerSpec //
           slaveMsgs           = (helper.d2msgs.bySrcId(5), helper.d2msgs.bySrcId(6)),
           nextSlaveMsgOption  = Some(helper.d2msgs.bySrcId(7))
         ),
-        Mismatch.Conflict(
+        MessagesMismatch.Conflict(
           prevMasterMsgOption = Some(helper.d1msgs.bySrcId(8)),
           masterMsgs          = (helper.d1msgs.bySrcId(9), helper.d1msgs.bySrcId(10)),
           nextMasterMsgOption = Some(helper.d1msgs.bySrcId(11)),
