@@ -11,6 +11,13 @@ import org.fs.chm.ui.swing.list.chat.ChatListItem
 import org.fs.chm.utility.EntityUtils._
 import org.fs.utility.Imports._
 
+/**
+ * Show dialog for merging chats.
+ * Rules:
+ * - There will be a merge option in the output for every chat in master DS
+ * - Master chats will precede slave-only chats
+ * - Checkbox option will be present for all chats in slave DS - i.e. whether to add/combine them or not
+ */
 class SelectMergeChatsDialog(
     masterDao: MutableChatHistoryDao,
     masterDs: Dataset,
@@ -98,10 +105,14 @@ class SelectMergeChatsDialog(
         isSelected: Boolean
     ): Option[ChatMergeOption] = {
       rd match {
-        case RowData.InMasterOnly(ChatWithDao(mc, _))               => Some(ChatMergeOption.Retain(mc))
-        case _ if !isSelected                                       => None
-        case RowData.InBoth(ChatWithDao(mc, _), ChatWithDao(sc, _)) => Some(ChatMergeOption.Combine(mc, sc))
-        case RowData.InSlaveOnly(ChatWithDao(sc, _))                => Some(ChatMergeOption.Add(sc))
+        case RowData.InMasterOnly(ChatWithDao(mc, _)) =>
+          Some(ChatMergeOption.Retain(mc))
+        case RowData.InBoth(ChatWithDao(mc, _), ChatWithDao(sc, _)) =>
+          Some(if (isSelected) ChatMergeOption.Combine(mc, sc) else ChatMergeOption.Retain(sc))
+        case _ if !isSelected =>
+          None
+        case RowData.InSlaveOnly(ChatWithDao(sc, _)) =>
+          Some(ChatMergeOption.Add(sc))
       }
     }
   }
