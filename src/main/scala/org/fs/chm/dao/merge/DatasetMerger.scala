@@ -35,19 +35,30 @@ class DatasetMerger(
     case ChatMergeOption.Combine(mc, sc) =>
       var mismatches = ArrayBuffer.empty[MessagesMergeOption]
       iterate(
-        ((messagesStream(masterDao, mc, 0), None), (messagesStream(slaveDao, sc, 0), None)),
+        ((messagesStream(masterDao, mc, None), None), (messagesStream(slaveDao, sc, None), None)),
         IterationState.NoState,
         (mm => mismatches += mm)
       )
       mismatches.toVector
   }
 
-  private def messagesStream[T <: TaggedMessage](dao: ChatHistoryDao, chat: Chat, offset: Int): Stream[T] = {
-    if (offset >= chat.msgCount) {
+  // FIXME: Test!
+  /** Stream messages, either from the beginning or from the given one (exclusive) */
+  protected[merge] def messagesStream[T <: TaggedMessage](
+      dao: ChatHistoryDao,
+      chat: Chat,
+      fromMessageOption: Option[Message with T]
+  ): Stream[T] = {
+    val batch = fromMessageOption
+      .map(from => dao.messagesAfter(chat, from, BatchSize + 1).drop(1))
+      .getOrElse(dao.firstMessages(chat, BatchSize))
+      .asInstanceOf[IndexedSeq[Message with T]]
+    if (batch.isEmpty) {
       Stream.empty
+    } else if (batch.size < BatchSize) {
+      batch.toStream
     } else {
-      val batch = dao.scrollMessages(chat, offset, BatchSize).asInstanceOf[IndexedSeq[T]]
-      batch.toStream #::: messagesStream[T](dao, chat, offset + batch.size)
+      batch.toStream #::: messagesStream[T](dao, chat, Some(batch.last))
     }
   }
 
@@ -208,9 +219,30 @@ class DatasetMerger(
           case etc                                  => etc
         }.foreach {
           case MessagesMergeOption.Retain(firstMasterMsg, lastMasterMsg, _, _) =>
-            ???
+            var lastFound = false
+            val messages = firstMasterMsg #:: messagesStream(
+              masterDao,
+              cmo.asInstanceOf[ChatMergeOption.Retain].masterChat,
+              Some(firstMasterMsg.asInstanceOf[TaggedMessage.M])
+            ).takeWhile { m =>
+              val isLast = m =~= lastMasterMsg
+              lastFound = isLast
+              isLast || !lastFound
+            }
+            masterDao.insertMessages(chat, messages)
           case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
-            ???
+            var lastFound = false
+            val messages = firstSlaveMsg #:: messagesStream(
+              slaveDao,
+              cmo.asInstanceOf[ChatMergeOption.Add].slaveChat,
+              Some(firstSlaveMsg.asInstanceOf[TaggedMessage.S])
+            ).takeWhile { m =>
+              val isLast = m =~= lastSlaveMsg
+              lastFound = isLast
+              isLast || !lastFound
+            }
+            masterDao.insertMessages(chat, messages)
+          case _ => throw new MatchError("Impossible!")
         }
       }
 

@@ -162,24 +162,7 @@ class H2ChatHistoryDao(
               batch <- batchStream(0)
               m     <- batch
             } {
-              m.sourceIdOption foreach (id => require(id > 0, "Source IDs should be positive!"))
-              val (rm, rcOption, rrtEls) = Raws.fromMessage(ds.uuid, c.id, m)
-
-              val msgInsertQuery: ConnectionIO[Unit] = for {
-                msgInternalId <- queries.rawMessages.insert(rm)
-
-                // Content
-                _ <- rcOption map { rc =>
-                  queries.rawContent.insert(rc, ds.uuid, msgInternalId)
-                } getOrElse queries.pure0
-
-                // RichText
-                _ <- rrtEls.foldLeft(queries.pure0) { (q, rrtEl) =>
-                  q flatMap (_ => queries.rawRichTextElements.insert(rrtEl, ds.uuid, msgInternalId) map (_ => 0))
-                }
-              } yield ()
-
-              query = query flatMap (_ => msgInsertQuery)
+              query = query flatMap (_ => queries.messages.insert(ds.uuid, c.id, m))
             }
           }
 
@@ -319,6 +302,19 @@ class H2ChatHistoryDao(
     log.info(s"Deleted ${deletedUsersNum} orphaned users")
     Lock.synchronized {
       _interlocutorsCacheOption = None
+    }
+  }
+
+  override def insertMessages(chat: Chat, msgs: Seq[Message]): Unit = {
+    if (msgs.nonEmpty) {
+      val query = msgs
+        .map(m => queries.messages.insert(chat.dsUuid, chat.id, m))
+        .reduce((q1, q2) => q1 flatMap (_ => q2))
+      query.transact(txctr).unsafeRunSync()
+      backup()
+      Lock.synchronized {
+        _interlocutorsCacheOption = None
+      }
     }
   }
 
@@ -616,6 +612,31 @@ class H2ChatHistoryDao(
 
       def delete(dsUuid: UUID, id: ChatId): ConnectionIO[Int] =
         (fr"DELETE FROM chats WHERE ds_uuid = ${dsUuid} AND id = ${id}").update.run
+    }
+
+    object messages {
+      def insert(
+          dsUuid: UUID,
+          chatId: Long,
+          m: Message
+      ): ConnectionIO[Unit] = {
+        m.sourceIdOption foreach (id => require(id > 0, "Source IDs should be positive!"))
+        val (rm, rcOption, rrtEls) = Raws.fromMessage(dsUuid, chatId, m)
+
+        for {
+          msgInternalId <- rawMessages.insert(rm)
+
+          // Content
+          _ <- rcOption map { rc =>
+            rawContent.insert(rc, dsUuid, msgInternalId)
+          } getOrElse pure0
+
+          // RichText
+          _ <- rrtEls.foldLeft(pure0) { (q, rrtEl) =>
+            q flatMap (_ => rawRichTextElements.insert(rrtEl, dsUuid, msgInternalId) map (_ => 0))
+          }
+        } yield ()
+      }
     }
 
     object rawMessages {

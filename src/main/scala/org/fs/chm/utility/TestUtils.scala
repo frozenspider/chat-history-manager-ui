@@ -109,6 +109,8 @@ object TestUtils {
 
     override def deleteChat(chat: Chat): Unit = ???
 
+    override def insertMessages(chat: Chat, msgs: Seq[Message]): Unit = ???
+
     override def disableBackups(): Unit = ???
 
     override def enableBackups(): Unit = ???

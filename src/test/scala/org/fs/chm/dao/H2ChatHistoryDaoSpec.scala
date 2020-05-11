@@ -7,6 +7,7 @@ import java.util.UUID
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.TestHelper
+import org.fs.chm.WithH2Dao
 import org.fs.chm.loader.H2DataManager
 import org.fs.chm.loader.TelegramDataLoader
 import org.fs.chm.utility.TestUtils
@@ -20,6 +21,7 @@ import org.slf4s.Logging
 class H2ChatHistoryDaoSpec //
     extends FunSuite
     with TestHelper
+    with WithH2Dao
     with Logging
     with BeforeAndAfter
     with BeforeAndAfterAll {
@@ -30,8 +32,6 @@ class H2ChatHistoryDaoSpec //
 
   var tgDao:  ChatHistoryDao   = _
   var dsUuid: UUID             = _
-  var h2dao:  H2ChatHistoryDao = _
-  var dir:    File             = _
 
   override def beforeAll(): Unit = {
     tgDao  = loader.loadData(telegramDir)
@@ -39,11 +39,7 @@ class H2ChatHistoryDaoSpec //
   }
 
   before {
-    dir = Files.createTempDirectory(null).toFile
-    log.info(s"Using temp dir $dir")
-    manager.create(dir)
-    h2dao = manager.loadData(dir)
-
+    initH2Dao()
     // Most invariants are checked within copyAllFrom
     h2dao.copyAllFrom(tgDao)
   }
@@ -318,14 +314,5 @@ class H2ChatHistoryDaoSpec //
           fromId         = baseUser.id
         ))).sortBy(_.time)
     assert(h2dao.firstMessages(chatsAfter.find(_.id == baseUserPc.id).get, 99999) === expectedMessages)
-  }
-
-  private def freeH2Dao(): Unit = {
-    h2dao.close()
-    def delete(f: File): Unit = {
-      (Option(f.listFiles()) getOrElse Array.empty) foreach delete
-      assert(f.delete(), s"Couldn't delete $f")
-    }
-    delete(dir)
   }
 }

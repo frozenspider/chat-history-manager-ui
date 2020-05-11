@@ -11,15 +11,42 @@ import org.scalatest.FunSuite
 import org.slf4s.Logging
 
 @RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class DatasetMergerSpec //
+class DatasetMergerAnalyzeSpec //
     extends FunSuite
     with TestHelper
     with Logging
     with BeforeAndAfter {
+  import DatasetMergerHelper._
 
-  val maxId = (DatasetMerger.BatchSize * 3)
-  val maxUserId = 3
-  def rndUserId = 1 + rnd.nextInt(maxUserId)
+  test("messages stream") {
+    def messagesForChat1(helper: MergerHelper, fromOption: Option[Message]) =
+      helper.merger.messagesStream(helper.dao1, helper.d1chat, fromOption.asInstanceOf[Option[TaggedMessage.M]])
+
+    val msgs = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
+
+    { // No messages
+      val helper = new MergerHelper(Seq.empty, Seq.empty)
+      assert(messagesForChat1(helper, None) === Seq.empty)
+    }
+
+    { // One message
+      val helper = new MergerHelper(msgs.take(1), Seq.empty)
+      assert(messagesForChat1(helper, None) === helper.d1msgs)
+      assert(messagesForChat1(helper, helper.d1msgs.headOption) === Seq.empty)
+    }
+
+    { // All messages
+      val helper = new MergerHelper(msgs, Seq.empty)
+      assert(messagesForChat1(helper, None) === helper.d1msgs)
+      assert(messagesForChat1(helper, helper.d1msgs.headOption) === helper.d1msgs.tail)
+    }
+
+    { // All messages but last
+      val helper = new MergerHelper(msgs.dropRight(1), Seq.empty)
+      assert(messagesForChat1(helper, None) === helper.d1msgs)
+      assert(messagesForChat1(helper, helper.d1msgs.headOption) === helper.d1msgs.tail)
+    }
+  }
 
   test("retain - no messages") {
     val helper   = new MergerHelper(Seq.empty, Seq.empty)
@@ -595,15 +622,6 @@ class DatasetMergerSpec //
   // Helpers
   //
 
-  def changedMessages(msgs: Seq[Message], idCondition: Long => Boolean): Seq[Message] = {
-    msgs.collect {
-      case m: Message.Regular if idCondition(m.sourceIdOption.get) =>
-        m.copy(textOption = Some(RichText(Seq(RichText.Plain("Different message")))))
-      case m =>
-        m
-    }
-  }
-
   class MergerHelper(msgs1: Seq[Message], msgs2: Seq[Message]) {
     val (dao1, d1ds, d1users, d1chat, d1msgs) = createDaoAndEntities("One", msgs1, maxUserId)
     val (dao2, d2ds, d2users, d2chat, d2msgs) = createDaoAndEntities("Two", msgs2, maxUserId)
@@ -612,7 +630,7 @@ class DatasetMergerSpec //
       new DatasetMerger(dao1, d1ds, dao2, d2ds)
 
     private def createDaoAndEntities(nameSuffix: String, srcMsgs: Seq[Message], numUsers: Int) = {
-      val dao = createSimpleDao(nameSuffix, srcMsgs, numUsers)
+      val dao                     = createSimpleDao(nameSuffix, srcMsgs, numUsers)
       val (ds, users, chat, msgs) = getSimpleDaoEntities(dao)
       (dao, ds, users, chat, msgs)
     }

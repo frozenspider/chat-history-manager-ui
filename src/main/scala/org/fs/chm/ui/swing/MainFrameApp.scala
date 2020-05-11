@@ -16,7 +16,6 @@ import com.github.nscala_time.time.Imports._
 import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
-import org.fs.chm.dao.merge.ChatHistoryMerger
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.loader._

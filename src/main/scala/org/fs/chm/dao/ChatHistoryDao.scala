@@ -113,6 +113,9 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
 
   def deleteChat(chat: Chat): Unit
 
+  /** Insert a new message for the given chat. Internal ID will be ignored. */
+  def insertMessages(chat: Chat, msgs: Seq[Message]): Unit
+
   /** Don't do automatic backups on data changes until re-enabled */
   def disableBackups(): Unit
 
