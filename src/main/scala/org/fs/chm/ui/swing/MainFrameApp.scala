@@ -333,7 +333,7 @@ class MainFrameApp //
       masterDs: Dataset,
       slaveDao: ChatHistoryDao,
       slaveDs: Dataset,
-      usersToMerge: Map[User, User],
+      usersToMerge: Seq[UserMergeOption],
       chatsToMerge: Seq[ChatMergeOption]
   ): Unit = {
     val merger = new ChatHistoryMerger(masterDao, masterDs, slaveDao, slaveDs)
