@@ -117,7 +117,7 @@ class SelectMergeUsersDialog(
         case RowData.InMasterOnly(muwd) => UserMergeOption.Retain(muwd.user)
         case RowData.InSlaveOnly(suwd)  => UserMergeOption.Add(suwd.user)
         case RowData.InBoth(muwd, suwd) =>
-          if (isSelected) UserMergeOption.Combine(muwd.user, suwd.user) else UserMergeOption.Retain(muwd.user)
+          if (isSelected) UserMergeOption.Replace(muwd.user, suwd.user) else UserMergeOption.Retain(muwd.user)
       })
     }
   }

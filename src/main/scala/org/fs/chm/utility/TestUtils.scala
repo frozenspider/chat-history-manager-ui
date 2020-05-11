@@ -27,7 +27,7 @@ object TestUtils {
       lastNameOption     = Some(idx.toString),
       usernameOption     = Some("user" + idx),
       phoneNumberOption  = Some("xxx xx xx".replaceAll("x", idx.toString)),
-      lastSeenTimeOption = Some(DateTime.now())
+      lastSeenTimeOption = Some(baseDate.plusMinutes(idx))
     )
 
   def createChat(ds: Dataset, idx: Int, nameSuffix: String, messagesSize: Int): Chat =

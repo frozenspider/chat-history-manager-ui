@@ -336,41 +336,38 @@ class MainFrameApp //
       usersToMerge: Seq[UserMergeOption],
       chatsToMerge: Seq[ChatMergeOption]
   ): Unit = {
-    val merger = new ChatHistoryMerger(masterDao, masterDs, slaveDao, slaveDs)
+    val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
     Swing.onEDT {
       freezeTheWorld("Analyzing chat messages...")
     }
     Future {
       // Analyze
-      chatsToMerge.collect {
-        case ChatMergeOption.Combine(mc, sc) => (mc, sc, merger.analyzeMergingChats(mc, sc))
-      }
-    } map { chatsMergeAnalysis =>
-      // Resolve mismatches
-      chatsMergeAnalysis.foldLeft(Option(Seq.empty[(Chat, Chat, Map[MessagesMismatch, MismatchResolution])])) {
-        case (None, _) =>
-          // Some selection has been cancelled, ignore everything else
-          None
-        case (Some(acc), (mc, sc, analysis)) if analysis.isEmpty =>
-          // No mismatches, nothing to ask user about
-          Some(acc :+ (mc, sc, Map.empty[MessagesMismatch, MismatchResolution]))
-        case (Some(acc), (mc, sc, analysis)) =>
+      val analysis = chatsToMerge.map(c => (c, merger.analyzeChatHistoryMerge(c))).toMap
+      val (resolution, cancelled) = analysis.foldLeft((Map.empty[ChatMergeOption, Seq[MessagesMergeOption]], false)) {
+        case ((res, stop), _) if stop =>
+          (res, true)
+        case ((res, _), (cmo @ ChatMergeOption.Combine(mc, sc), chatAnalysis)) =>
+          // Resolve mismatches
           val dialog =
-            new SelectMergeMessagesDialog(masterDao, mc, slaveDao, sc, analysis.toIndexedSeq, htmlKit, msgService)
+            new SelectMergeMessagesDialog(masterDao, mc, slaveDao, sc, chatAnalysis.toIndexedSeq, htmlKit, msgService)
           dialog.visible = true
-          dialog.selection map { resolutions =>
-            acc :+ (mc, sc, resolutions)
-          }
+          dialog.selection
+            .map(resolution => (res + (cmo -> resolution), false))
+            .getOrElse((res, true))
+        case ((res, _), (cmo, chatAnalysis)) =>
+          (res + (cmo -> chatAnalysis), false)
       }
-    } map { chatsMergeResolutionsOption: Option[Seq[(Chat, Chat, Map[MessagesMismatch, MismatchResolution])]] =>
+      if (cancelled) None else Some(resolution)
+    } map { chatsMergeResolutionsOption: Option[Map[ChatMergeOption, Seq[MessagesMergeOption]]] =>
       // Merge
       Swing.onEDTWait {
         freezeTheWorld("Merging...")
       }
       chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
-        val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
-        ???
-//        merger.merge()
+        merger.merge(usersToMerge, chatsMergeResolutions)
+        // TODO: daoListChanged? loadDaoInEDT?
+        chatsOuterPanel.revalidate()
+        chatsOuterPanel.repaint()
       }
     } onComplete { res =>
       res.failed.foreach(handleException)

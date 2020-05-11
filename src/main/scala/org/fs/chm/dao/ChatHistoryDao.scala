@@ -315,6 +315,8 @@ sealed trait Message extends Searchable {
     this.withInternalId(Message.NoInternalId) == that.withInternalId(Message.NoInternalId)
 
   def !=~=(that: Message) = !(this =~= that)
+
+  override def toString: String = s"Message($plainSearchableString)"
 }
 
 object Message {
