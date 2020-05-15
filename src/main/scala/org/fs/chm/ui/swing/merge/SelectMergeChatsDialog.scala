@@ -134,7 +134,7 @@ object SelectMergeChatsDialog {
         sourceType = "test source"
       )
       val chats        = chatsProducer(ds)
-      val user         = createUser(ds, 1)
+      val user         = createUser(ds.uuid, 1)
       val dataPathRoot = Files.createTempDirectory(null).toFile
       dataPathRoot.deleteOnExit()
       new EagerChatHistoryDao(
@@ -147,9 +147,9 @@ object SelectMergeChatsDialog {
       ) with EagerMutableDaoTrait
     }
 
-    val mDao           = createMultiChatDao(ds => for (i <- 1 to 5 if i != 4) yield createChat(ds, i, i.toString, 0))
+    val mDao           = createMultiChatDao(ds => for (i <- 1 to 5 if i != 4) yield createChat(ds.uuid, i, i.toString, 0))
     val (mDs, _, _, _) = getSimpleDaoEntities(mDao)
-    val sDao           = createMultiChatDao(ds => for (i <- 2 to 6 by 2) yield createChat(ds, i, i.toString, 0))
+    val sDao           = createMultiChatDao(ds => for (i <- 2 to 6 by 2) yield createChat(ds.uuid, i, i.toString, 0))
     val (sDs, _, _, _) = getSimpleDaoEntities(sDao)
 
     val dialog = new SelectMergeChatsDialog(mDao, mDs, sDao, sDs)

@@ -7,7 +7,6 @@ import scala.collection.immutable.ListMap
 import scala.util.Random
 
 import com.github.nscala_time.time.Imports._
-import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger.TaggedMessage
 
@@ -16,12 +15,13 @@ import org.fs.chm.dao.merge.DatasetMerger.TaggedMessage
  */
 object TestUtils {
 
+  val noUuid   = UUID.fromString("00000000-0000-0000-0000-000000000000")
   val baseDate = DateTime.parse("2019-01-02T11:15:21")
   val rnd      = new Random()
 
-  def createUser(ds: Dataset, idx: Int): User =
+  def createUser(dsUuid: UUID, idx: Int): User =
     User(
-      dsUuid             = ds.uuid,
+      dsUuid             = dsUuid,
       id                 = idx,
       firstNameOption    = Some("User"),
       lastNameOption     = Some(idx.toString),
@@ -30,9 +30,9 @@ object TestUtils {
       lastSeenTimeOption = Some(baseDate.plusMinutes(idx))
     )
 
-  def createChat(ds: Dataset, idx: Int, nameSuffix: String, messagesSize: Int): Chat =
+  def createChat(dsUuid: UUID, idx: Int, nameSuffix: String, messagesSize: Int): Chat =
     Chat(
-      dsUuid        = ds.uuid,
+      dsUuid        = dsUuid,
       id            = idx,
       nameOption    = Some("Chat " + nameSuffix),
       tpe           = ChatType.Personal,
@@ -59,22 +59,35 @@ object TestUtils {
   }
 
   def createSimpleDao(nameSuffix: String, msgs: Seq[Message], numUsers: Int): MutableChatHistoryDao = {
+    val chat  = createChat(noUuid, 1, "One", msgs.size)
+    val users = (1 to numUsers).map(i => createUser(noUuid, i))
+    createDao(nameSuffix, users, ListMap(chat -> msgs.toIndexedSeq))
+  }
+
+  def createDao(
+      nameSuffix: String,
+      users: Seq[User],
+      chatsWithMsgs: ListMap[Chat, Seq[Message]]
+  ): MutableChatHistoryDao = {
+    require({
+      val userIds = users.map(_.id).toSet
+      chatsWithMsgs.values.flatten.forall(userIds contains _.fromId)
+    }, "All messages should have valid user IDs!")
     val ds = Dataset(
       uuid       = UUID.randomUUID(),
       alias      = "Dataset " + nameSuffix,
       sourceType = "test source"
     )
-    val chat         = createChat(ds, 1, "One", msgs.size)
-    val users        = (1 to numUsers).map(i => createUser(ds, i))
+    val users1 = users map (_ copy (dsUuid = ds.uuid))
     val dataPathRoot = Files.createTempDirectory(null).toFile
     dataPathRoot.deleteOnExit()
     new EagerChatHistoryDao(
       name               = "Dao " + nameSuffix,
       dataPathRoot       = dataPathRoot,
       dataset            = ds,
-      myself1            = users.head,
-      users1             = users,
-      _chatsWithMessages = ListMap(chat -> msgs.toIndexedSeq)
+      myself1            = users1.head,
+      users1             = users1,
+      _chatsWithMessages = chatsWithMsgs.map { case (c, ms) => (c.copy(dsUuid = ds.uuid) -> ms.toIndexedSeq) }
     ) with EagerMutableDaoTrait
   }
 
@@ -84,6 +97,11 @@ object TestUtils {
     val chat  = dao.chats(ds.uuid).head
     val msgs  = dao.firstMessages(chat, Int.MaxValue)
     (ds, users, chat, msgs)
+  }
+
+  implicit class RichUserSeq(users: Seq[User]) {
+    def byId(id: Long): User =
+      users.find(_.id == id).get
   }
 
   implicit class RichMsgSeq(msgs: Seq[Message]) {
@@ -97,9 +115,11 @@ object TestUtils {
     msgs.bySrcId(id)
 
   trait EagerMutableDaoTrait extends MutableChatHistoryDao {
+    override def insertDataset(ds: Dataset): Unit = ???
+
     override def renameDataset(dsUuid: UUID, newName: String): Dataset = ???
 
-    override def insertUser(user: User): Unit = ???
+    override def insertUser(user: User, isMyself: Boolean): Unit = ???
 
     override def updateUser(user: User): Unit = ???
 

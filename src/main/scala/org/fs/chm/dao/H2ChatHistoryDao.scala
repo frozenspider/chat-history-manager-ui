@@ -45,7 +45,11 @@ class H2ChatHistoryDao(
   }
 
   override def myself(dsUuid: UUID): User = {
-    queries.users.selectMyself(dsUuid).transact(txctr).unsafeRunSync()
+    queries.users
+      .selectMyself(dsUuid)
+      .transact(txctr)
+      .unsafeRunSync()
+      .getOrElse(throw new IllegalStateException(s"Dataset $dsUuid has no self user!"))
   }
 
   /** Contains myself as well */
@@ -225,16 +229,27 @@ class H2ChatHistoryDao(
 
   override def isMutable: Boolean = true
 
+  override def insertDataset(ds: Dataset): Unit = {
+    backup()
+    queries.datasets.insert(ds).transact(txctr).unsafeRunSync()
+    Lock.synchronized {
+      _interlocutorsCacheOption = None
+    }
+  }
+
   override def renameDataset(dsUuid: UUID, newName: String): Dataset = {
     backup()
     queries.datasets.rename(dsUuid, newName).transact(txctr).unsafeRunSync()
     datasets.find(_.uuid == dsUuid).get
   }
 
-  override def insertUser(user: User): Unit = {
+  override def insertUser(user: User, isMyself: Boolean): Unit = {
     require(user.id > 0, "ID should be positive!")
+    if (isMyself) {
+      val oldMyselfOption = queries.users.selectMyself(user.dsUuid).transact(txctr).unsafeRunSync()
+      require(oldMyselfOption.isEmpty, "Myself is already defined for this dataset!")
+    }
     backup()
-    val isMyself = myself(user.dsUuid).id == user.id
     queries.users.insert(user, isMyself).transact(txctr).unsafeRunSync()
     Lock.synchronized {
       _interlocutorsCacheOption = None
@@ -511,7 +526,7 @@ class H2ChatHistoryDao(
         (selectFr(dsUuid) ++ defaultOrder).query[User].to[Seq]
 
       def selectMyself(dsUuid: UUID) =
-        (selectFr(dsUuid) ++ fr"AND is_myself = true").query[User].unique
+        (selectFr(dsUuid) ++ fr"AND is_myself = true").query[User].option
 
       def select(dsUuid: UUID, id: Long) =
         (selectFr(dsUuid) ++ fr"AND id = $id").query[User].option

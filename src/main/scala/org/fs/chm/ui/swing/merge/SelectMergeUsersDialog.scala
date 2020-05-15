@@ -141,7 +141,7 @@ object SelectMergeUsersDialog {
         sourceType = "test source"
       )
       val users        = usersProducer(ds)
-      val chat         = createChat(ds, 1, "One", 0)
+      val chat         = createChat(ds.uuid, 1, "One", 0)
       val dataPathRoot = Files.createTempDirectory(null).toFile
       dataPathRoot.deleteOnExit()
       new EagerChatHistoryDao(
@@ -155,12 +155,12 @@ object SelectMergeUsersDialog {
     }
 
     val mDao = createMultiUserDao { ds =>
-      (1 to 5) map (i => createUser(ds, i))
+      (1 to 5) map (i => createUser(ds.uuid, i))
     }
     val (mDs, _, _, _) = getSimpleDaoEntities(mDao)
     val sDao = createMultiUserDao { ds =>
       (2 to 6 by 2) map { i =>
-        val u = createUser(ds, i)
+        val u = createUser(ds.uuid, i)
         if (i == 2) u.copy(firstNameOption = Some("Aha!")) else u
       }
     }

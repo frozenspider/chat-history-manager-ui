@@ -94,10 +94,12 @@ trait ChatHistoryDao extends AutoCloseable {
 }
 
 trait MutableChatHistoryDao extends ChatHistoryDao {
+  def insertDataset(ds: Dataset): Unit
+
   def renameDataset(dsUuid: UUID, newName: String): Dataset
 
   /** Insert a new user. It should not yet exist. */
-  def insertUser(user: User): Unit
+  def insertUser(user: User, isMyself: Boolean): Unit
 
   /** Sets the data (names and phone only) for a user with the given `id` and `dsUuid` to the given state */
   def updateUser(user: User): Unit

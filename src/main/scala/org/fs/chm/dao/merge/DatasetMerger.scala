@@ -143,7 +143,7 @@ class DatasetMerger(
       //
 
       case (_, Some(sm), state: AdditionInProgress)
-        if state.prevMasterMsgOption == cxt.prevMm && cxt.cmpMasterSlave() > 0 =>
+          if state.prevMasterMsgOption == cxt.prevMm && cxt.cmpMasterSlave() > 0 =>
         // Addition continues
         iterate(cxt.advanceSlave(), state, onMismatch)
       case (_, _, state: AdditionInProgress) =>
@@ -168,7 +168,7 @@ class DatasetMerger(
       //
 
       case (Some(mm), _, RetentionInProgress(_, _, prevSlaveMsgOption))
-        if (cxt.prevSm == prevSlaveMsgOption) && cxt.cmpMasterSlave() < 0 =>
+          if (cxt.prevSm == prevSlaveMsgOption) && cxt.cmpMasterSlave() < 0 =>
         // Retention continues
         iterate(cxt.advanceMaster(), state, onMismatch)
       case (_, _, state: RetentionInProgress) =>
@@ -201,11 +201,17 @@ class DatasetMerger(
         alias = masterDs.alias + " (merged)",
         sourceType = masterDs.sourceType
       )
+      masterDao.insertDataset(newDs)
 
       // Users
+      val masterSelf = masterDao.myself(masterDs.uuid)
+      require(
+        usersToMerge.map(_.userToInsert).count(_.id == masterSelf.id) == 1,
+        "User merges should contain exactly one self user!"
+      )
       for (sourceUser <- usersToMerge) {
         val user2 = sourceUser.userToInsert.copy(dsUuid = newDs.uuid)
-        masterDao.insertUser(user2)
+        masterDao.insertUser(user2, user2.id == masterSelf.id)
       }
 
       // Chats

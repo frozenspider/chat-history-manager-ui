@@ -1,7 +1,6 @@
 package org.fs.chm.dao.merge
 
-import org.fs.chm.dao.Message
-import org.fs.chm.dao.RichText
+import org.fs.chm.dao._
 import org.fs.chm.utility.TestUtils._
 
 object DatasetMergerHelper {
@@ -16,6 +15,21 @@ object DatasetMergerHelper {
         m.copy(textOption = Some(RichText(Seq(RichText.Plain("Different message")))))
       case m =>
         m
+    }
+  }
+
+  def changedUsers(users: Seq[User], idCondition: Long => Boolean): Seq[User] = {
+    users.collect {
+      case u if idCondition(u.id) =>
+        u.copy(
+          firstNameOption    = Some("AnotherUserFN"),
+          lastNameOption     = Some("AnotherUserLN"),
+          usernameOption     = Some("AnotherUserUN"),
+          phoneNumberOption  = Some("123321"),
+          lastSeenTimeOption = Some(baseDate.plusDays(u.id.toInt))
+        )
+      case u =>
+        u
     }
   }
 }
