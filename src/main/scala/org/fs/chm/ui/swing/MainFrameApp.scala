@@ -347,12 +347,17 @@ class MainFrameApp //
           (res, true)
         case ((res, _), (cmo @ ChatMergeOption.Combine(mc, sc, mismatches))) =>
           // Resolve mismatches
-          val dialog =
-            new SelectMergeMessagesDialog(masterDao, mc, slaveDao, sc, mismatches, htmlKit, msgService)
-          dialog.visible = true
-          dialog.selection
-            .map(resolution => (res :+ (cmo.copy(messageMergeOptions = resolution)), false))
-            .getOrElse((res, true))
+          if (mismatches.forall(_.isInstanceOf[MessagesMergeOption.Keep])) {
+            // User has no choice - pass them as-is
+            (res :+ cmo, false)
+          } else {
+            val dialog =
+              new SelectMergeMessagesDialog(masterDao, mc, slaveDao, sc, mismatches, htmlKit, msgService)
+            dialog.visible = true
+            dialog.selection
+              .map(resolution => (res :+ (cmo.copy(messageMergeOptions = resolution)), false))
+              .getOrElse((res, true))
+          }
         case ((res, _), cmo) =>
           (res :+ cmo, false)
       }
