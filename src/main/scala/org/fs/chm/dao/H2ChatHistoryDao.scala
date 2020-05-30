@@ -16,6 +16,7 @@ import doobie.free.connection.ConnectionOp
 import doobie.h2.implicits._
 import doobie.implicits._
 import org.fs.chm.utility.EntityUtils._
+import org.fs.chm.utility.IoUtils
 import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
@@ -42,6 +43,10 @@ class H2ChatHistoryDao(
 
   override def dataPath(dsUuid: UUID): File = {
     new File(dataPathRoot, dsUuid.toString.toLowerCase)
+  }
+
+  override def filePaths(dsUuid: UUID): Set[String] = {
+    queries.selectAllPaths(dsUuid).transact(txctr).unsafeRunSync()
   }
 
   override def myself(dsUuid: UUID): User = {
@@ -204,25 +209,14 @@ class H2ChatHistoryDao(
         }((_, t) => log.info(s"Dataset checked in $t ms"))
 
         // Copying files
-        val fromPath = dao.dataPath(ds.uuid)
-        val toPath   = dataPath(ds.uuid)
-        toPath.mkdir()
-        val localPaths = queries.selectAllPaths(ds.uuid).transact(txctr).unsafeRunSync()
-        log.info(s"Copying ${localPaths.size} files")
-        var notFoundCount = 0
-        for (localPath <- localPaths) {
-          val from = new File(fromPath, localPath)
-          val to   = new File(toPath, localPath)
-          if (from.exists()) {
-            if (!to.exists()) {
-              to.getParentFile.mkdirs()
-              Files.copy(from.toPath, to.toPath)
-            }
-          } else {
-            notFoundCount += 1
-          }
-        }
-        log.info(s"Done copying ${localPaths.size} files, ${notFoundCount} not found")
+        val localPaths = filePaths(ds.uuid)
+        val fromPath   = dao.dataPath(ds.uuid)
+        val toPath     = dataPath(ds.uuid)
+        val filesMap = localPaths.map { localPath =>
+          (new File(fromPath, localPath), new File(toPath, localPath))
+        }.toMap
+        val (notFound, _) = StopWatch.measureAndCall(IoUtils.copyAll(filesMap))((_, t) => log.info(s"Copied in $t ms"))
+        notFound.foreach(nf => log.info(s"Not found: ${nf.getAbsolutePath}"))
       }
     }((_, t) => log.info(s"All done in $t ms"))
   }
@@ -367,7 +361,7 @@ class H2ChatHistoryDao(
     backup()
   }
 
-  private def getBackupPath(): File = {
+  protected[dao] def getBackupPath(): File = {
     val backupDir = new File(dataPathRoot, H2ChatHistoryDao.BackupsDir)
     backupDir.mkdir()
     backupDir
@@ -888,7 +882,7 @@ class H2ChatHistoryDao(
     }
 
     /** Select all non-null filesystem paths from all tables for the specific dataset */
-    def selectAllPaths(dsUuid: UUID): ConnectionIO[Seq[String]] = {
+    def selectAllPaths(dsUuid: UUID): ConnectionIO[Set[String]] = {
       def q(col: String, table: String) = {
         val whereFr = Fragments.whereAnd(
           fr"ds_uuid = ${dsUuid}",
@@ -903,7 +897,7 @@ class H2ChatHistoryDao(
         msgCThumbPaths <- q("thumbnail_path", "messages_content")
         msgCVcardPaths <- q("vcard_path", "messages_content")
       } yield chatImgPaths ++ msgPaths ++ msgCPaths ++ msgCThumbPaths ++ msgCVcardPaths
-    }
+    } map (_.toSet)
   }
 
   object Raws {

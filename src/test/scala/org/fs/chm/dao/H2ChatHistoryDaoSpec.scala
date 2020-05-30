@@ -53,7 +53,6 @@ class H2ChatHistoryDaoSpec //
     val pathRegex   = """(?<=")chats/[a-zA-Z0-9()\[\]./\\_ -]+(?=")""".r
     val srcDataPath = tgDao.dataPath(dsUuid)
     val dstDataPath = h2dao.dataPath(dsUuid)
-    def bytesOf(f: File): Array[Byte] = Files.readAllBytes(f.toPath)
 
     for (path <- pathRegex.findAllIn(src).toList) {
       assert(new File(srcDataPath, path).exists(), s"File ${path} (source) isn't found! Bug in test?")
@@ -73,6 +72,8 @@ class H2ChatHistoryDaoSpec //
       val srcBytes = bytesOf(new File(srcDataPath, path))
       assert(!srcBytes.isEmpty, s"Source file ${path} was empty! Bug in test?")
     }
+
+    assert(tgDao.filePaths(dsUuid) === h2dao.filePaths(dsUuid))
   }
 
   test("messages and chats are equal, retrieval methods work as needed") {
@@ -319,6 +320,9 @@ class H2ChatHistoryDaoSpec //
   test("delete dataset") {
     h2dao.deleteDataset(dsUuid)
     assert(h2dao.datasets.isEmpty)
+
+    // Dataset files has been moved to a backup dir
     assert(!h2dao.dataPath(dsUuid).exists())
+    assert(new File(h2dao.getBackupPath(), dsUuid.toString).exists())
   }
 }

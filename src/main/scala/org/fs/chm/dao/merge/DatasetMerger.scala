@@ -1,11 +1,13 @@
 package org.fs.chm.dao.merge
 
+import java.io.File
 import java.util.UUID
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.fs.chm.dao._
+import org.fs.chm.utility.IoUtils
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
 
@@ -222,11 +224,11 @@ class DatasetMerger(
           masterDao.insertChat(chat)
 
           // Messages
-          val messageBatches: Stream[IndexedSeq[Message]] = cmo match {
+          val messageBatches: Stream[(ChatHistoryDao, Dataset, IndexedSeq[Message])] = cmo match {
             case ChatMergeOption.Keep(mc) =>
-              messageBatchesStream[TaggedMessage.M](masterDao, mc, None)
+              messageBatchesStream[TaggedMessage.M](masterDao, mc, None) map (mb => (masterDao, masterDs, mb))
             case ChatMergeOption.Add(sc) =>
-              messageBatchesStream[TaggedMessage.S](slaveDao, sc, None)
+              messageBatchesStream[TaggedMessage.S](slaveDao, sc, None) map (mb => (slaveDao, slaveDs, mb))
             case ChatMergeOption.Combine(mc, sc, resolution) =>
               resolution.map {
                 case replace: MessagesMergeOption.Replace => replace.asAdd
@@ -240,7 +242,7 @@ class DatasetMerger(
                       Some(firstMasterMsg.asInstanceOf[TaggedMessage.M])
                     ),
                     lastMasterMsg
-                  )
+                  ) map (mb => (masterDao, masterDs, mb))
                 case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
                   takeMsgsFromBatchUntilInc(
                     IndexedSeq(firstSlaveMsg) #:: messageBatchesStream(
@@ -249,12 +251,19 @@ class DatasetMerger(
                       Some(firstSlaveMsg.asInstanceOf[TaggedMessage.S])
                     ),
                     lastSlaveMsg
-                  )
+                  ) map (mb => (slaveDao, slaveDs, mb))
                 case _ => throw new MatchError("Impossible!")
               }.toStream.flatten
           }
-          for (mb <- messageBatches) {
+          val to = masterDao.dataPath(newDs.uuid)
+          for ((srcDao, srcDs, mb) <- messageBatches) {
             masterDao.insertMessages(chat, mb)
+            val paths    = mb.flatMap(_.paths)
+            val from     = srcDao.dataPath(srcDs.uuid)
+            val filesMap = paths.map(p => (new File(from, p), new File(to, p))).toMap
+            val (notFound, _) =
+              StopWatch.measureAndCall(IoUtils.copyAll(filesMap))((_, t) => log.info(s"Copied in $t ms"))
+            notFound.foreach(nf => log.info(s"Not found: ${nf.getAbsolutePath}"))
           }
         }
 

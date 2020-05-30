@@ -1,5 +1,6 @@
 package org.fs.chm.utility
 
+import java.io.File
 import java.nio.file.Files
 import java.util.UUID
 
@@ -67,7 +68,8 @@ object TestUtils {
   def createDao(
       nameSuffix: String,
       users: Seq[User],
-      chatsWithMsgs: ListMap[Chat, Seq[Message]]
+      chatsWithMsgs: ListMap[Chat, Seq[Message]],
+      amendMessage: ((File, Message) => Message) = ((_, m) => m)
   ): MutableChatHistoryDao = {
     require({
       val userIds = users.map(_.id).toSet
@@ -78,16 +80,19 @@ object TestUtils {
       alias      = "Dataset " + nameSuffix,
       sourceType = "test source"
     )
-    val users1 = users map (_ copy (dsUuid = ds.uuid))
+    val users1       = users map (_ copy (dsUuid = ds.uuid))
     val dataPathRoot = Files.createTempDirectory(null).toFile
     dataPathRoot.deleteOnExit()
+    val amend2 = amendMessage.curried(dataPathRoot)
     new EagerChatHistoryDao(
-      name               = "Dao " + nameSuffix,
-      dataPathRoot       = dataPathRoot,
-      dataset            = ds,
-      myself1            = users1.head,
-      users1             = users1,
-      _chatsWithMessages = chatsWithMsgs.map { case (c, ms) => (c.copy(dsUuid = ds.uuid) -> ms.toIndexedSeq) }
+      name         = "Dao " + nameSuffix,
+      dataPathRoot = dataPathRoot,
+      dataset      = ds,
+      myself1      = users1.head,
+      users1       = users1,
+      _chatsWithMessages = chatsWithMsgs.map {
+        case (c, ms) => (c.copy(dsUuid = ds.uuid) -> ms.map(amend2).toIndexedSeq)
+      }
     ) with EagerMutableDaoTrait
   }
 

@@ -21,6 +21,9 @@ trait ChatHistoryDao extends AutoCloseable {
   /** Base of relative paths specified in messages */
   def dataPath(dsUuid: UUID): File
 
+  /** List all files referenced by entities of this dataset. Paths are relative to `dataPath`, some might not exist. */
+  def filePaths(dsUuid: UUID): Set[String]
+
   def myself(dsUuid: UUID): User
 
   /** Contains myself as well. Order must be stable. */
@@ -311,6 +314,9 @@ sealed trait Message extends Searchable {
    */
   def withInternalId(internalId: Message.InternalId): Message
 
+  /** All file paths, relative to the dataset path */
+  def paths: Set[String]
+
   /** We can't use "super" on vals/lazy vals, so... */
   protected val plainSearchableMsgString =
     textOption map (_.plainSearchableString) getOrElse ""
@@ -347,6 +353,21 @@ object Message {
       contentOption: Option[Content]
   ) extends Message {
     override def withInternalId(internalId: Message.InternalId): Regular = copy(internalId = internalId)
+
+    override def paths: Set[String] = {
+      (contentOption match {
+        case Some(content: Content.Sticker)       => Set(content.pathOption, content.thumbnailPathOption)
+        case Some(content: Content.Photo)         => Set(content.pathOption)
+        case Some(content: Content.VoiceMsg)      => Set(content.pathOption)
+        case Some(content: Content.VideoMsg)      => Set(content.pathOption, content.thumbnailPathOption)
+        case Some(content: Content.Animation)     => Set(content.pathOption, content.thumbnailPathOption)
+        case Some(content: Content.File)          => Set(content.pathOption, content.thumbnailPathOption)
+        case Some(content: Content.Location)      => Set.empty[Option[String]]
+        case Some(content: Content.Poll)          => Set.empty[Option[String]]
+        case Some(content: Content.SharedContact) => Set(content.vcardPathOption)
+        case None                                 => Set.empty[Option[String]]
+      }).yieldDefined
+    }
   }
 
   sealed trait Service extends Message
@@ -366,6 +387,8 @@ object Message {
         discardReasonOption: Option[String]
     ) extends Service {
       override def withInternalId(internalId: Message.InternalId): PhoneCall = copy(internalId = internalId)
+
+      override def paths: Set[String] = Set.empty
     }
 
     case class PinMessage(
@@ -377,6 +400,8 @@ object Message {
         messageId: SourceId
     ) extends Service {
       override def withInternalId(internalId: Message.InternalId): PinMessage = copy(internalId = internalId)
+
+      override def paths: Set[String] = Set.empty
     }
 
     /** Note: for Telegram, `from...` is not always meaningful */
@@ -388,6 +413,8 @@ object Message {
         textOption: Option[RichText]
     ) extends Service {
       override def withInternalId(internalId: Message.InternalId): ClearHistory = copy(internalId = internalId)
+
+      override def paths: Set[String] = Set.empty
     }
 
     case class EditPhoto(
@@ -401,6 +428,8 @@ object Message {
         heightOption: Option[Int]
     ) extends Service {
       override def withInternalId(internalId: Message.InternalId): EditPhoto = copy(internalId = internalId)
+
+      override def paths: Set[String] = Set(pathOption).yieldDefined
     }
 
     object Group {
@@ -414,6 +443,8 @@ object Message {
           members: Seq[String]
       ) extends MembershipChange {
         override def withInternalId(internalId: Message.InternalId): Create = copy(internalId = internalId)
+
+        override def paths: Set[String] = Set.empty
 
         override val plainSearchableString =
           (plainSearchableMsgString +: title +: members).mkString(" ").trim
@@ -429,6 +460,8 @@ object Message {
       ) extends MembershipChange {
         override def withInternalId(internalId: Message.InternalId): InviteMembers = copy(internalId = internalId)
 
+        override def paths: Set[String] = Set.empty
+
         override val plainSearchableString =
           (plainSearchableMsgString +: members).mkString(" ").trim
       }
@@ -442,6 +475,8 @@ object Message {
           members: Seq[String]
       ) extends MembershipChange {
         override def withInternalId(internalId: Message.InternalId): RemoveMembers = copy(internalId = internalId)
+
+        override def paths: Set[String] = Set.empty
 
         override val plainSearchableString =
           (plainSearchableMsgString +: members).mkString(" ").trim
@@ -457,6 +492,8 @@ object Message {
       ) extends Service {
         override def withInternalId(internalId: Message.InternalId): MigrateFrom = copy(internalId = internalId)
 
+        override def paths: Set[String] = Set.empty
+
         override val plainSearchableString =
           (plainSearchableMsgString + " " + titleOption.getOrElse("")).trim
       }
@@ -469,6 +506,8 @@ object Message {
           textOption: Option[RichText]
       ) extends Service {
         override def withInternalId(internalId: Message.InternalId): MigrateTo = copy(internalId = internalId)
+
+        override def paths: Set[String] = Set.empty
       }
     }
   }

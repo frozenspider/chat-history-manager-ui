@@ -5,9 +5,11 @@ import java.util.UUID
 
 import scala.collection.immutable.ListMap
 
+import org.fs.utility.Imports._
+
 /**
  * Serves as in-memory ChatHistoryDao.
- * Guarantees `internalId`` ordering to match order in  `_chatsWithMessages`.
+ * Guarantees `internalId` ordering to match order in  `_chatsWithMessages`.
  */
 class EagerChatHistoryDao(
     override val name: String,
@@ -34,6 +36,16 @@ class EagerChatHistoryDao(
   override def datasets: Seq[Dataset] = Seq(dataset)
 
   override def dataPath(dsUuid: UUID): File = dataPathRoot
+
+  override def filePaths(dsUuid: UUID): Set[String] = {
+    val cs           = chats(dsUuid)
+    val chatImgPaths = cs.map(_.imgPathOption).yieldDefined.toSet
+    val msgPaths = for {
+      c <- cs
+      m <- firstMessages(c, Int.MaxValue)
+    } yield m.paths
+    chatImgPaths ++ msgPaths.toSet.flatten
+  }
 
   override def myself(dsUuid: UUID): User = myself1
 
