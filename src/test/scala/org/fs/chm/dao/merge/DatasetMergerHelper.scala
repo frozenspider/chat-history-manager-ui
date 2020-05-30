@@ -12,7 +12,10 @@ object DatasetMergerHelper {
   def changedMessages(msgs: Seq[Message], idCondition: Long => Boolean): Seq[Message] = {
     msgs.collect {
       case m: Message.Regular if idCondition(m.sourceIdOption.get) =>
-        m.copy(textOption = Some(RichText(Seq(RichText.Plain("Different message")))))
+        m.copy(
+          textOption =
+            Some(RichText(Seq(RichText.Plain("Different message " + m.sourceIdOption.getOrElse("<no src id>")))))
+        )
       case m =>
         m
     }

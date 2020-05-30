@@ -32,7 +32,7 @@ class SelectMergeMessagesDialog(
     mismatches: IndexedSeq[MessagesMergeOption],
     htmlKit: HTMLEditorKit,
     msgService: MessagesService
-) extends CustomDialog[Seq[MessagesMergeOption]] {
+) extends CustomDialog[IndexedSeq[MessagesMergeOption]] {
   import SelectMergeMessagesDialog._
 
   private lazy val MaxMessageWidth = 500
@@ -51,8 +51,8 @@ class SelectMergeMessagesDialog(
     table.wrapInScrollpaneAndAdjustWidth()
   }
 
-  override protected def validateChoices(): Option[Seq[MessagesMergeOption]] = {
-    Some(table.selected)
+  override protected def validateChoices(): Option[IndexedSeq[MessagesMergeOption]] = {
+    Some(table.selected.toIndexedSeq)
   }
 
   import SelectMergesTable._

@@ -341,23 +341,23 @@ class MainFrameApp //
     }
     Future {
       // Analyze
-      val analysis = chatsToMerge.map(c => (c, merger.analyzeChatHistoryMerge(c))).toMap
-      val (resolution, cancelled) = analysis.foldLeft((Map.empty[ChatMergeOption, Seq[MessagesMergeOption]], false)) {
+      val analyzed = chatsToMerge.map(merger.analyzeChatHistoryMerge)
+      val (resolved, cancelled) = analyzed.foldLeft((Seq.empty[ChatMergeOption], false)) {
         case ((res, stop), _) if stop =>
           (res, true)
-        case ((res, _), (cmo @ ChatMergeOption.Combine(mc, sc), chatAnalysis)) =>
+        case ((res, _), (cmo @ ChatMergeOption.Combine(mc, sc, mismatches))) =>
           // Resolve mismatches
           val dialog =
-            new SelectMergeMessagesDialog(masterDao, mc, slaveDao, sc, chatAnalysis.toIndexedSeq, htmlKit, msgService)
+            new SelectMergeMessagesDialog(masterDao, mc, slaveDao, sc, mismatches, htmlKit, msgService)
           dialog.visible = true
           dialog.selection
-            .map(resolution => (res + (cmo -> resolution), false))
+            .map(resolution => (res :+ (cmo.copy(messageMergeOptions = resolution)), false))
             .getOrElse((res, true))
-        case ((res, _), (cmo, chatAnalysis)) =>
-          (res + (cmo -> chatAnalysis), false)
+        case ((res, _), cmo) =>
+          (res :+ cmo, false)
       }
-      if (cancelled) None else Some(resolution)
-    } map { chatsMergeResolutionsOption: Option[Map[ChatMergeOption, Seq[MessagesMergeOption]]] =>
+      if (cancelled) None else Some(resolved)
+    } map { chatsMergeResolutionsOption: Option[Seq[ChatMergeOption]] =>
       // Merge
       Swing.onEDTWait {
         freezeTheWorld("Merging...")

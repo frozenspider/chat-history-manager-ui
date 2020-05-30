@@ -36,14 +36,13 @@ class DatasetMergerMergeSpec //
     val usersA     = users filter (Seq(1, 3, 4, 5) contains _.id)
     val usersB     = changedUsers(users filter (Seq(2, 3, 4, 5) contains _.id), _ => true)
     val helper     = H2MergerHelper.fromUsers(usersA, usersB)
-    val chatMerges = ListMap.empty[ChatMergeOption, Seq[MessagesMergeOption]]
 
     val newDs = helper.merger.merge(
       Seq(
         UserMergeOption.Retain(helper.d1users.byId(1)),
         UserMergeOption.Add(helper.d2users.byId(2)),
         UserMergeOption.Replace(helper.d1users.byId(3), helper.d2users.byId(3))
-      ), chatMerges
+      ), Seq.empty
     )
     assert(helper.dao1.chats(newDs.uuid).isEmpty)
     val newUsers = helper.dao1.users(newDs.uuid)
@@ -56,15 +55,8 @@ class DatasetMergerMergeSpec //
   test("merge chats - retain single message, basic checks") {
     val msgs   = Seq(createRegularMessage(1, 1))
     val helper = H2MergerHelper.fromMessages(msgs, msgs)
-    val chatMerges = ListMap[ChatMergeOption, Seq[MessagesMergeOption]](
-      ChatMergeOption.Retain(helper.d1chat) -> Seq(
-        MessagesMergeOption.Retain(
-          firstMasterMsg      = helper.d1msgs.bySrcId(1),
-          lastMasterMsg       = helper.d1msgs.bySrcId(1),
-          firstSlaveMsgOption = None,
-          lastSlaveMsgOption  = None
-        )
-      )
+    val chatMerges = Seq[ChatMergeOption](
+      ChatMergeOption.Retain(helper.d1chat)
     )
     assert(helper.dao1.datasets.size === 1)
     val newDs = helper.merger.merge(retainSignleUser(helper), chatMerges)
@@ -76,27 +68,13 @@ class DatasetMergerMergeSpec //
     assert(newMessages.head =~= helper.d1msgs.head)
   }
 
-  /**
-   * {{{
-   * Master messages -       3  4
-   * Slave messages  - 1* 2* 3* 4* 5*
-   * }}}
-   * Retain 3, 4
-   */
-  test("merge chats - retain two message, dicard the rest") {
-    val msgs   = for (i <- 1 to 5) yield createRegularMessage(i, 1)
+  test("merge chats - retain two messages") {
+    val msgs   = for (i <- 1 to 6) yield createRegularMessage(i, 1)
     val msgsA  = msgs.filter(Seq(3, 4) contains _.sourceIdOption.get)
     val msgsB  = changedMessages(msgs, _ => true)
     val helper = H2MergerHelper.fromMessages(msgsA, msgsB)
-    val chatMerges = ListMap[ChatMergeOption, Seq[MessagesMergeOption]](
-      ChatMergeOption.Retain(helper.d1chat) -> Seq(
-        MessagesMergeOption.Retain(
-          firstMasterMsg      = helper.d1msgs.bySrcId(3),
-          lastMasterMsg       = helper.d1msgs.bySrcId(4),
-          firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(3)),
-          lastSlaveMsgOption  = Some(helper.d2msgs.bySrcId(4))
-        )
-      )
+    val chatMerges = Seq[ChatMergeOption](
+      ChatMergeOption.Retain(helper.d1chat)
     )
     val newMessages = {
       val newDs    = helper.merger.merge(retainSignleUser(helper), chatMerges)
@@ -106,6 +84,111 @@ class DatasetMergerMergeSpec //
     assert(newMessages.size === helper.d1msgs.size)
     for ((nm, om) <- (newMessages zip helper.d1msgs)) {
       assert(nm =~= om)
+    }
+  }
+
+  test("merge chats - add two messages") {
+    val msgs   = for (i <- 1 to 5) yield createRegularMessage(i, 1)
+    val msgsA  = msgs
+    val msgsB  = changedMessages(msgs.filter(Seq(3, 4) contains _.sourceIdOption.get), _ => true)
+    val helper = H2MergerHelper.fromMessages(msgsA, msgsB)
+    val chatMerges = Seq[ChatMergeOption](
+      ChatMergeOption.Add(helper.d2chat)
+    )
+    val newMessages = {
+      val newDs    = helper.merger.merge(retainSignleUser(helper), chatMerges)
+      val newChats = helper.dao1.chats(newDs.uuid)
+      helper.dao1.firstMessages(newChats.head, Int.MaxValue)
+    }
+    assert(newMessages.size === 2)
+    assert(newMessages(0) =~= helper.d2msgs.bySrcId(3))
+    assert(newMessages(1) =~= helper.d2msgs.bySrcId(4))
+  }
+
+  /**
+   * {{{
+   * Master messages - 1  2  3  4  5  6
+   * Slave messages  - 1* 2* 3* 4* 5* 6*
+   * }}}
+   * R(3, 4)
+   */
+  test("merge chats - replace two messages, dicard the rest") {
+    val msgs   = for (i <- 1 to 5) yield createRegularMessage(i, 1)
+    val msgsA  = msgs
+    val msgsB  = changedMessages(msgs, _ => true)
+    val helper = H2MergerHelper.fromMessages(msgsA, msgsB)
+    val chatMerges = Seq[ChatMergeOption](
+      ChatMergeOption.Combine(
+        helper.d1chat,
+        helper.d2chat,
+        IndexedSeq(
+          MessagesMergeOption.Replace(
+            firstMasterMsg = helper.d1msgs.bySrcId(3),
+            lastMasterMsg  = helper.d1msgs.bySrcId(4),
+            firstSlaveMsg  = helper.d2msgs.bySrcId(3),
+            lastSlaveMsg   = helper.d2msgs.bySrcId(4)
+          )
+        )
+      )
+    )
+    val newMessages = {
+      val newDs    = helper.merger.merge(retainSignleUser(helper), chatMerges)
+      val newChats = helper.dao1.chats(newDs.uuid)
+      helper.dao1.firstMessages(newChats.head, Int.MaxValue)
+    }
+    assert(newMessages.size === 2)
+    assert(newMessages(0) =~= helper.d2msgs.bySrcId(3))
+    assert(newMessages(1) =~= helper.d2msgs.bySrcId(4))
+  }
+
+  /**
+   * {{{
+   * Master messages - 1  2  ... max
+   * Slave messages  - 1* 2* ... max*
+   * }}}
+   * A(2, max/3), K(max/3 + 1, max*2/3), R(max*2/3 + 1, max - 1)
+   */
+  test("merge chats - combine, each") {
+    val msgs       = for (i <- 1 to maxId) yield createRegularMessage(i, 1)
+    val msgsA      = msgs
+    val msgsB      = changedMessages(msgs, _ => true)
+    val helper     = H2MergerHelper.fromMessages(msgsA, msgsB)
+    val (bp1, bp2) = (maxId / 3, maxId * 2 / 3)
+    val chatMerges = Seq[ChatMergeOption](
+      ChatMergeOption.Combine(
+        helper.d1chat,
+        helper.d2chat,
+        IndexedSeq(
+          MessagesMergeOption.Add(
+            firstSlaveMsg  = helper.d2msgs.bySrcId(2),
+            lastSlaveMsg   = helper.d2msgs.bySrcId(bp1)
+          ),
+          MessagesMergeOption.Retain(
+            firstMasterMsg      = helper.d1msgs.bySrcId(bp1 + 1),
+            lastMasterMsg       = helper.d1msgs.bySrcId(bp2),
+            firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(bp1 + 1)),
+            lastSlaveMsgOption  = Some(helper.d2msgs.bySrcId(bp2))
+          ),
+          MessagesMergeOption.Replace(
+            firstMasterMsg = helper.d1msgs.bySrcId(bp2 + 1),
+            lastMasterMsg  = helper.d1msgs.bySrcId(maxId - 1),
+            firstSlaveMsg  = helper.d2msgs.bySrcId(bp2 + 1),
+            lastSlaveMsg   = helper.d2msgs.bySrcId(maxId - 1)
+          )
+        )
+      )
+    )
+    val newMessages = {
+      val newDs    = helper.merger.merge(retainSignleUser(helper), chatMerges)
+      val newChats = helper.dao1.chats(newDs.uuid)
+      helper.dao1.firstMessages(newChats.head, Int.MaxValue)
+    }
+    assert(newMessages.size === msgs.size - 2)
+    assert(newMessages(0) =~= helper.d2msgs.bySrcId(2))
+    val expected = helper.d2msgs.slice(1, bp1) ++ helper.d1msgs.slice(bp1, bp2) ++ helper.d2msgs.slice(bp2, maxId - 1)
+    assert(expected.size === newMessages.size)
+    for ((m1, m2) <- (expected zip newMessages)) {
+      assert(m1 =~= m2, (m1, m2))
     }
   }
 

@@ -16,23 +16,12 @@ class DatasetMerger(
   import DatasetMerger._
 
   /**
-   * Analyze dataset mergeability, returning the map from slave chat to mismatches in order.
+   * Analyze dataset mergeability, amending `ChatMergeOption.Combine` with mismatches in order.
+   * Other `ChatMergeOption`s are returned unchanged.
    * Note that we can only detect conflicts if data source supports source IDs.
    */
-  def analyzeChatHistoryMerge(merge: ChatMergeOption): Seq[MessagesMergeOption] = merge match {
-    case ChatMergeOption.Retain(mc) =>
-      val firstOption = masterDao.firstMessages(mc, 1).headOption
-      firstOption.toSeq.map { first =>
-        val last = masterDao.lastMessages(mc, 1).last
-        MessagesMergeOption.Retain(first.asInstanceOf[TaggedMessage.M], last.asInstanceOf[TaggedMessage.M], None, None)
-      }
-    case ChatMergeOption.Add(sc) =>
-      val firstOption = slaveDao.firstMessages(sc, 1).headOption
-      firstOption.toSeq.map { first =>
-        val last = slaveDao.lastMessages(sc, 1).last
-        MessagesMergeOption.Add(first.asInstanceOf[TaggedMessage.S], last.asInstanceOf[TaggedMessage.S])
-      }
-    case ChatMergeOption.Combine(mc, sc) =>
+  def analyzeChatHistoryMerge[T <: ChatMergeOption](merge: T): T = merge match {
+    case merge @ ChatMergeOption.Combine(mc, sc, _) =>
       var mismatches = ArrayBuffer.empty[MessagesMergeOption]
       iterate(
         ((messagesStream(masterDao, mc, None), None), (messagesStream(slaveDao, sc, None), None)),
@@ -40,15 +29,25 @@ class DatasetMerger(
         (mm => mismatches += mm)
       )
       mismatches.toVector
+      merge.copy(messageMergeOptions = mismatches).asInstanceOf[T]
+    case _ => merge
   }
 
-  // FIXME: Test!
   /** Stream messages, either from the beginning or from the given one (exclusive) */
   protected[merge] def messagesStream[T <: TaggedMessage](
       dao: ChatHistoryDao,
       chat: Chat,
       fromMessageOption: Option[Message with T]
   ): Stream[T] = {
+    messageBatchesStream(dao, chat, fromMessageOption).flatten
+  }
+
+  /** Stream messages, either from the beginning or from the given one (exclusive) */
+  protected[merge] def messageBatchesStream[T <: TaggedMessage](
+      dao: ChatHistoryDao,
+      chat: Chat,
+      fromMessageOption: Option[Message with T]
+  ): Stream[IndexedSeq[T]] = {
     val batch = fromMessageOption
       .map(from => dao.messagesAfter(chat, from, BatchSize + 1).drop(1))
       .getOrElse(dao.firstMessages(chat, BatchSize))
@@ -56,9 +55,9 @@ class DatasetMerger(
     if (batch.isEmpty) {
       Stream.empty
     } else if (batch.size < BatchSize) {
-      batch.toStream
+      Stream(batch)
     } else {
-      batch.toStream #::: messagesStream[T](dao, chat, Some(batch.last))
+      Stream(batch) #::: messageBatchesStream[T](dao, chat, Some(batch.last))
     }
   }
 
@@ -192,7 +191,7 @@ class DatasetMerger(
 
   def merge(
       usersToMerge: Seq[UserMergeOption],
-      chatsMergeResolutions: Map[ChatMergeOption, Seq[MessagesMergeOption]]
+      chatsToMerge: Seq[ChatMergeOption]
   ): Dataset = {
     try {
       masterDao.disableBackups()
@@ -215,40 +214,43 @@ class DatasetMerger(
       }
 
       // Chats
-      for ((cmo, resolution) <- chatsMergeResolutions) {
-        val chat = cmo.chatToInsert.copy(dsUuid = newDs.uuid)
+      for (cmo <- chatsToMerge) {
+        val chat = (cmo.slaveChatOption orElse cmo.masterChatOption).get.copy(dsUuid = newDs.uuid)
         masterDao.insertChat(chat)
 
-        // Messages
-        resolution.map {
-          case replace: MessagesMergeOption.Replace => replace.asAdd
-          case etc                                  => etc
-        }.foreach {
-          case MessagesMergeOption.Retain(firstMasterMsg, lastMasterMsg, _, _) =>
-            var lastFound = false
-            val messages = firstMasterMsg #:: messagesStream(
-              masterDao,
-              cmo.asInstanceOf[ChatMergeOption.Retain].masterChat,
-              Some(firstMasterMsg.asInstanceOf[TaggedMessage.M])
-            ).takeWhile { m =>
-              val isLast = m =~= lastMasterMsg
-              lastFound = isLast
-              isLast || !lastFound
-            }
-            masterDao.insertMessages(chat, messages)
-          case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
-            var lastFound = false
-            val messages = firstSlaveMsg #:: messagesStream(
-              slaveDao,
-              cmo.asInstanceOf[ChatMergeOption.Add].slaveChat,
-              Some(firstSlaveMsg.asInstanceOf[TaggedMessage.S])
-            ).takeWhile { m =>
-              val isLast = m =~= lastSlaveMsg
-              lastFound = isLast
-              isLast || !lastFound
-            }
-            masterDao.insertMessages(chat, messages)
-          case _ => throw new MatchError("Impossible!")
+        val messageBatches: Stream[IndexedSeq[Message]] = cmo match {
+          case ChatMergeOption.Retain(mc) =>
+            messageBatchesStream[TaggedMessage.M](masterDao, mc, None)
+          case ChatMergeOption.Add(sc)    =>
+            messageBatchesStream[TaggedMessage.S](slaveDao, sc, None)
+          case ChatMergeOption.Combine(mc, sc, resolution) =>
+            // Messages
+            val x = resolution.map {
+              case replace: MessagesMergeOption.Replace => replace.asAdd
+              case etc                                  => etc
+            }.map {
+              case MessagesMergeOption.Retain(firstMasterMsg, lastMasterMsg, _, _) =>
+                takeMsgsFromBatchUntilInc(
+                  IndexedSeq(firstMasterMsg) #:: messageBatchesStream(
+                    masterDao,
+                    cmo.masterChatOption.get,
+                    Some(firstMasterMsg.asInstanceOf[TaggedMessage.M])
+                  ), lastMasterMsg
+                )
+              case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
+                takeMsgsFromBatchUntilInc(
+                  IndexedSeq(firstSlaveMsg) #:: messageBatchesStream(
+                    slaveDao,
+                    cmo.slaveChatOption.get,
+                    Some(firstSlaveMsg.asInstanceOf[TaggedMessage.S])
+                  ), lastSlaveMsg
+                )
+              case _ => throw new MatchError("Impossible!")
+            }.toStream.flatten
+            x
+        }
+        for (mb <- messageBatches) {
+          masterDao.insertMessages(chat, mb)
         }
       }
 
@@ -343,6 +345,24 @@ class DatasetMerger(
         startSlaveMsg: TaggedMessage.S
     ) extends StateInProgress
   }
+
+  private def takeMsgsFromBatchUntilInc(
+      stream: Stream[IndexedSeq[Message]],
+      m: Message
+  ): Stream[IndexedSeq[Message]] = {
+    var lastFound = false
+    stream.map { mb =>
+      if (!lastFound) {
+        mb.takeWhile { m2 =>
+          val isLast = m2 =~= m
+          lastFound |= isLast
+          isLast || !lastFound
+        }
+      } else {
+        IndexedSeq.empty
+      }
+    }.takeWhile(_.nonEmpty)
+  }
 }
 
 object DatasetMerger {
@@ -360,11 +380,19 @@ object DatasetMerger {
   }
 
   /** Represents a single merge decision: a chat that should be added, retained, merged (or skipped otherwise) */
-  sealed abstract class ChatMergeOption(val chatToInsert: Chat)
+  sealed abstract class ChatMergeOption(
+     val masterChatOption: Option[Chat],
+     val slaveChatOption:  Option[Chat]
+  )
   object ChatMergeOption {
-    case class Retain(masterChat: Chat)                   extends ChatMergeOption(masterChat)
-    case class Add(slaveChat: Chat)                       extends ChatMergeOption(slaveChat)
-    case class Combine(masterChat: Chat, slaveChat: Chat) extends ChatMergeOption(slaveChat)
+    case class Retain(masterChat: Chat) extends ChatMergeOption(Some(masterChat), None)
+    case class Add(slaveChat: Chat)     extends ChatMergeOption(None, Some(slaveChat))
+    case class Combine(
+        val masterChat: Chat,
+        val slaveChat: Chat,
+        /** Serves as either mismatches (all options after analysis) or resolution (mismatches filtered by user) */
+        val messageMergeOptions: IndexedSeq[MessagesMergeOption]
+    ) extends ChatMergeOption(Some(masterChat), Some(slaveChat))
   }
 
   // Message tagged types

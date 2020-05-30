@@ -15,6 +15,7 @@ import org.fs.utility.Imports._
  * Show dialog for merging chats.
  * Rules:
  * - There will be a merge option in the output for every chat in master DS
+ * - `Combine` options would NOT have mismatches defined
  * - Master chats will precede slave-only chats
  * - Checkbox option will be present for all chats in slave DS - i.e. whether to add/combine them or not
  */
@@ -108,7 +109,14 @@ class SelectMergeChatsDialog(
         case RowData.InMasterOnly(ChatWithDao(mc, _)) =>
           Some(ChatMergeOption.Retain(mc))
         case RowData.InBoth(ChatWithDao(mc, _), ChatWithDao(sc, _)) =>
-          Some(if (isSelected) ChatMergeOption.Combine(mc, sc) else ChatMergeOption.Retain(sc))
+          Some(
+            if (isSelected) {
+              // Mismatches have to be analyzed by DatasetMerger
+              ChatMergeOption.Combine(mc, sc, IndexedSeq.empty)
+            } else {
+              ChatMergeOption.Retain(sc)
+            }
+          )
         case _ if !isSelected =>
           None
         case RowData.InSlaveOnly(ChatWithDao(sc, _)) =>
