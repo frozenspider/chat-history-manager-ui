@@ -22,6 +22,7 @@ class DatasetItem[I <: Panel](
   val headerPopupMenu = new PopupMenu {
     callbacksOption foreach { _ =>
       contents += menuItem("Rename", enabled = dao.isMutable)(rename())
+      contents += menuItem("Delete", enabled = dao.isMutable)(delete())
     }
   }
 
@@ -54,10 +55,20 @@ class DatasetItem[I <: Panel](
   private def rename(): Unit = {
     // This element will be removed so we don't care about stale data
     Dialog.showInput(
-      message = "Choose a new name",
       title   = "Rename dataset",
+      message = "Choose a new name",
       initial = ds.alias
     ) foreach (newAlias => callbacksOption.get.renameDataset(ds.uuid, newAlias, dao))
+  }
+
+  private def delete(): Unit = {
+    Dialog.showConfirmation(
+      title   = "Delete dataset",
+      message = s"Are you sure you want to delete a dataset '${ds.alias}', sourced from ${ds.sourceType}?"
+    ) match {
+      case Dialog.Result.Yes => callbacksOption.get.deleteDataset(ds.uuid, dao)
+      case _                 => // NOOP
+    }
   }
 
   override def enabled_=(b: Boolean): Unit = {

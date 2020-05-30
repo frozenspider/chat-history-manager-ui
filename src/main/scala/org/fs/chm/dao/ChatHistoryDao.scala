@@ -98,6 +98,8 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
 
   def renameDataset(dsUuid: UUID, newName: String): Dataset
 
+  def deleteDataset(dsUuid: UUID): Unit
+
   /** Insert a new user. It should not yet exist. */
   def insertUser(user: User, isMyself: Boolean): Unit
 

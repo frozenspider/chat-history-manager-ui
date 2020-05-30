@@ -119,6 +119,8 @@ object TestUtils {
 
     override def renameDataset(dsUuid: UUID, newName: String): Dataset = ???
 
+    override def deleteDataset(dsUuid: UUID): Unit = ???
+
     override def insertUser(user: User, isMyself: Boolean): Unit = ???
 
     override def updateUser(user: User): Unit = ???

@@ -315,4 +315,9 @@ class H2ChatHistoryDaoSpec //
         ))).sortBy(_.time)
     assert(h2dao.firstMessages(chatsAfter.find(_.id == baseUserPc.id).get, 99999) === expectedMessages)
   }
+
+  test("delete dataset") {
+    h2dao.deleteDataset(dsUuid)
+    assert(h2dao.datasets.isEmpty)
+  }
 }

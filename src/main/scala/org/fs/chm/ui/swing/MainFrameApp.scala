@@ -371,6 +371,7 @@ class MainFrameApp //
     } onComplete { res =>
       res.failed.foreach(handleException)
       Swing.onEDT {
+        daoListChanged()
         unfreezeTheWorld()
       }
     }
@@ -416,6 +417,24 @@ class MainFrameApp //
       try {
         MutationLock.synchronized {
           dao.mutable.renameDataset(dsUuid, newName)
+          chatList.replaceWith(loadedDaos.keys.toSeq)
+        }
+        chatsOuterPanel.revalidate()
+        chatsOuterPanel.repaint()
+      } finally {
+        unfreezeTheWorld()
+      }
+    }
+  }
+
+  override def deleteDataset(dsUuid: UUID, dao: ChatHistoryDao): Unit = {
+    checkEdt()
+    require(dao.isMutable, "DAO is immutable!")
+    freezeTheWorld("Deleting...")
+    Swing.onEDT { // To release UI lock
+      try {
+        MutationLock.synchronized {
+          dao.mutable.deleteDataset(dsUuid)
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
         chatsOuterPanel.revalidate()

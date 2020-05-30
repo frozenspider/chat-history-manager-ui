@@ -243,6 +243,22 @@ class H2ChatHistoryDao(
     datasets.find(_.uuid == dsUuid).get
   }
 
+  override def deleteDataset(dsUuid: UUID): Unit = {
+    backup()
+    val query = for {
+      q1 <- queries.rawContent.deleteByDataset(dsUuid)
+      q2 <- queries.rawRichTextElements.deleteByDataset(dsUuid)
+      q3 <- queries.rawMessages.deleteByDataset(dsUuid)
+      q4 <- queries.chats.deleteByDataset(dsUuid)
+      q5 <- queries.users.deleteByDataset(dsUuid)
+      qL <- queries.datasets.delete(dsUuid)
+    } yield q1 + q2 + q3 + q4 + q5 + qL
+    query.transact(txctr).unsafeRunSync()
+    Lock.synchronized {
+      _interlocutorsCacheOption = None
+    }
+  }
+
   override def insertUser(user: User, isMyself: Boolean): Unit = {
     require(user.id > 0, "ID should be positive!")
     if (isMyself) {
@@ -514,6 +530,9 @@ class H2ChatHistoryDao(
 
       def rename(dsUuid: UUID, newName: String): ConnectionIO[Int] =
         sql"UPDATE datasets SET alias = ${newName} WHERE uuid = ${dsUuid}".update.run
+
+      def delete(dsUuid: UUID): ConnectionIO[Int] =
+        sql"DELETE FROM datasets WHERE uuid = ${dsUuid}".update.run
     }
 
     object users {
@@ -573,6 +592,9 @@ class H2ChatHistoryDao(
               ) WHERE msgs_count = 0
             )
            """.update.run
+
+      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+        sql"DELETE FROM users WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     object chats {
@@ -627,6 +649,9 @@ class H2ChatHistoryDao(
 
       def delete(dsUuid: UUID, id: ChatId): ConnectionIO[Int] =
         (fr"DELETE FROM chats WHERE ds_uuid = ${dsUuid} AND id = ${id}").update.run
+
+      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+        sql"DELETE FROM chats WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     object messages {
@@ -761,6 +786,9 @@ class H2ChatHistoryDao(
 
       def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
         (fr"DELETE FROM messages m WHERE m.ds_uuid = ${dsUuid} AND m.chat_id = ${chatId}").update.run
+
+      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+        sql"DELETE FROM messages m WHERE m.ds_uuid = ${dsUuid}".update.run
     }
 
     object rawRichTextElements {
@@ -785,6 +813,9 @@ class H2ChatHistoryDao(
               WHERE m.ds_uuid = ${dsUuid} AND m.chat_id = ${chatId}
             )
            """.update.run
+
+      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+        sql"DELETE FROM messages_text_elements WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     object rawContent {
@@ -816,6 +847,9 @@ class H2ChatHistoryDao(
               WHERE m.ds_uuid = ${dsUuid} AND m.chat_id = ${chatId}
             )
            """.update.run
+
+      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+        sql"DELETE FROM messages_content WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     /** Merge all messages from all personal chats with this user into the first one and delete the rest */
