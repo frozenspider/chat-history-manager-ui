@@ -51,11 +51,11 @@ class DatasetMergerAnalyzeSpec //
     }
   }
 
-  test("retain - no messages") {
+  test("keep - no messages") {
     val helper   = new MergerHelper(Seq.empty, Seq.empty)
-    val retain   = CMO.Retain(helper.d1chat)
-    val analyzed = helper.merger.analyzeChatHistoryMerge(retain)
-    assert(analyzed === retain)
+    val keep     = CMO.Keep(helper.d1chat)
+    val analyzed = helper.merger.analyzeChatHistoryMerge(keep)
+    assert(analyzed === keep)
   }
 
   test("add - no messages") {
@@ -72,7 +72,7 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(1),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(1)),
@@ -89,7 +89,7 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(maxId),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(1)),
@@ -106,7 +106,7 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(maxId),
           firstSlaveMsgOption = None,
@@ -124,19 +124,19 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(4),
           firstSlaveMsgOption = None,
           lastSlaveMsgOption  = None
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(5),
           lastMasterMsg       = helper.d1msgs.bySrcId(10),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(5)),
           lastSlaveMsgOption  = Some(helper.d2msgs.bySrcId(10))
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(11),
           lastMasterMsg       = helper.d1msgs.bySrcId(maxId),
           firstSlaveMsgOption = None,
@@ -155,7 +155,7 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(1),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(1)),
@@ -165,7 +165,7 @@ class DatasetMergerAnalyzeSpec //
           firstSlaveMsg = helper.d2msgs.bySrcId(2),
           lastSlaveMsg  = helper.d2msgs.bySrcId(2)
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(3),
           lastMasterMsg       = helper.d1msgs.bySrcId(3),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(3)),
@@ -185,7 +185,7 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(1),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(1)),
@@ -197,7 +197,7 @@ class DatasetMergerAnalyzeSpec //
           firstSlaveMsg  = helper.d2msgs.bySrcId(2),
           lastSlaveMsg   = helper.d2msgs.bySrcId(2)
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(3),
           lastMasterMsg       = helper.d1msgs.bySrcId(3),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(3)),
@@ -225,7 +225,7 @@ class DatasetMergerAnalyzeSpec //
           firstSlaveMsg  = helper.d2msgs.bySrcId(1),
           lastSlaveMsg   = helper.d2msgs.bySrcId(maxId - 1)
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(maxId),
           lastMasterMsg       = helper.d1msgs.bySrcId(maxId),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(maxId)),
@@ -256,7 +256,7 @@ class DatasetMergerAnalyzeSpec //
           firstSlaveMsg  = helper.d2msgs.bySrcId(1),
           lastSlaveMsg   = helper.d2msgs.bySrcId(maxId - 1)
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(maxId),
           lastMasterMsg       = helper.d1msgs.bySrcId(maxId),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(maxId)),
@@ -280,7 +280,7 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(1),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(1)),
@@ -290,7 +290,7 @@ class DatasetMergerAnalyzeSpec //
           firstSlaveMsg  = helper.d2msgs.bySrcId(2),
           lastSlaveMsg   = helper.d2msgs.bySrcId(maxId - 1)
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(maxId),
           lastMasterMsg       = helper.d1msgs.bySrcId(maxId),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(maxId)),
@@ -315,7 +315,7 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(1),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(1)),
@@ -327,7 +327,7 @@ class DatasetMergerAnalyzeSpec //
           firstSlaveMsg  = helper.d2msgs.bySrcId(2),
           lastSlaveMsg   = helper.d2msgs.bySrcId(maxId - 1)
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(maxId),
           lastMasterMsg       = helper.d1msgs.bySrcId(maxId),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(maxId)),
@@ -351,7 +351,7 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(1),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(1)),
@@ -380,7 +380,7 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(1),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(1)),
@@ -436,31 +436,31 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(1),
           firstSlaveMsgOption = None,
           lastSlaveMsgOption  = None
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(2),
           lastMasterMsg       = helper.d1msgs.bySrcId(2),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(2)),
           lastSlaveMsgOption  = Some(helper.d2msgs.bySrcId(2))
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(3),
           lastMasterMsg       = helper.d1msgs.bySrcId(3),
           firstSlaveMsgOption = None,
           lastSlaveMsgOption  = None
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(4),
           lastMasterMsg       = helper.d1msgs.bySrcId(4),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(4)),
           lastSlaveMsgOption  = Some(helper.d2msgs.bySrcId(4))
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(5),
           lastMasterMsg       = helper.d1msgs.bySrcId(5),
           firstSlaveMsgOption = None,
@@ -488,7 +488,7 @@ class DatasetMergerAnalyzeSpec //
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(1),
           lastMasterMsg       = helper.d1msgs.bySrcId(2),
           firstSlaveMsgOption = None,
@@ -504,7 +504,7 @@ class DatasetMergerAnalyzeSpec //
           firstSlaveMsg  = helper.d2msgs.bySrcId(5),
           lastSlaveMsg   = helper.d2msgs.bySrcId(6)
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(7),
           lastMasterMsg       = helper.d1msgs.bySrcId(8),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(7)),
@@ -546,7 +546,7 @@ class DatasetMergerAnalyzeSpec //
           firstSlaveMsg  = helper.d2msgs.bySrcId(1),
           lastSlaveMsg   = helper.d2msgs.bySrcId(2)
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(3),
           lastMasterMsg       = helper.d1msgs.bySrcId(4),
           firstSlaveMsgOption = None,
@@ -558,7 +558,7 @@ class DatasetMergerAnalyzeSpec //
           firstSlaveMsg  = helper.d2msgs.bySrcId(5),
           lastSlaveMsg   = helper.d2msgs.bySrcId(6)
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(7),
           lastMasterMsg       = helper.d1msgs.bySrcId(8),
           firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(7)),
@@ -570,7 +570,7 @@ class DatasetMergerAnalyzeSpec //
           firstSlaveMsg  = helper.d2msgs.bySrcId(9),
           lastSlaveMsg   = helper.d2msgs.bySrcId(10)
         ),
-        MessagesMergeOption.Retain(
+        MessagesMergeOption.Keep(
           firstMasterMsg      = helper.d1msgs.bySrcId(11),
           lastMasterMsg       = helper.d1msgs.bySrcId(12),
           firstSlaveMsgOption = None,

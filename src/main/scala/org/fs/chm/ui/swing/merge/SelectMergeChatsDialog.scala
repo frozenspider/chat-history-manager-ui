@@ -107,14 +107,14 @@ class SelectMergeChatsDialog(
     ): Option[ChatMergeOption] = {
       rd match {
         case RowData.InMasterOnly(ChatWithDao(mc, _)) =>
-          Some(ChatMergeOption.Retain(mc))
+          Some(ChatMergeOption.Keep(mc))
         case RowData.InBoth(ChatWithDao(mc, _), ChatWithDao(sc, _)) =>
           Some(
             if (isSelected) {
               // Mismatches have to be analyzed by DatasetMerger
               ChatMergeOption.Combine(mc, sc, IndexedSeq.empty)
             } else {
-              ChatMergeOption.Retain(sc)
+              ChatMergeOption.Keep(sc)
             }
           )
         case _ if !isSelected =>

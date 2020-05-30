@@ -114,10 +114,10 @@ class SelectMergeUsersDialog(
         isSelected: Boolean
     ): Option[UserMergeOption] = {
       Some(rd match {
-        case RowData.InMasterOnly(muwd) => UserMergeOption.Retain(muwd.user)
+        case RowData.InMasterOnly(muwd) => UserMergeOption.Keep(muwd.user)
         case RowData.InSlaveOnly(suwd)  => UserMergeOption.Add(suwd.user)
         case RowData.InBoth(muwd, suwd) =>
-          if (isSelected) UserMergeOption.Replace(muwd.user, suwd.user) else UserMergeOption.Retain(muwd.user)
+          if (isSelected) UserMergeOption.Replace(muwd.user, suwd.user) else UserMergeOption.Keep(muwd.user)
       })
     }
   }

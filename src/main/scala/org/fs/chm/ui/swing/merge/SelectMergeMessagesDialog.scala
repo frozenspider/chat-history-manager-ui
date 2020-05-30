@@ -21,7 +21,7 @@ import org.fs.utility.Imports._
  * Rules:
  * - Checkbox option will be present for all `Add`/`Replace` mismatches
  * - `Add` mismatch that was unchecked will be removed from output
- * - `Replace` mismatch that was unchecked will be replaced by `Retain` mismatch
+ * - `Replace` mismatch that was unchecked will be replaced by `Keep` mismatch
  * This means that master messages coverage should not change in the output
  */
 class SelectMergeMessagesDialog(
@@ -79,10 +79,10 @@ class SelectMergeMessagesDialog(
         val masterValue       = RenderableMismatch(mismatch, cxtToRaw(masterFetchResult), masterCwd)
         val slaveValue        = RenderableMismatch(mismatch, cxtToRaw(slaveFetchResult), slaveCwd)
         mismatch match {
-          case MessagesMergeOption.Retain(_, _, Some(_), Some(_)) => RowData.InBoth(masterValue, slaveValue)
-          case _: MessagesMergeOption.Retain                      => RowData.InMasterOnly(masterValue)
-          case _: MessagesMergeOption.Add                         => RowData.InSlaveOnly(slaveValue)
-          case _: MessagesMergeOption.Replace                     => RowData.InBoth(masterValue, slaveValue)
+          case MessagesMergeOption.Keep(_, _, Some(_), Some(_)) => RowData.InBoth(masterValue, slaveValue)
+          case _: MessagesMergeOption.Keep                      => RowData.InMasterOnly(masterValue)
+          case _: MessagesMergeOption.Add                       => RowData.InSlaveOnly(slaveValue)
+          case _: MessagesMergeOption.Replace                   => RowData.InBoth(masterValue, slaveValue)
         }
       }
     }
@@ -137,8 +137,8 @@ class SelectMergeMessagesDialog(
       rd match {
         case RowData.InMasterOnly(mmd)                                => Some(mmd.mismatch)
         case RowData.InBoth(mmd, _) if isSelected                     => Some(mmd.mismatch)
-        case RowData.InBoth(RenderableMismatch(mm: Retain, _, _), _)  => Some(mm)
-        case RowData.InBoth(RenderableMismatch(mm: Replace, _, _), _) => Some(mm.asRetain)
+        case RowData.InBoth(RenderableMismatch(mm: Keep, _, _), _)    => Some(mm)
+        case RowData.InBoth(RenderableMismatch(mm: Replace, _, _), _) => Some(mm.asKeep)
         case _ if !isSelected                                         => None
         case RowData.InSlaveOnly(smd)                                 => Some(smd.mismatch)
       }
@@ -153,7 +153,7 @@ class SelectMergeMessagesDialog(
       cwd: ChatWithDao
   ) {
     def isSelectable = mismatch match {
-      case _: MessagesMergeOption.Retain  => false
+      case _: MessagesMergeOption.Keep    => false
       case _: MessagesMergeOption.Add     => true
       case _: MessagesMergeOption.Replace => true
     }
@@ -255,7 +255,7 @@ private object SelectMergeMessagesDialog {
 
     val mismatches = IndexedSeq(
       // Prefix
-      MessagesMergeOption.Retain(
+      MessagesMergeOption.Keep(
         firstMasterMsg      = mMsgsI.bySrcId(40),
         lastMasterMsg       = mMsgsI.bySrcId(40),
 //        firstSlaveMsgOption = None,
@@ -295,7 +295,7 @@ private object SelectMergeMessagesDialog {
       ),
 
       // Suffix
-      MessagesMergeOption.Retain(
+      MessagesMergeOption.Keep(
         firstMasterMsg      = mMsgsI.bySrcId(200),
         lastMasterMsg       = mMsgsI.bySrcId(201),
 //        firstSlaveMsgOption = None,

@@ -72,14 +72,14 @@ class DatasetMerger(
     def mismatchAfterConflictEnd(state: StateInProgress): MessagesMergeOption = {
       state match {
         case MatchInProgress(_, startMasterMsg, _, startSlaveMsg) =>
-          MessagesMergeOption.Retain(
+          MessagesMergeOption.Keep(
             firstMasterMsg = startMasterMsg,
             lastMasterMsg = cxt.prevMm.get,
             firstSlaveMsgOption = Some(startSlaveMsg),
             lastSlaveMsgOption = cxt.prevSm
           )
         case RetentionInProgress(_, startMasterMsg, _) =>
-          MessagesMergeOption.Retain(
+          MessagesMergeOption.Keep(
             firstMasterMsg = startMasterMsg,
             lastMasterMsg = cxt.prevMm.get,
             firstSlaveMsgOption = None,
@@ -218,18 +218,18 @@ class DatasetMerger(
         val chat = (cmo.slaveChatOption orElse cmo.masterChatOption).get.copy(dsUuid = newDs.uuid)
         masterDao.insertChat(chat)
 
+        // Messages
         val messageBatches: Stream[IndexedSeq[Message]] = cmo match {
-          case ChatMergeOption.Retain(mc) =>
+          case ChatMergeOption.Keep(mc) =>
             messageBatchesStream[TaggedMessage.M](masterDao, mc, None)
           case ChatMergeOption.Add(sc)    =>
             messageBatchesStream[TaggedMessage.S](slaveDao, sc, None)
           case ChatMergeOption.Combine(mc, sc, resolution) =>
-            // Messages
-            val x = resolution.map {
+            resolution.map {
               case replace: MessagesMergeOption.Replace => replace.asAdd
               case etc                                  => etc
             }.map {
-              case MessagesMergeOption.Retain(firstMasterMsg, lastMasterMsg, _, _) =>
+              case MessagesMergeOption.Keep(firstMasterMsg, lastMasterMsg, _, _) =>
                 takeMsgsFromBatchUntilInc(
                   IndexedSeq(firstMasterMsg) #:: messageBatchesStream(
                     masterDao,
@@ -247,7 +247,6 @@ class DatasetMerger(
                 )
               case _ => throw new MatchError("Impossible!")
             }.toStream.flatten
-            x
         }
         for (mb <- messageBatches) {
           masterDao.insertMessages(chat, mb)
@@ -368,13 +367,10 @@ class DatasetMerger(
 object DatasetMerger {
   protected[merge] val BatchSize = 1000
 
-  // FIXME: Rename *Option to *Choice
-  //        Rename Retain to Keep
-
   /** Represents a single merge decision: a user that should be added, retained, merged (or skipped otherwise) */
   sealed abstract class UserMergeOption(val userToInsert: User)
   object UserMergeOption {
-    case class Retain(masterUser: User)                   extends UserMergeOption(masterUser)
+    case class Keep(masterUser: User)                     extends UserMergeOption(masterUser)
     case class Add(slaveUser: User)                       extends UserMergeOption(slaveUser)
     case class Replace(masterUser: User, slaveUser: User) extends UserMergeOption(slaveUser)
   }
@@ -385,8 +381,8 @@ object DatasetMerger {
      val slaveChatOption:  Option[Chat]
   )
   object ChatMergeOption {
-    case class Retain(masterChat: Chat) extends ChatMergeOption(Some(masterChat), None)
-    case class Add(slaveChat: Chat)     extends ChatMergeOption(None, Some(slaveChat))
+    case class Keep(masterChat: Chat) extends ChatMergeOption(Some(masterChat), None)
+    case class Add(slaveChat: Chat)   extends ChatMergeOption(None, Some(slaveChat))
     case class Combine(
         val masterChat: Chat,
         val slaveChat: Chat,
@@ -413,7 +409,7 @@ object DatasetMerger {
     def lastSlaveMsgOption:   Option[TaggedMessage.S]
   }
   object MessagesMergeOption {
-    case class Retain(
+    case class Keep(
         firstMasterMsg: TaggedMessage.M,
         lastMasterMsg: TaggedMessage.M,
         firstSlaveMsgOption: Option[TaggedMessage.S],
@@ -445,8 +441,8 @@ object DatasetMerger {
       override def firstSlaveMsgOption  = Some(firstSlaveMsg)
       override def lastSlaveMsgOption   = Some(lastSlaveMsg)
 
-      def asRetain: Retain = Retain(firstMasterMsg, lastMasterMsg, firstSlaveMsgOption, lastSlaveMsgOption)
-      def asAdd:    Add    = Add(firstSlaveMsg, lastSlaveMsg)
+      def asKeep: Keep = Keep(firstMasterMsg, lastMasterMsg, firstSlaveMsgOption, lastSlaveMsgOption)
+      def asAdd:  Add  = Add(firstSlaveMsg, lastSlaveMsg)
     }
   }
 }
