@@ -8,6 +8,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.fs.chm.dao._
 import org.fs.chm.utility.IoUtils
+import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
 
@@ -220,15 +221,24 @@ class DatasetMerger(
 
         // Chats
         for (cmo <- chatsToMerge) {
-          val chat = (cmo.slaveChatOption orElse cmo.masterChatOption).get.copy(dsUuid = newDs.uuid)
-          masterDao.insertChat(chat)
+          val (dsRoot, chat) = {
+            Seq(
+              cmo.slaveChatOption.map(c => (slaveDao.datasetRoot(c.dsUuid), c)),
+              cmo.masterChatOption.map(c => (masterDao.datasetRoot(c.dsUuid), c))
+            ).yieldDefined.head match {
+              case (f, c) => (f, c.copy(dsUuid = newDs.uuid))
+            }
+          }
+          masterDao.insertChat(dsRoot, chat)
 
           // Messages
-          val messageBatches: Stream[(ChatHistoryDao, Dataset, IndexedSeq[Message])] = cmo match {
+          val messageBatches: Stream[(File, IndexedSeq[Message])] = cmo match {
             case ChatMergeOption.Keep(mc) =>
-              messageBatchesStream[TaggedMessage.M](masterDao, mc, None) map (mb => (masterDao, masterDs, mb))
+              messageBatchesStream[TaggedMessage.M](masterDao, mc, None)
+                .map(mb => (masterDao.datasetRoot(masterDs.uuid), mb))
             case ChatMergeOption.Add(sc) =>
-              messageBatchesStream[TaggedMessage.S](slaveDao, sc, None) map (mb => (slaveDao, slaveDs, mb))
+              messageBatchesStream[TaggedMessage.S](slaveDao, sc, None)
+                .map(mb => (slaveDao.datasetRoot(slaveDs.uuid), mb))
             case ChatMergeOption.Combine(mc, sc, resolution) =>
               resolution.map {
                 case replace: MessagesMergeOption.Replace => replace.asAdd
@@ -243,13 +253,16 @@ class DatasetMerger(
                 case _ => throw new MatchError("Impossible!")
               }.toStream.flatten
           }
-          val to = masterDao.dataPath(newDs.uuid)
-          for ((srcDao, srcDs, mb) <- messageBatches) {
-            masterDao.insertMessages(chat, mb)
-            val paths = mb.flatMap(_.paths)
-            if (paths.nonEmpty) {
-              val from     = srcDao.dataPath(srcDs.uuid)
-              val filesMap = paths.map(p => (new File(from, p), new File(to, p))).toMap
+
+          val toRootFile = masterDao.datasetRoot(newDs.uuid)
+          for ((srcDsRoot, mb) <- messageBatches) {
+            masterDao.insertMessages(srcDsRoot, chat, mb)
+
+            // Copying files
+            val files = mb.flatMap(_.files)
+            if (files.nonEmpty) {
+              val fromPrefixLen = srcDsRoot.getAbsolutePath.length
+              val filesMap = files.map(f => (f, new File(toRootFile, f.getAbsolutePath.drop(fromPrefixLen)))).toMap
               val (notFound, _) =
                 StopWatch.measureAndCall(IoUtils.copyAll(filesMap))((_, t) => log.info(s"Copied in $t ms"))
               notFound.foreach(nf => log.info(s"Not found: ${nf.getAbsolutePath}"))
@@ -356,11 +369,11 @@ class DatasetMerger(
       chat: Chat,
       firstMsg: TM,
       lastMsg: TM
-  ): Stream[(ChatHistoryDao, Dataset, IndexedSeq[Message])] = {
+  ): Stream[(File, IndexedSeq[Message])] = {
     takeMsgsFromBatchUntilInc(
       IndexedSeq(firstMsg) #:: messageBatchesStream(dao, chat, Some(firstMsg)),
       lastMsg
-    ) map (mb => (dao, ds, mb))
+    ) map (mb => (dao.datasetRoot(ds.uuid), mb))
   }
 
   private def takeMsgsFromBatchUntilInc[T <: TaggedMessage](

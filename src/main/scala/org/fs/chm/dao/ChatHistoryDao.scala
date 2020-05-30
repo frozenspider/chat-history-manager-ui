@@ -1,9 +1,10 @@
 package org.fs.chm.dao
 
-import java.io.File
+import java.io.{ File => JFile }
 import java.util.UUID
 
 import com.github.nscala_time.time.Imports._
+import org.fs.chm.utility.IoUtils._
 import org.fs.utility.Imports._
 
 /**
@@ -18,11 +19,11 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def datasets: Seq[Dataset]
 
-  /** Base of relative paths specified in messages */
-  def dataPath(dsUuid: UUID): File
+  /** Directory which stores eveything in the dataset. All files are guaranteed to have this as a prefix */
+  def datasetRoot(dsUuid: UUID): JFile
 
-  /** List all files referenced by entities of this dataset. Paths are relative to `dataPath`, some might not exist. */
-  def filePaths(dsUuid: UUID): Set[String]
+  /** List all files referenced by entities of this dataset. Some might not exist. */
+  def datasetFiles(dsUuid: UUID): Set[JFile]
 
   def myself(dsUuid: UUID): User
 
@@ -93,7 +94,7 @@ trait ChatHistoryDao extends AutoCloseable {
   override def close(): Unit = {}
 
   /** Whether given data path is the one loaded in this DAO */
-  def isLoaded(dataPathRoot: File): Boolean
+  def isLoaded(dataPathRoot: JFile): Boolean
 }
 
 trait MutableChatHistoryDao extends ChatHistoryDao {
@@ -116,12 +117,12 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
   def mergeUsers(baseUser: User, absorbedUser: User): Unit
 
   /** Insert a new chat. It should not yet exist. */
-  def insertChat(chat: Chat): Unit
+  def insertChat(dsRoot: JFile, chat: Chat): Unit
 
   def deleteChat(chat: Chat): Unit
 
   /** Insert a new message for the given chat. Internal ID will be ignored. */
-  def insertMessages(chat: Chat, msgs: Seq[Message]): Unit
+  def insertMessages(dsRoot: JFile, chat: Chat, msgs: Seq[Message]): Unit
 
   /** Don't do automatic backups on data changes until re-enabled */
   def disableBackups(): Unit
@@ -200,7 +201,7 @@ case class Chat(
     id: Long,
     nameOption: Option[String],
     tpe: ChatType,
-    imgPathOption: Option[String],
+    imgPathOption: Option[JFile],
     msgCount: Int
 ) extends WithId
 
@@ -314,8 +315,8 @@ sealed trait Message extends Searchable {
    */
   def withInternalId(internalId: Message.InternalId): Message
 
-  /** All file paths, relative to the dataset path */
-  def paths: Set[String]
+  /** All file paths, which might or might not exist */
+  def files: Set[JFile]
 
   /** We can't use "super" on vals/lazy vals, so... */
   protected val plainSearchableMsgString =
@@ -354,7 +355,7 @@ object Message {
   ) extends Message {
     override def withInternalId(internalId: Message.InternalId): Regular = copy(internalId = internalId)
 
-    override def paths: Set[String] = {
+    override def files: Set[JFile] = {
       (contentOption match {
         case Some(content: Content.Sticker)       => Set(content.pathOption, content.thumbnailPathOption)
         case Some(content: Content.Photo)         => Set(content.pathOption)
@@ -362,11 +363,27 @@ object Message {
         case Some(content: Content.VideoMsg)      => Set(content.pathOption, content.thumbnailPathOption)
         case Some(content: Content.Animation)     => Set(content.pathOption, content.thumbnailPathOption)
         case Some(content: Content.File)          => Set(content.pathOption, content.thumbnailPathOption)
-        case Some(content: Content.Location)      => Set.empty[Option[String]]
-        case Some(content: Content.Poll)          => Set.empty[Option[String]]
+        case Some(content: Content.Location)      => Set.empty[Option[JFile]]
+        case Some(content: Content.Poll)          => Set.empty[Option[JFile]]
         case Some(content: Content.SharedContact) => Set(content.vcardPathOption)
-        case None                                 => Set.empty[Option[String]]
+        case None                                 => Set.empty[Option[JFile]]
       }).yieldDefined
+    }
+
+    override def =~=(that: Message) = that match {
+      case that: Message.Regular if this.contentOption.nonEmpty && that.contentOption.nonEmpty =>
+        val contentEquals = this.contentOption.get =~= that.contentOption.get
+        contentEquals && (
+          this.copy(
+            internalId    = Message.NoInternalId,
+            contentOption = None
+          ) == that.copy(
+            internalId    = Message.NoInternalId,
+            contentOption = None
+          )
+        )
+      case _ =>
+        super.=~=(that)
     }
   }
 
@@ -388,7 +405,7 @@ object Message {
     ) extends Service {
       override def withInternalId(internalId: Message.InternalId): PhoneCall = copy(internalId = internalId)
 
-      override def paths: Set[String] = Set.empty
+      override def files: Set[JFile] = Set.empty
     }
 
     case class PinMessage(
@@ -401,7 +418,7 @@ object Message {
     ) extends Service {
       override def withInternalId(internalId: Message.InternalId): PinMessage = copy(internalId = internalId)
 
-      override def paths: Set[String] = Set.empty
+      override def files: Set[JFile] = Set.empty
     }
 
     /** Note: for Telegram, `from...` is not always meaningful */
@@ -414,7 +431,7 @@ object Message {
     ) extends Service {
       override def withInternalId(internalId: Message.InternalId): ClearHistory = copy(internalId = internalId)
 
-      override def paths: Set[String] = Set.empty
+      override def files: Set[JFile] = Set.empty
     }
 
     case class EditPhoto(
@@ -423,13 +440,27 @@ object Message {
         time: DateTime,
         fromId: Long,
         textOption: Option[RichText],
-        pathOption: Option[String],
+        pathOption: Option[JFile],
         widthOption: Option[Int],
         heightOption: Option[Int]
     ) extends Service {
       override def withInternalId(internalId: Message.InternalId): EditPhoto = copy(internalId = internalId)
 
-      override def paths: Set[String] = Set(pathOption).yieldDefined
+      override def files: Set[JFile] = Set(pathOption).yieldDefined
+
+      override def =~=(that: Message) = that match {
+        case that: Message.Service.EditPhoto =>
+          (this.pathOption =~= that.pathOption) &&
+            (this.copy(
+              internalId = Message.NoInternalId,
+              pathOption = None
+            ) == that.copy(
+              internalId = Message.NoInternalId,
+              pathOption = None
+            ))
+        case _ =>
+          super.=~=(that)
+      }
     }
 
     object Group {
@@ -444,7 +475,7 @@ object Message {
       ) extends MembershipChange {
         override def withInternalId(internalId: Message.InternalId): Create = copy(internalId = internalId)
 
-        override def paths: Set[String] = Set.empty
+        override def files: Set[JFile] = Set.empty
 
         override val plainSearchableString =
           (plainSearchableMsgString +: title +: members).mkString(" ").trim
@@ -460,7 +491,7 @@ object Message {
       ) extends MembershipChange {
         override def withInternalId(internalId: Message.InternalId): InviteMembers = copy(internalId = internalId)
 
-        override def paths: Set[String] = Set.empty
+        override def files: Set[JFile] = Set.empty
 
         override val plainSearchableString =
           (plainSearchableMsgString +: members).mkString(" ").trim
@@ -476,7 +507,7 @@ object Message {
       ) extends MembershipChange {
         override def withInternalId(internalId: Message.InternalId): RemoveMembers = copy(internalId = internalId)
 
-        override def paths: Set[String] = Set.empty
+        override def files: Set[JFile] = Set.empty
 
         override val plainSearchableString =
           (plainSearchableMsgString +: members).mkString(" ").trim
@@ -492,7 +523,7 @@ object Message {
       ) extends Service {
         override def withInternalId(internalId: Message.InternalId): MigrateFrom = copy(internalId = internalId)
 
-        override def paths: Set[String] = Set.empty
+        override def files: Set[JFile] = Set.empty
 
         override val plainSearchableString =
           (plainSearchableMsgString + " " + titleOption.getOrElse("")).trim
@@ -507,7 +538,7 @@ object Message {
       ) extends Service {
         override def withInternalId(internalId: Message.InternalId): MigrateTo = copy(internalId = internalId)
 
-        override def paths: Set[String] = Set.empty
+        override def files: Set[JFile] = Set.empty
       }
     }
   }
@@ -517,57 +548,145 @@ object Message {
 // Content
 //
 
-sealed trait Content {}
+sealed trait Content {
+  def =~=(that: Content): Boolean =
+    this == that
+
+  def !=~=(that: Content): Boolean =
+    !(this =~= that)
+}
 
 object Content {
   case class Sticker(
-      pathOption: Option[String],
-      thumbnailPathOption: Option[String],
+      pathOption: Option[JFile],
+      thumbnailPathOption: Option[JFile],
       emojiOption: Option[String],
       widthOption: Option[Int],
       heightOption: Option[Int]
-  ) extends Content
+  ) extends Content {
+    override def =~=(that: Content) = that match {
+      case that: Content.Sticker =>
+        (
+          this.pathOption =~= that.pathOption
+            && this.thumbnailPathOption =~= that.thumbnailPathOption
+            && this.copy(
+              pathOption = None,
+              thumbnailPathOption = None
+            ) == that.copy(
+              pathOption = None,
+              thumbnailPathOption = None
+            )
+        )
+      case _ =>
+        super.=~=(that)
+    }
+  }
 
   case class Photo(
-      pathOption: Option[String],
+      pathOption: Option[JFile],
       width: Int,
       height: Int
-  ) extends Content
+  ) extends Content {
+    override def =~=(that: Content) = that match {
+      case that: Content.Photo =>
+        this.pathOption =~= that.pathOption && this.copy(pathOption = None) == that.copy(pathOption = None)
+      case _ =>
+        super.=~=(that)
+    }
+  }
 
   case class VoiceMsg(
-      pathOption: Option[String],
+      pathOption: Option[JFile],
       mimeTypeOption: Option[String],
       durationSecOption: Option[Int],
-  ) extends Content
+  ) extends Content {
+    override def =~=(that: Content) = that match {
+      case that: Content.VoiceMsg =>
+        this.pathOption =~= that.pathOption && this.copy(pathOption = None) == that.copy(pathOption = None)
+      case _ =>
+        super.=~=(that)
+    }
+  }
 
   case class VideoMsg(
-      pathOption: Option[String],
-      thumbnailPathOption: Option[String],
+      pathOption: Option[JFile],
+      thumbnailPathOption: Option[JFile],
       mimeTypeOption: Option[String],
       durationSecOption: Option[Int],
       width: Int,
       height: Int
-  ) extends Content
+  ) extends Content {
+    override def =~=(that: Content) = that match {
+      case that: Content.VideoMsg =>
+        (
+          this.pathOption =~= that.pathOption
+            && this.thumbnailPathOption =~= that.thumbnailPathOption
+            && this.copy(
+              pathOption = None,
+              thumbnailPathOption = None
+            ) == that.copy(
+              pathOption = None,
+              thumbnailPathOption = None
+            )
+        )
+      case _ =>
+        super.=~=(that)
+    }
+  }
 
   case class Animation(
-      pathOption: Option[String],
-      thumbnailPathOption: Option[String],
+      pathOption: Option[JFile],
+      thumbnailPathOption: Option[JFile],
       mimeTypeOption: Option[String],
       durationSecOption: Option[Int],
       width: Int,
       height: Int
-  ) extends Content
+  ) extends Content {
+    override def =~=(that: Content) = that match {
+      case that: Content.Animation =>
+        (
+          this.pathOption =~= that.pathOption
+            && this.thumbnailPathOption =~= that.thumbnailPathOption
+            && this.copy(
+              pathOption = None,
+              thumbnailPathOption = None
+            ) == that.copy(
+              pathOption = None,
+              thumbnailPathOption = None
+            )
+        )
+      case _ =>
+        super.=~=(that)
+    }
+  }
 
   case class File(
-      pathOption: Option[String],
-      thumbnailPathOption: Option[String],
+      pathOption: Option[JFile],
+      thumbnailPathOption: Option[JFile],
       mimeTypeOption: Option[String],
       titleOption: Option[String],
       performerOption: Option[String],
       durationSecOption: Option[Int],
       widthOption: Option[Int],
       heightOption: Option[Int]
-  ) extends Content
+  ) extends Content {
+    override def =~=(that: Content) = that match {
+      case that: Content.File =>
+        (
+          this.pathOption =~= that.pathOption
+            && this.thumbnailPathOption =~= that.thumbnailPathOption
+            && this.copy(
+              pathOption = None,
+              thumbnailPathOption = None
+            ) == that.copy(
+              pathOption = None,
+              thumbnailPathOption = None
+            )
+        )
+      case _ =>
+        super.=~=(that)
+    }
+  }
 
   case class Location(
       lat: BigDecimal,
@@ -584,7 +703,15 @@ object Content {
       firstNameOption: Option[String],
       lastNameOption: Option[String],
       phoneNumberOption: Option[String],
-      vcardPathOption: Option[String]
+      vcardPathOption: Option[JFile]
   ) extends Content
-      with PersonInfo
+      with PersonInfo {
+    override def =~=(that: Content) = that match {
+      case that: Content.SharedContact =>
+        (this.vcardPathOption =~= that.vcardPathOption
+          && this.copy(vcardPathOption = None) == that.copy(vcardPathOption = None))
+      case _ =>
+        super.=~=(that)
+    }
+  }
 }

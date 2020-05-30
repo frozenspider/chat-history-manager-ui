@@ -129,12 +129,11 @@ class MessagesService(htmlKit: HTMLEditorKit) {
   }
 
   private def renderPossiblyMissingContent(
-      pathOption: Option[String],
+      fileOption: Option[File],
       kindPrettyName: String,
       dao: ChatHistoryDao,
       dsUuid: UUID
   )(renderContentFromFile: File => String): String = {
-    val fileOption = pathOption map (new File(dao.dataPath(dsUuid), _))
     fileOption match {
       case Some(file) if file.exists => renderContentFromFile(file)
       case Some(file)                => s"[$kindPrettyName not found]"
@@ -142,14 +141,14 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     }
   }
 
-  private def renderImage(pathOption: Option[String],
+  private def renderImage(fileOption: Option[File],
                           widthOption: Option[Int],
                           heightOption: Option[Int],
                           altTextOption: Option[String],
                           imagePrettyType: String,
                           dao: ChatHistoryDao,
                           dsUuid: UUID): String = {
-    renderPossiblyMissingContent(pathOption, imagePrettyType, dao, dsUuid)(file => {
+    renderPossiblyMissingContent(fileOption, imagePrettyType, dao, dsUuid)(file => {
       val srcAttr    = Some(s"""src="${fileToLocalUriString(file)}"""")
       val widthAttr  = widthOption map (w => s"""width="${w / 2}"""")
       val heightAttr = heightOption map (h => s"""height="${h / 2}"""")

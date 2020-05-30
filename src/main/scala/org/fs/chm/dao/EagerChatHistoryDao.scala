@@ -13,7 +13,7 @@ import org.fs.utility.Imports._
  */
 class EagerChatHistoryDao(
     override val name: String,
-    dataPathRoot: File,
+    _dataRootFile: File,
     dataset: Dataset,
     myself1: User,
     users1: Seq[User],
@@ -35,16 +35,16 @@ class EagerChatHistoryDao(
 
   override def datasets: Seq[Dataset] = Seq(dataset)
 
-  override def dataPath(dsUuid: UUID): File = dataPathRoot
+  override def datasetRoot(dsUuid: UUID): File = _dataRootFile.getAbsoluteFile
 
-  override def filePaths(dsUuid: UUID): Set[String] = {
+  override def datasetFiles(dsUuid: UUID): Set[File] = {
     val cs           = chats(dsUuid)
-    val chatImgPaths = cs.map(_.imgPathOption).yieldDefined.toSet
-    val msgPaths = for {
+    val chatImgFiles = cs.map(_.imgPathOption).yieldDefined.toSet
+    val msgFiles = for {
       c <- cs
       m <- firstMessages(c, Int.MaxValue)
-    } yield m.paths
-    chatImgPaths ++ msgPaths.toSet.flatten
+    } yield m.files
+    chatImgFiles ++ msgFiles.toSet.flatten
   }
 
   override def myself(dsUuid: UUID): User = myself1
@@ -138,13 +138,13 @@ class EagerChatHistoryDao(
   }
 
   override def isLoaded(dataPathRoot: File): Boolean = {
-    dataPathRoot != null && this.dataPathRoot == dataPathRoot
+    dataPathRoot != null && this._dataRootFile == dataPathRoot
   }
 
   override def equals(that: Any): Boolean = that match {
-    case that: EagerChatHistoryDao => this.name == that.name && that.isLoaded(this.dataPathRoot)
+    case that: EagerChatHistoryDao => this.name == that.name && that.isLoaded(this._dataRootFile)
     case _                         => false
   }
 
-  override def hashCode(): Int = this.name.hashCode + 17 * this.dataPathRoot.hashCode
+  override def hashCode(): Int = this.name.hashCode + 17 * this._dataRootFile.hashCode
 }

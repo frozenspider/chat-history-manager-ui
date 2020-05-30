@@ -11,6 +11,7 @@ import org.fs.chm.TestHelper
 import org.fs.chm.WithH2Dao
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger._
+import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.TestUtils._
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
@@ -219,7 +220,7 @@ class DatasetMergerMergeSpec //
       )
     }
     assert(expectedMessages.size === newMessages.size)
-    for ((m1, m2) <- (expectedMessages zip newMessages)) {
+    for ((m1, m2) <- (expectedMessages zip newMessages).par) {
       assert(m1 =~= m2, (m1, m2))
     }
 
@@ -235,20 +236,19 @@ class DatasetMergerMergeSpec //
   }
 
   def msgsPaths(dao: ChatHistoryDao, ds: Dataset, msgs: Seq[Message]): Set[File] = {
-    val dp = dao.dataPath(ds.uuid)
-    msgs.flatMap(m => m.paths map (p => new File(dp, p))).toSet
+    msgs.flatMap(_.files).toSet
   }
 
   def assertFiles(dao: ChatHistoryDao, ds: Dataset, expectedFiles: Set[File]) = {
-    val dp    = dao.dataPath(ds.uuid)
-    val paths = dao.filePaths(ds.uuid)
-    assert(paths.size === expectedFiles.size)
-    val sortedFiles         = paths.toSeq.map(p => new File(dp, p)).sortBy(_.getName)
+    val files = dao.datasetFiles(ds.uuid)
+    assert(files.size === expectedFiles.size)
+    // Given that expected files might come from different DS's, we rely on random names being unique and sort by name
+    val sortedFiles         = files.toSeq.sortBy(_.getName)
     val sortedExpectedFiles = expectedFiles.toSeq.sortBy(_.getName)
-    for ((af, ef) <- (sortedFiles zip sortedExpectedFiles)) {
-      assert(af.getName === ef.getName)
-      assert(af.exists === ef.exists)
-      assert(bytesOf(af) === bytesOf(ef))
+    for ((af, ef) <- (sortedFiles zip sortedExpectedFiles).par) {
+      assert(af.getName === ef.getName, (af, ef))
+      assert(af.exists === ef.exists, (af, ef))
+      assert(af =~= ef, ((af, ef), (af.bytes, ef.bytes)))
     }
   }
 
@@ -259,9 +259,8 @@ class DatasetMergerMergeSpec //
       chatsWithMsgs2: ListMap[Chat, Seq[Message]]
   ) {
     val (dao1, d1ds, d1users, d1chat, d1msgs) = {
-      val dao = createDao("One", users1, chatsWithMsgs1, amendMessageWithContent)
-      h2dao.copyAllFrom(dao)
-      val (ds, users, chat, msgs) = getSimpleDaoEntities(dao)
+      h2dao.copyAllFrom(createDao("One", users1, chatsWithMsgs1, amendMessageWithContent))
+      val (ds, users, chat, msgs) = getSimpleDaoEntities(h2dao)
       (h2dao, ds, users, chat, msgs)
     }
     val (dao2, d2ds, d2users, d2chat, d2msgs) = {
@@ -275,13 +274,13 @@ class DatasetMergerMergeSpec //
 
     private def amendMessageWithContent(path: File, msg: Message): Message = msg match {
       case msg: Message.Regular =>
-        val path1 = rnd.alphanumeric.take(30).mkString("", "", ".bin")
-        val path2 = rnd.alphanumeric.take(31).mkString("", "", ".bin")
-        Files.write(new File(path, path1).toPath, rnd.alphanumeric.take(256).mkString.getBytes)
-        Files.write(new File(path, path2).toPath, rnd.alphanumeric.take(256).mkString.getBytes)
+        val file1 = new File(path, rnd.alphanumeric.take(30).mkString("", "", ".bin"))
+        val file2 = new File(path, rnd.alphanumeric.take(31).mkString("", "", ".bin"))
+        Files.write(file1.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
+        Files.write(file2.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
         val content = Content.File(
-          pathOption          = Some(path1),
-          thumbnailPathOption = Some(path2),
+          pathOption          = Some(file1),
+          thumbnailPathOption = Some(file2),
           mimeTypeOption      = Some("mt"),
           titleOption         = Some("t"),
           performerOption     = Some("p"),

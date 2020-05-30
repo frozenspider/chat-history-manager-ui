@@ -10,6 +10,7 @@ import org.fs.chm.TestHelper
 import org.fs.chm.WithH2Dao
 import org.fs.chm.loader.H2DataManager
 import org.fs.chm.loader.TelegramDataLoader
+import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.TestUtils
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
@@ -51,15 +52,15 @@ class H2ChatHistoryDaoSpec //
   test("relevant files are copied") {
     val src         = new String(Files.readAllBytes(new File(telegramDir, "result.json").toPath), Charset.forName("UTF-8"))
     val pathRegex   = """(?<=")chats/[a-zA-Z0-9()\[\]./\\_ -]+(?=")""".r
-    val srcDataPath = tgDao.dataPath(dsUuid)
-    val dstDataPath = h2dao.dataPath(dsUuid)
+    val srcDataPath = tgDao.datasetRoot(dsUuid)
+    val dstDataPath = h2dao.datasetRoot(dsUuid)
 
     for (path <- pathRegex.findAllIn(src).toList) {
       assert(new File(srcDataPath, path).exists(), s"File ${path} (source) isn't found! Bug in test?")
       assert(new File(dstDataPath, path).exists(), s"File ${path} wasn't copied!")
-      val srcBytes = bytesOf(new File(srcDataPath, path))
+      val srcBytes = new File(srcDataPath, path).bytes
       assert(!srcBytes.isEmpty, s"Source file ${path} was empty! Bug in test?")
-      assert(srcBytes === bytesOf(new File(dstDataPath, path)), s"Copy of ${path} didn't match its source!")
+      assert(srcBytes === new File(dstDataPath, path).bytes, s"Copy of ${path} didn't match its source!")
     }
 
     val pathsNotToCopy = Seq(
@@ -69,11 +70,12 @@ class H2ChatHistoryDaoSpec //
     for (path <- pathsNotToCopy) {
       assert(new File(srcDataPath, path).exists(), s"File ${path} (source) isn't found! Bug in test?")
       assert(!new File(dstDataPath, path).exists(), s"File ${path} was copied - but it shouldn't have been!")
-      val srcBytes = bytesOf(new File(srcDataPath, path))
+      val srcBytes = new File(srcDataPath, path).bytes
       assert(!srcBytes.isEmpty, s"Source file ${path} was empty! Bug in test?")
     }
 
-    assert(tgDao.filePaths(dsUuid) === h2dao.filePaths(dsUuid))
+    assert(tgDao.datasetFiles(dsUuid).toSeq.sortBy(_.getAbsolutePath)
+      =~= h2dao.datasetFiles(dsUuid).toSeq.sortBy(_.getAbsolutePath))
   }
 
   test("messages and chats are equal, retrieval methods work as needed") {
@@ -84,48 +86,47 @@ class H2ChatHistoryDaoSpec //
 
       val allTg = tgDao.lastMessages(tgChat, tgChat.msgCount)
       val allH2 = h2dao.lastMessages(h2Chat, tgChat.msgCount)
-      assert(allH2.size == tgChat.msgCount)
-      assert(allH2 === allTg)
+      assert(allH2 =~= allTg)
 
       val scroll1 = h2dao.scrollMessages(h2Chat, 0, numMsgsToTake)
       assert(scroll1 === allH2.take(numMsgsToTake))
-      assert(scroll1 === tgDao.scrollMessages(tgChat, 0, numMsgsToTake))
+      assert(scroll1 =~= tgDao.scrollMessages(tgChat, 0, numMsgsToTake))
 
       val scroll2 = h2dao.scrollMessages(h2Chat, 1, numMsgsToTake)
       assert(scroll2 === allH2.tail.take(numMsgsToTake))
-      assert(scroll2 === tgDao.scrollMessages(tgChat, 1, numMsgsToTake))
+      assert(scroll2 =~= tgDao.scrollMessages(tgChat, 1, numMsgsToTake))
 
       val before1 = h2dao.messagesBefore(h2Chat, allH2.last, numMsgsToTake)
       assert(before1.last === allH2.last)
       assert(before1 === allH2.takeRight(numMsgsToTake))
-      assert(before1 === tgDao.messagesBefore(tgChat, allTg.last, numMsgsToTake))
+      assert(before1 =~= tgDao.messagesBefore(tgChat, allTg.last, numMsgsToTake))
 
       val before2 = h2dao.messagesBefore(h2Chat, allH2.dropRight(1).last, numMsgsToTake)
       assert(before2.last === allH2.dropRight(1).last)
       assert(before2 === allH2.dropRight(1).takeRight(numMsgsToTake))
-      assert(before2 === tgDao.messagesBefore(tgChat, allTg.dropRight(1).last, numMsgsToTake))
+      assert(before2 =~= tgDao.messagesBefore(tgChat, allTg.dropRight(1).last, numMsgsToTake))
 
       val after1 = h2dao.messagesAfter(h2Chat, allH2.head, numMsgsToTake)
       assert(after1.head === allH2.head)
       assert(after1 === allH2.take(numMsgsToTake))
-      assert(after1 === tgDao.messagesAfter(tgChat, allTg.head, numMsgsToTake))
+      assert(after1 =~= tgDao.messagesAfter(tgChat, allTg.head, numMsgsToTake))
 
       val after2 = h2dao.messagesAfter(h2Chat, allH2(1), numMsgsToTake)
       assert(after2.head === allH2(1))
       assert(after2 === allH2.tail.take(numMsgsToTake))
-      assert(after2 === tgDao.messagesAfter(tgChat, allTg(1), numMsgsToTake))
+      assert(after2 =~= tgDao.messagesAfter(tgChat, allTg(1), numMsgsToTake))
 
       val between1 = h2dao.messagesBetween(h2Chat, allH2.head, allH2.last)
       assert(between1 === allH2)
-      assert(between1 === tgDao.messagesBetween(tgChat, allTg.head, allTg.last))
+      assert(between1 =~= tgDao.messagesBetween(tgChat, allTg.head, allTg.last))
 
       val between2 = h2dao.messagesBetween(h2Chat, allH2(1), allH2.last)
       assert(between2 === allH2.tail)
-      assert(between2 === tgDao.messagesBetween(tgChat, allTg(1), allTg.last))
+      assert(between2 =~= tgDao.messagesBetween(tgChat, allTg(1), allTg.last))
 
       val between3 = h2dao.messagesBetween(h2Chat, allH2.head, allH2.dropRight(1).last)
       assert(between3 === allH2.dropRight(1))
-      assert(between3 === tgDao.messagesBetween(tgChat, allTg.head, allTg.dropRight(1).last))
+      assert(between3 =~= tgDao.messagesBetween(tgChat, allTg.head, allTg.dropRight(1).last))
 
       val countBetween1 = h2dao.countMessagesBetween(h2Chat, allH2.head, allH2.last)
       assert(countBetween1 === allH2.size - 2)
@@ -143,7 +144,7 @@ class H2ChatHistoryDaoSpec //
 
       val last = h2dao.lastMessages(h2Chat, numMsgsToTake)
       assert(last === allH2.takeRight(numMsgsToTake))
-      assert(last === tgDao.lastMessages(tgChat, numMsgsToTake))
+      assert(last =~= tgDao.lastMessages(tgChat, numMsgsToTake))
     }
   }
 
@@ -322,7 +323,7 @@ class H2ChatHistoryDaoSpec //
     assert(h2dao.datasets.isEmpty)
 
     // Dataset files has been moved to a backup dir
-    assert(!h2dao.dataPath(dsUuid).exists())
+    assert(!h2dao.datasetRoot(dsUuid).exists())
     assert(new File(h2dao.getBackupPath(), dsUuid.toString).exists())
   }
 }

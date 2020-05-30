@@ -147,7 +147,7 @@ object SelectMergeChatsDialog {
       dataPathRoot.deleteOnExit()
       new EagerChatHistoryDao(
         name = "Dao",
-        dataPathRoot = dataPathRoot,
+        _dataRootFile = dataPathRoot,
         dataset = ds,
         myself1 = user,
         users1 = Seq(user),

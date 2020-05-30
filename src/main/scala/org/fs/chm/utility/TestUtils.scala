@@ -86,7 +86,7 @@ object TestUtils {
     val amend2 = amendMessage.curried(dataPathRoot)
     new EagerChatHistoryDao(
       name         = "Dao " + nameSuffix,
-      dataPathRoot = dataPathRoot,
+      _dataRootFile = dataPathRoot,
       dataset      = ds,
       myself1      = users1.head,
       users1       = users1,
@@ -132,11 +132,11 @@ object TestUtils {
 
     override def mergeUsers(baseUser: User, absorbedUser: User): Unit = ???
 
-    override def insertChat(chat: Chat): Unit = ???
+    override def insertChat(dsRoot: File, chat: Chat): Unit = ???
 
     override def deleteChat(chat: Chat): Unit = ???
 
-    override def insertMessages(chat: Chat, msgs: Seq[Message]): Unit = ???
+    override def insertMessages(dsRoot: File, chat: Chat, msgs: Seq[Message]): Unit = ???
 
     override def disableBackups(): Unit = ???
 

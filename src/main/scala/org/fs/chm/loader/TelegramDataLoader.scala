@@ -16,10 +16,12 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
   implicit private val formats: Formats = DefaultFormats.withLong.withBigDecimal
 
   /** Path should point to the folder with `result.json` and other stuff */
-  override protected def loadDataInner(path: File): EagerChatHistoryDao = {
+  override protected def loadDataInner(rootFile: File): EagerChatHistoryDao = {
     implicit val dummyTracker = new FieldUsageTracker
-    val resultJsonFile: File = new File(path, "result.json")
-    if (!resultJsonFile.exists()) throw new FileNotFoundException("result.json not found in " + path.getAbsolutePath)
+    val resultJsonFile: File = new File(rootFile, "result.json").getAbsoluteFile
+    if (!resultJsonFile.exists()) {
+      throw new FileNotFoundException("result.json not found in " + rootFile.getAbsolutePath)
+    }
 
     val dataset = Dataset.createDefault("Telegram", "telegram")
 
@@ -33,7 +35,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     } yield {
       val messagesRes = (for {
         message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
-      } yield MessageParser.parseMessageOption(message)).yieldDefined
+      } yield MessageParser.parseMessageOption(message, rootFile)).yieldDefined
 
       val chatRes = parseChat(chat, dataset.uuid, messagesRes.size)
       (chatRes, messagesRes)
@@ -41,8 +43,8 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
 
     new EagerChatHistoryDao(
-      name               = "Telegram export data from " + path.getName,
-      dataPathRoot       = path,
+      name               = "Telegram export data from " + rootFile.getName,
+      _dataRootFile      = rootFile.getAbsoluteFile,
       dataset            = dataset,
       myself1            = myself,
       users1             = users,
@@ -161,13 +163,13 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
 
   private object MessageParser {
 
-    def parseMessageOption(jv: JValue): Option[Message] = {
+    def parseMessageOption(jv: JValue, rootFile: File): Option[Message] = {
       implicit val tracker = new FieldUsageTracker
       tracker.markUsed("via_bot") // Ignored
       tracker.ensuringUsage(jv) {
         getCheckedField[String](jv, "type") match {
-          case "message" => Some(parseRegular(jv))
-          case "service" => Some(parseService(jv))
+          case "message" => Some(parseRegular(jv, rootFile))
+          case "service" => Some(parseService(jv, rootFile))
           case "unsupported" =>
             // Not enough data is provided even for a placeholder
             tracker.markUsed("id")
@@ -179,7 +181,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
       }
     }
 
-    private def parseRegular(jv: JValue)(implicit tracker: FieldUsageTracker): Message.Regular = {
+    private def parseRegular(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Message.Regular = {
       tracker.markUsed("from") // Sending user name has been parsed during a separate pass
       Message.Regular(
         internalId             = Message.NoInternalId,
@@ -190,11 +192,11 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
         forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
         replyToMessageIdOption = getFieldOpt[Message.SourceId](jv, "reply_to_message_id", false),
         textOption             = RichTextParser.parseRichTextOption(jv),
-        contentOption          = ContentParser.parseContentOption(jv)
+        contentOption          = ContentParser.parseContentOption(jv, rootFile)
       )
     }
 
-    private def parseService(jv: JValue)(implicit tracker: FieldUsageTracker): Message.Service = {
+    private def parseService(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Message.Service = {
       tracker.markUsed("edited") // Service messages can't be edited
       tracker.markUsed("actor")  // Sending user name has been parsed during a separate pass
       getCheckedField[String](jv, "action") match {
@@ -231,7 +233,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getCheckedField[Long](jv, "actor_id"),
-            pathOption     = getStringOpt(jv, "photo", true),
+            pathOption     = getFileOpt(jv, "photo", true, rootFile),
             widthOption    = getFieldOpt[Int](jv, "width", false),
             heightOption   = getFieldOpt[Int](jv, "height", false),
             textOption     = RichTextParser.parseRichTextOption(jv)
@@ -389,7 +391,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
   }
 
   private object ContentParser {
-    def parseContentOption(jv: JValue)(implicit tracker: FieldUsageTracker): Option[Content] = {
+    def parseContentOption(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Option[Content] = {
       val mediaTypeOption     = getFieldOpt[String](jv, "media_type", false)
       val photoOption         = getFieldOpt[String](jv, "photo", false)
       val fileOption          = getFieldOpt[String](jv, "file", false)
@@ -398,44 +400,44 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
       val contactInfoPresent  = (jv \ "contact_information") != JNothing
       (mediaTypeOption, photoOption, fileOption, locPresent, pollQuestionPresent, contactInfoPresent) match {
         case (None, None, None, false, false, false)                     => None
-        case (Some("sticker"), None, Some(_), false, false, false)       => Some(parseSticker(jv))
-        case (Some("animation"), None, Some(_), false, false, false)     => Some(parseAnimation(jv))
-        case (Some("video_message"), None, Some(_), false, false, false) => Some(parseVideoMsg(jv))
-        case (Some("voice_message"), None, Some(_), false, false, false) => Some(parseVoiceMsg(jv))
-        case (Some("video_file"), None, Some(_), false, false, false)    => Some(parseFile(jv))
-        case (Some("audio_file"), None, Some(_), false, false, false)    => Some(parseFile(jv))
-        case (None, Some(_), None, false, false, false)                  => Some(parsePhoto(jv))
-        case (None, None, Some(_), false, false, false)                  => Some(parseFile(jv))
+        case (Some("sticker"), None, Some(_), false, false, false)       => Some(parseSticker(jv, rootFile))
+        case (Some("animation"), None, Some(_), false, false, false)     => Some(parseAnimation(jv, rootFile))
+        case (Some("video_message"), None, Some(_), false, false, false) => Some(parseVideoMsg(jv, rootFile))
+        case (Some("voice_message"), None, Some(_), false, false, false) => Some(parseVoiceMsg(jv, rootFile))
+        case (Some("video_file"), None, Some(_), false, false, false)    => Some(parseFile(jv, rootFile))
+        case (Some("audio_file"), None, Some(_), false, false, false)    => Some(parseFile(jv, rootFile))
+        case (None, Some(_), None, false, false, false)                  => Some(parsePhoto(jv, rootFile))
+        case (None, None, Some(_), false, false, false)                  => Some(parseFile(jv, rootFile))
         case (None, None, None, true, false, false)                      => Some(parseLocation(jv))
         case (None, None, None, false, true, false)                      => Some(parsePoll(jv))
-        case (None, None, None, false, false, true)                      => Some(parseSharedContact(jv))
+        case (None, None, None, false, false, true)                      => Some(parseSharedContact(jv, rootFile))
         case _ =>
           throw new IllegalArgumentException(s"Couldn't determine content type for '$jv'")
       }
     }
 
-    private def parseSticker(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Sticker = {
+    private def parseSticker(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Sticker = {
       Content.Sticker(
-        pathOption          = getStringOpt(jv, "file", true),
-        thumbnailPathOption = getStringOpt(jv, "thumbnail", true),
+        pathOption          = getFileOpt(jv, "file", true, rootFile),
+        thumbnailPathOption = getFileOpt(jv, "thumbnail", true, rootFile),
         emojiOption         = getStringOpt(jv, "sticker_emoji", false),
         widthOption         = getFieldOpt[Int](jv, "width", false),
         heightOption        = getFieldOpt[Int](jv, "height", false)
       )
     }
 
-    private def parsePhoto(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Photo = {
+    private def parsePhoto(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Photo = {
       Content.Photo(
-        pathOption = getStringOpt(jv, "photo", true),
+        pathOption = getFileOpt(jv, "photo", true, rootFile),
         width      = getCheckedField[Int](jv, "width"),
         height     = getCheckedField[Int](jv, "height"),
       )
     }
 
-    private def parseAnimation(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Animation = {
+    private def parseAnimation(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Animation = {
       Content.Animation(
-        pathOption          = getStringOpt(jv, "file", true),
-        thumbnailPathOption = getStringOpt(jv, "thumbnail", true),
+        pathOption          = getFileOpt(jv, "file", true, rootFile),
+        thumbnailPathOption = getFileOpt(jv, "thumbnail", true, rootFile),
         mimeTypeOption      = Some(getCheckedField[String](jv, "mime_type")),
         durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
         width               = getCheckedField[Int](jv, "width"),
@@ -443,18 +445,18 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
       )
     }
 
-    private def parseVoiceMsg(jv: JValue)(implicit tracker: FieldUsageTracker): Content.VoiceMsg = {
+    private def parseVoiceMsg(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.VoiceMsg = {
       Content.VoiceMsg(
-        pathOption        = getStringOpt(jv, "file", true),
+        pathOption        = getFileOpt(jv, "file", true, rootFile),
         mimeTypeOption    = Some(getCheckedField[String](jv, "mime_type")),
         durationSecOption = getFieldOpt[Int](jv, "duration_seconds", false),
       )
     }
 
-    private def parseVideoMsg(jv: JValue)(implicit tracker: FieldUsageTracker): Content.VideoMsg = {
+    private def parseVideoMsg(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.VideoMsg = {
       Content.VideoMsg(
-        pathOption          = getStringOpt(jv, "file", true),
-        thumbnailPathOption = getStringOpt(jv, "thumbnail", true),
+        pathOption          = getFileOpt(jv, "file", true, rootFile),
+        thumbnailPathOption = getFileOpt(jv, "thumbnail", true, rootFile),
         mimeTypeOption      = Some(getCheckedField[String](jv, "mime_type")),
         durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
         width               = getCheckedField[Int](jv, "width"),
@@ -462,10 +464,10 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
       )
     }
 
-    private def parseFile(jv: JValue)(implicit tracker: FieldUsageTracker): Content.File = {
+    private def parseFile(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.File = {
       Content.File(
-        pathOption          = getStringOpt(jv, "file", true),
-        thumbnailPathOption = getStringOpt(jv, "thumbnail", false),
+        pathOption          = getFileOpt(jv, "file", true, rootFile),
+        thumbnailPathOption = getFileOpt(jv, "thumbnail", false, rootFile),
         mimeTypeOption      = getStringOpt(jv, "mime_type", true),
         titleOption         = getStringOpt(jv, "title", false),
         performerOption     = getStringOpt(jv, "performer", false),
@@ -489,13 +491,14 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
       )
     }
 
-    private def parseSharedContact(jv: JValue)(implicit tracker: FieldUsageTracker): Content.SharedContact = {
+    private def parseSharedContact(jv: JValue, rootFile: File)(
+        implicit tracker: FieldUsageTracker): Content.SharedContact = {
       val ci = getRawField(jv, "contact_information", true)
       Content.SharedContact(
-        firstNameOption   = getStringOpt(ci, "first_name", true),
-        lastNameOption    = getStringOpt(ci, "last_name", true),
+        firstNameOption = getStringOpt(ci, "first_name", true),
+        lastNameOption = getStringOpt(ci, "last_name", true),
         phoneNumberOption = getStringOpt(ci, "phone_number", true),
-        vcardPathOption   = getStringOpt(jv, "contact_vcard", false)
+        vcardPathOption = getFileOpt(jv, "contact_vcard", false, rootFile)
       )
     }
   }
@@ -567,6 +570,12 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     tracker.markUsed(fieldName)
     if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in ${jv.toString.take(500)}")
     res.extractOpt[String] flatMap stringToOption
+  }
+
+  private def getFileOpt(jv: JValue, fieldName: String, mustPresent: Boolean, rootFile: File)(
+      implicit formats: Formats,
+      tracker: FieldUsageTracker): Option[File] = {
+    getStringOpt(jv, fieldName, mustPresent) map (p => new File(rootFile, p).getAbsoluteFile)
   }
 
   private def getCheckedField[A](jv: JValue, fieldName: String)(implicit formats: Formats,
