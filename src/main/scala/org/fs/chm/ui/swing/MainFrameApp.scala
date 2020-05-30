@@ -363,15 +363,14 @@ class MainFrameApp //
         freezeTheWorld("Merging...")
       }
       chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
-        merger.merge(usersToMerge, chatsMergeResolutions)
-        // TODO: daoListChanged? loadDaoInEDT?
-        chatsOuterPanel.revalidate()
-        chatsOuterPanel.repaint()
+        MutationLock.synchronized {
+          merger.merge(usersToMerge, chatsMergeResolutions)
+        }
+        daoListChanged()
       }
     } onComplete { res =>
       res.failed.foreach(handleException)
       Swing.onEDT {
-        daoListChanged()
         unfreezeTheWorld()
       }
     }

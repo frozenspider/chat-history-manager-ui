@@ -6,13 +6,15 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.fs.chm.dao._
+import org.fs.utility.StopWatch
+import org.slf4s.Logging
 
 class DatasetMerger(
     masterDao: MutableChatHistoryDao,
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset
-) {
+) extends Logging {
   import DatasetMerger._
 
   /**
@@ -193,70 +195,74 @@ class DatasetMerger(
       usersToMerge: Seq[UserMergeOption],
       chatsToMerge: Seq[ChatMergeOption]
   ): Dataset = {
-    try {
-      masterDao.disableBackups()
-      val newDs = Dataset(
-        uuid = UUID.randomUUID(),
-        alias = masterDs.alias + " (merged)",
-        sourceType = masterDs.sourceType
-      )
-      masterDao.insertDataset(newDs)
+    StopWatch.measureAndCall {
+      try {
+        masterDao.disableBackups()
+        val newDs = Dataset(
+          uuid = UUID.randomUUID(),
+          alias = masterDs.alias + " (merged)",
+          sourceType = masterDs.sourceType
+        )
+        masterDao.insertDataset(newDs)
 
-      // Users
-      val masterSelf = masterDao.myself(masterDs.uuid)
-      require(
-        usersToMerge.map(_.userToInsert).count(_.id == masterSelf.id) == 1,
-        "User merges should contain exactly one self user!"
-      )
-      for (sourceUser <- usersToMerge) {
-        val user2 = sourceUser.userToInsert.copy(dsUuid = newDs.uuid)
-        masterDao.insertUser(user2, user2.id == masterSelf.id)
-      }
-
-      // Chats
-      for (cmo <- chatsToMerge) {
-        val chat = (cmo.slaveChatOption orElse cmo.masterChatOption).get.copy(dsUuid = newDs.uuid)
-        masterDao.insertChat(chat)
-
-        // Messages
-        val messageBatches: Stream[IndexedSeq[Message]] = cmo match {
-          case ChatMergeOption.Keep(mc) =>
-            messageBatchesStream[TaggedMessage.M](masterDao, mc, None)
-          case ChatMergeOption.Add(sc)    =>
-            messageBatchesStream[TaggedMessage.S](slaveDao, sc, None)
-          case ChatMergeOption.Combine(mc, sc, resolution) =>
-            resolution.map {
-              case replace: MessagesMergeOption.Replace => replace.asAdd
-              case etc                                  => etc
-            }.map {
-              case MessagesMergeOption.Keep(firstMasterMsg, lastMasterMsg, _, _) =>
-                takeMsgsFromBatchUntilInc(
-                  IndexedSeq(firstMasterMsg) #:: messageBatchesStream(
-                    masterDao,
-                    cmo.masterChatOption.get,
-                    Some(firstMasterMsg.asInstanceOf[TaggedMessage.M])
-                  ), lastMasterMsg
-                )
-              case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
-                takeMsgsFromBatchUntilInc(
-                  IndexedSeq(firstSlaveMsg) #:: messageBatchesStream(
-                    slaveDao,
-                    cmo.slaveChatOption.get,
-                    Some(firstSlaveMsg.asInstanceOf[TaggedMessage.S])
-                  ), lastSlaveMsg
-                )
-              case _ => throw new MatchError("Impossible!")
-            }.toStream.flatten
+        // Users
+        val masterSelf = masterDao.myself(masterDs.uuid)
+        require(
+          usersToMerge.map(_.userToInsert).count(_.id == masterSelf.id) == 1,
+          "User merges should contain exactly one self user!"
+        )
+        for (sourceUser <- usersToMerge) {
+          val user2 = sourceUser.userToInsert.copy(dsUuid = newDs.uuid)
+          masterDao.insertUser(user2, user2.id == masterSelf.id)
         }
-        for (mb <- messageBatches) {
-          masterDao.insertMessages(chat, mb)
-        }
-      }
 
-      newDs
-    } finally {
-      masterDao.enableBackups()
-    }
+        // Chats
+        for (cmo <- chatsToMerge) {
+          val chat = (cmo.slaveChatOption orElse cmo.masterChatOption).get.copy(dsUuid = newDs.uuid)
+          masterDao.insertChat(chat)
+
+          // Messages
+          val messageBatches: Stream[IndexedSeq[Message]] = cmo match {
+            case ChatMergeOption.Keep(mc) =>
+              messageBatchesStream[TaggedMessage.M](masterDao, mc, None)
+            case ChatMergeOption.Add(sc) =>
+              messageBatchesStream[TaggedMessage.S](slaveDao, sc, None)
+            case ChatMergeOption.Combine(mc, sc, resolution) =>
+              resolution.map {
+                case replace: MessagesMergeOption.Replace => replace.asAdd
+                case etc                                  => etc
+              }.map {
+                case MessagesMergeOption.Keep(firstMasterMsg, lastMasterMsg, _, _) =>
+                  takeMsgsFromBatchUntilInc(
+                    IndexedSeq(firstMasterMsg) #:: messageBatchesStream(
+                      masterDao,
+                      cmo.masterChatOption.get,
+                      Some(firstMasterMsg.asInstanceOf[TaggedMessage.M])
+                    ),
+                    lastMasterMsg
+                  )
+                case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
+                  takeMsgsFromBatchUntilInc(
+                    IndexedSeq(firstSlaveMsg) #:: messageBatchesStream(
+                      slaveDao,
+                      cmo.slaveChatOption.get,
+                      Some(firstSlaveMsg.asInstanceOf[TaggedMessage.S])
+                    ),
+                    lastSlaveMsg
+                  )
+                case _ => throw new MatchError("Impossible!")
+              }.toStream.flatten
+          }
+          for (mb <- messageBatches) {
+            masterDao.insertMessages(chat, mb)
+          }
+        }
+
+        newDs
+      } finally {
+        masterDao.enableBackups()
+      }
+    } ((_, t) => log.info(s"Datasets merged in ${t} ms"))
   }
 
   //

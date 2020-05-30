@@ -37,7 +37,8 @@ class SelectMergeMessagesDialog(
 
   private lazy val MaxMessageWidth = 500
 
-  private lazy val originalTitle = "Select messages to merge"
+  private lazy val originalTitle =
+    s"Select messages to merge (${masterChat.nameOption.getOrElse(ChatHistoryDao.Unnamed)})"
 
   {
     title = originalTitle
