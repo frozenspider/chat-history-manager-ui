@@ -157,16 +157,16 @@ class DatasetMergerMergeSpec //
   /**
    * {{{
    * Master messages - 1  2  ... max
-   * Slave messages  - 1* 2* ... max*
+   * Slave messages  - 1' 2' ... max'
    * }}}
-   * A(2, max/3), K(max/3 + 1, max*2/3), R(max*2/3 + 1, max - 1)
+   * A(2, max/3), KA(max/3 + 1, max/2), KR(max/2 + 1, max*2/3), R(max*2/3 + 1, max - 1)
    */
   test("merge chats - combine, each") {
-    val msgs       = for (i <- 1 to maxId) yield createRegularMessage(i, 1)
-    val msgsA      = msgs
-    val msgsB      = changedMessages(msgs, _ => true)
-    val helper     = H2MergerHelper.fromMessages(msgsA, msgsB)
-    val (bp1, bp2) = (maxId / 3, maxId * 2 / 3)
+    val msgs            = for (i <- 1 to maxId) yield createRegularMessage(i, 1)
+    val msgsA           = msgs
+    val msgsB           = changedMessages(msgs, _ => true)
+    val helper          = H2MergerHelper.fromMessages(msgsA, msgsB)
+    val (bp1, bp2, bp3) = (maxId / 3, maxId / 2, maxId * 2 / 3)
     val chatMerges = Seq[ChatMergeOption](
       ChatMergeOption.Combine(
         helper.d1chat,
@@ -176,16 +176,23 @@ class DatasetMergerMergeSpec //
             firstSlaveMsg  = helper.d2msgs.bySrcId(2),
             lastSlaveMsg   = helper.d2msgs.bySrcId(bp1)
           ),
+          // Keep, with added messages specified - should act as replace
           MessagesMergeOption.Keep(
             firstMasterMsg      = helper.d1msgs.bySrcId(bp1 + 1),
             lastMasterMsg       = helper.d1msgs.bySrcId(bp2),
             firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(bp1 + 1)),
             lastSlaveMsgOption  = Some(helper.d2msgs.bySrcId(bp2))
           ),
+          MessagesMergeOption.Keep(
+            firstMasterMsg      = helper.d1msgs.bySrcId(bp2 + 1),
+            lastMasterMsg       = helper.d1msgs.bySrcId(bp3),
+            firstSlaveMsgOption = None,
+            lastSlaveMsgOption  = None
+          ),
           MessagesMergeOption.Replace(
-            firstMasterMsg = helper.d1msgs.bySrcId(bp2 + 1),
+            firstMasterMsg = helper.d1msgs.bySrcId(bp3 + 1),
             lastMasterMsg  = helper.d1msgs.bySrcId(maxId - 1),
-            firstSlaveMsg  = helper.d2msgs.bySrcId(bp2 + 1),
+            firstSlaveMsg  = helper.d2msgs.bySrcId(bp3 + 1),
             lastSlaveMsg   = helper.d2msgs.bySrcId(maxId - 1)
           )
         )
@@ -200,13 +207,15 @@ class DatasetMergerMergeSpec //
     assert(newMessages(0) =~= helper.d2msgs.bySrcId(2))
     val (expectedMessages, expectedFiles) = {
       val msgs1 = helper.d2msgs.slice(1, bp1)
-      val msgs2 = helper.d1msgs.slice(bp1, bp2)
-      val msgs3 = helper.d2msgs.slice(bp2, maxId - 1)
+      val msgs2 = helper.d2msgs.slice(bp1, bp2)
+      val msgs3 = helper.d1msgs.slice(bp2, bp3)
+      val msgs4 = helper.d2msgs.slice(bp3, maxId - 1)
       (
-        msgs1 ++ msgs2 ++ msgs3,
+        msgs1 ++ msgs2 ++ msgs3 ++ msgs4,
         (msgsPaths(helper.dao2, helper.d2ds, msgs1)
-          ++ msgsPaths(helper.dao1, helper.d1ds, msgs2)
-          ++ msgsPaths(helper.dao2, helper.d2ds, msgs3))
+          ++ msgsPaths(helper.dao2, helper.d2ds, msgs2)
+          ++ msgsPaths(helper.dao1, helper.d1ds, msgs3)
+          ++ msgsPaths(helper.dao2, helper.d2ds, msgs4))
       )
     }
     assert(expectedMessages.size === newMessages.size)

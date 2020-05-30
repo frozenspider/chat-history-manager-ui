@@ -47,21 +47,21 @@ class DatasetMerger(
   }
 
   /** Stream messages, either from the beginning or from the given one (exclusive) */
-  protected[merge] def messageBatchesStream[T <: TaggedMessage](
+  protected[merge] def messageBatchesStream[TM <: TaggedMessage](
       dao: ChatHistoryDao,
       chat: Chat,
-      fromMessageOption: Option[Message with T]
-  ): Stream[IndexedSeq[T]] = {
+      fromMessageOption: Option[TM]
+  ): Stream[IndexedSeq[TM]] = {
     val batch = fromMessageOption
       .map(from => dao.messagesAfter(chat, from, BatchSize + 1).drop(1))
       .getOrElse(dao.firstMessages(chat, BatchSize))
-      .asInstanceOf[IndexedSeq[Message with T]]
+      .asInstanceOf[IndexedSeq[TM]]
     if (batch.isEmpty) {
       Stream.empty
     } else if (batch.size < BatchSize) {
       Stream(batch)
     } else {
-      Stream(batch) #::: messageBatchesStream[T](dao, chat, Some(batch.last))
+      Stream(batch) #::: messageBatchesStream[TM](dao, chat, Some(batch.last))
     }
   }
 
@@ -234,24 +234,12 @@ class DatasetMerger(
                 case replace: MessagesMergeOption.Replace => replace.asAdd
                 case etc                                  => etc
               }.map {
+                case MessagesMergeOption.Keep(_, _, Some(firstSlaveMsg), Some(lastSlaveMsg)) =>
+                  batchLoadMsgsUntilInc(slaveDao, slaveDs, cmo.slaveChatOption.get, firstSlaveMsg, lastSlaveMsg)
                 case MessagesMergeOption.Keep(firstMasterMsg, lastMasterMsg, _, _) =>
-                  takeMsgsFromBatchUntilInc(
-                    IndexedSeq(firstMasterMsg) #:: messageBatchesStream(
-                      masterDao,
-                      cmo.masterChatOption.get,
-                      Some(firstMasterMsg.asInstanceOf[TaggedMessage.M])
-                    ),
-                    lastMasterMsg
-                  ) map (mb => (masterDao, masterDs, mb))
+                  batchLoadMsgsUntilInc(masterDao, masterDs, cmo.masterChatOption.get, firstMasterMsg, lastMasterMsg)
                 case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
-                  takeMsgsFromBatchUntilInc(
-                    IndexedSeq(firstSlaveMsg) #:: messageBatchesStream(
-                      slaveDao,
-                      cmo.slaveChatOption.get,
-                      Some(firstSlaveMsg.asInstanceOf[TaggedMessage.S])
-                    ),
-                    lastSlaveMsg
-                  ) map (mb => (slaveDao, slaveDs, mb))
+                  batchLoadMsgsUntilInc(slaveDao, slaveDs, cmo.slaveChatOption.get, firstSlaveMsg, lastSlaveMsg)
                 case _ => throw new MatchError("Impossible!")
               }.toStream.flatten
           }
@@ -360,7 +348,20 @@ class DatasetMerger(
     ) extends StateInProgress
   }
 
-  private def takeMsgsFromBatchUntilInc(
+  private def batchLoadMsgsUntilInc[TM <: TaggedMessage](
+      dao: ChatHistoryDao,
+      ds: Dataset,
+      chat: Chat,
+      firstMsg: TM,
+      lastMsg: TM
+  ): Stream[(ChatHistoryDao, Dataset, IndexedSeq[Message])] = {
+    takeMsgsFromBatchUntilInc(
+      IndexedSeq(firstMsg) #:: messageBatchesStream(dao, chat, Some(firstMsg)),
+      lastMsg
+    ) map (mb => (dao, ds, mb))
+  }
+
+  private def takeMsgsFromBatchUntilInc[T <: TaggedMessage](
       stream: Stream[IndexedSeq[Message]],
       m: Message
   ): Stream[IndexedSeq[Message]] = {
@@ -407,13 +408,15 @@ object DatasetMerger {
   }
 
   // Message tagged types
-  sealed trait TaggedMessage
+  sealed trait MessageTag
+  object MessageTag {
+    sealed trait MasterMessageTag extends MessageTag
+    sealed trait SlaveMessageTag  extends MessageTag
+  }
+  type TaggedMessage = Message with MessageTag
   object TaggedMessage {
-    sealed trait MasterMessageTag extends TaggedMessage
-    sealed trait SlaveMessageTag  extends TaggedMessage
-
-    type M = Message with MasterMessageTag
-    type S = Message with SlaveMessageTag
+    type M = Message with MessageTag.MasterMessageTag
+    type S = Message with MessageTag.SlaveMessageTag
   }
 
   /** Represents a single merge decision: a messages that should be added, retained, merged (or skipped otherwise) */
