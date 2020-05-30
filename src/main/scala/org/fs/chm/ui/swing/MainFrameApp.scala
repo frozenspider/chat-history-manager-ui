@@ -370,8 +370,12 @@ class MainFrameApp //
       chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
         MutationLock.synchronized {
           merger.merge(usersToMerge, chatsMergeResolutions)
+          Swing.onEDT {
+            chatList.replaceWith(loadedDaos.keys.toSeq)
+            chatsOuterPanel.revalidate()
+            chatsOuterPanel.repaint()
+          }
         }
-        daoListChanged()
       }
     } onComplete { res =>
       res.failed.foreach(handleException)

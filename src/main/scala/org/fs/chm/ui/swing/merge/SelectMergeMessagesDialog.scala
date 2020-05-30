@@ -123,7 +123,12 @@ class SelectMergeMessagesDialog(
       // For some reason, maximumWidth is ignored
       msgAreaContainer.textPane.preferredWidth = MaxMessageWidth
 
-      msgAreaContainer.textPane
+      val res = msgAreaContainer.textPane
+
+      // If we don't call it here, we might get an NPE later, under some unknown and rare conditions. Magic!
+      res.peer.getPreferredSize
+
+      res
     }
 
     override protected def isInBothSelectable(mv: RenderableMismatch, sv: RenderableMismatch): Boolean = mv.isSelectable

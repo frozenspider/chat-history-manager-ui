@@ -23,6 +23,7 @@ import javax.swing.event.CellEditorListener
 import javax.swing.table._
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.utility.Imports._
+import org.slf4s.Logging
 
 class SelectMergesTable[V, R](
     models: SelectMergesTable.MergeModels[V, R]
@@ -203,7 +204,7 @@ class SelectMergesTable[V, R](
   }
 }
 
-object SelectMergesTable {
+object SelectMergesTable extends Logging {
 
   abstract class MergeModels[V, R] {
 

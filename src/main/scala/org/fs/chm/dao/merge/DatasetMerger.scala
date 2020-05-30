@@ -246,12 +246,14 @@ class DatasetMerger(
           val to = masterDao.dataPath(newDs.uuid)
           for ((srcDao, srcDs, mb) <- messageBatches) {
             masterDao.insertMessages(chat, mb)
-            val paths    = mb.flatMap(_.paths)
-            val from     = srcDao.dataPath(srcDs.uuid)
-            val filesMap = paths.map(p => (new File(from, p), new File(to, p))).toMap
-            val (notFound, _) =
-              StopWatch.measureAndCall(IoUtils.copyAll(filesMap))((_, t) => log.info(s"Copied in $t ms"))
-            notFound.foreach(nf => log.info(s"Not found: ${nf.getAbsolutePath}"))
+            val paths = mb.flatMap(_.paths)
+            if (paths.nonEmpty) {
+              val from     = srcDao.dataPath(srcDs.uuid)
+              val filesMap = paths.map(p => (new File(from, p), new File(to, p))).toMap
+              val (notFound, _) =
+                StopWatch.measureAndCall(IoUtils.copyAll(filesMap))((_, t) => log.info(s"Copied in $t ms"))
+              notFound.foreach(nf => log.info(s"Not found: ${nf.getAbsolutePath}"))
+            }
           }
         }
 
