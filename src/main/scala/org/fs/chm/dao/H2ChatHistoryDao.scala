@@ -254,6 +254,11 @@ class H2ChatHistoryDao(
       qL <- queries.datasets.delete(dsUuid)
     } yield q1 + q2 + q3 + q4 + q5 + qL
     query.transact(txctr).unsafeRunSync()
+    val srcDataPath = dataPath(dsUuid)
+    if (srcDataPath.exists()) {
+      val dstDataPath = new File(getBackupPath(), srcDataPath.getName)
+      Files.move(srcDataPath.toPath, dstDataPath.toPath)
+    }
     Lock.synchronized {
       _interlocutorsCacheOption = None
     }
@@ -362,11 +367,16 @@ class H2ChatHistoryDao(
     backup()
   }
 
+  private def getBackupPath(): File = {
+    val backupDir = new File(dataPathRoot, H2ChatHistoryDao.BackupsDir)
+    backupDir.mkdir()
+    backupDir
+  }
+
   override protected def backup(): Unit = {
     val backupsEnabled = Lock.synchronized { _backupsEnabled }
     if (backupsEnabled) {
-      val backupDir = new File(dataPathRoot, H2ChatHistoryDao.BackupsDir)
-      backupDir.mkdir()
+      val backupDir = getBackupPath()
       val backups =
         backupDir
           .listFiles((dir, name) => name.matches("""backup_(\d\d\d\d)-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d).zip"""))

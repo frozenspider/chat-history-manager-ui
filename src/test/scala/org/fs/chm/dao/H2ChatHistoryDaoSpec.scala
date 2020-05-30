@@ -319,5 +319,6 @@ class H2ChatHistoryDaoSpec //
   test("delete dataset") {
     h2dao.deleteDataset(dsUuid)
     assert(h2dao.datasets.isEmpty)
+    assert(!h2dao.dataPath(dsUuid).exists())
   }
 }
