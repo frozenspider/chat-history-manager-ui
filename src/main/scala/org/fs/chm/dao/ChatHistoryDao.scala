@@ -324,7 +324,7 @@ sealed trait Message extends Searchable {
 
   override val plainSearchableString = plainSearchableMsgString
 
-  /** Equals not regarding internal IDs */
+  /** "Practical equality" that ignores internal ID, paths of files with equal content, and some unimportant fields */
   def =~=(that: Message) =
     this.withInternalId(Message.NoInternalId) == that.withInternalId(Message.NoInternalId)
 
@@ -348,6 +348,7 @@ object Message {
       time: DateTime,
       editTimeOption: Option[DateTime],
       fromId: Long,
+      /** Excluded from `=~=` comparison */
       forwardFromNameOption: Option[String],
       replyToMessageIdOption: Option[SourceId],
       textOption: Option[RichText],
@@ -371,15 +372,21 @@ object Message {
     }
 
     override def =~=(that: Message) = that match {
-      case that: Message.Regular if this.contentOption.nonEmpty && that.contentOption.nonEmpty =>
-        val contentEquals = this.contentOption.get =~= that.contentOption.get
+      case that: Message.Regular =>
+        val contentEquals = (this.contentOption, that.contentOption) match {
+          case (None, None)               => true
+          case (Some(thisC), Some(thatC)) => thisC =~= thatC
+          case _                          => false
+        }
         contentEquals && (
           this.copy(
-            internalId    = Message.NoInternalId,
-            contentOption = None
+            internalId            = Message.NoInternalId,
+            forwardFromNameOption = None,
+            contentOption         = None
           ) == that.copy(
-            internalId    = Message.NoInternalId,
-            contentOption = None
+            internalId            = Message.NoInternalId,
+            forwardFromNameOption = None,
+            contentOption         = None
           )
         )
       case _ =>
