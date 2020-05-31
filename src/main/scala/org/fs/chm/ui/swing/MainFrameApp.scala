@@ -60,12 +60,17 @@ class MainFrameApp //
   private val msgService    = new MessagesService(htmlKit)
   private val chatSelGroup  = new ChatListItemSelectionGroup
 
-  // TODO:
-  // reply-to (make clickable)
-  // word-wrap and narrower width
-  // search
-  // better pictures rendering
-  // emoji and fonts
+  /*
+   * TODO:
+   *  - reply-to (make clickable)
+   *  - word-wrap and narrower width
+   *  - search
+   *  - better pictures rendering
+   *  - emoji and fonts
+   *  - fucked up merge layout
+   *  - delete orphan users
+   *  - better tabs?
+   */
 
   val preloadResult: Future[_] = {
     val futureSeq = Seq(
