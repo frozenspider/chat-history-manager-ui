@@ -95,7 +95,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
 
     new EagerChatHistoryDao(
       name               = "GT-S5610 export data from " + path.getName,
-      dataPathRoot       = path,
+      _dataRootFile       = path,
       dataset            = dataset,
       myself1            = myself,
       users1             = users,

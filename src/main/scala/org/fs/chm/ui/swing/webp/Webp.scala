@@ -87,5 +87,5 @@ object Webp extends Logging {
         new Point(0, 0)
       )
       new BufferedImage(colorModel, raster, false, null)
-    }((_, t) => log.debug(s"WebP image created in $t ms"))
+    }((_, t) => if (t > 20) log.debug(s"WebP image created in $t ms"))
 }

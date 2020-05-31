@@ -16,8 +16,8 @@ import com.github.nscala_time.time.Imports._
 import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
-import org.fs.chm.dao.merge.ChatHistoryMerger
-//import org.fs.chm.dao.merge.ChatHistoryMerger._
+import org.fs.chm.dao.merge.DatasetMerger
+import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.loader._
 import org.fs.chm.ui.swing.MessagesService._
 import org.fs.chm.ui.swing.general.ChatWithDao
@@ -91,9 +91,14 @@ class MainFrameApp //
   val ui = new BorderPanel {
     import scala.swing.BorderPanel.Position._
 
-    layout(menuBar)                = North
-    layout(chatsOuterPanel)        = West
+    layout(menuBar) = North
+    layout(chatsOuterPanel) = West
     layout(msgAreaContainer.panel) = Center
+    layout {
+      new BorderPanel {
+        layout(statusLabel) = West
+      }
+    } = South
   }
 
   lazy val (menuBar, dbEmbeddedMenu) = {
@@ -116,6 +121,8 @@ class MainFrameApp //
   }
 
   lazy val chatList = new DaoList(dao => new DaoChatItem(dao))
+
+  lazy val statusLabel = new Label(" ")
 
   lazy val chatsOuterPanel = {
     new BorderPanel {
@@ -161,12 +168,14 @@ class MainFrameApp //
     m
   }
 
-  def freezeTheWorld(): Unit = {
+  def freezeTheWorld(statusMsg: String): Unit = {
+    statusLabel.text = statusMsg
     menuBar.contents foreach (_.enabled = false)
     changeChatsClickable(false)
   }
 
   def unfreezeTheWorld(): Unit = {
+    statusLabel.text = " " // Empty string to prevent collapse
     menuBar.contents foreach (_.enabled = true)
     changeChatsClickable(true)
   }
@@ -199,7 +208,7 @@ class MainFrameApp //
       case FileChooser.Result.Approve if loadedDaos.keys.exists(_ isLoaded chooser.selectedFile.getParentFile) =>
         showWarning(s"File '${chooser.selectedFile}' is already loaded")
       case FileChooser.Result.Approve => {
-        freezeTheWorld()
+        freezeTheWorld("Loading data...")
         config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
         Future { // To release UI lock
           Swing.onEDT {
@@ -235,7 +244,7 @@ class MainFrameApp //
       case FileChooser.Result.Cancel => // NOOP
       case FileChooser.Result.Error  => // Mostly means that dialog was dismissed, also NOOP
       case FileChooser.Result.Approve => {
-        freezeTheWorld()
+        freezeTheWorld("Saving data...")
         config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
         Future { // To release UI lock
           try {
@@ -290,7 +299,6 @@ class MainFrameApp //
   }
 
   def showSelectDatasetsToMergeDialog(): Unit = {
-    /*
     if (loadedDaos.isEmpty) {
       showWarning("Load a database first!")
     } else if (!loadedDaos.exists(_._1.isMutable)) {
@@ -313,59 +321,70 @@ class MainFrameApp //
           }
       }
     }
-     */
-    ???
   }
 
   //
   // Other stuff
   //
 
-  /*
   def mergeDatasets(
-      masterDao: H2ChatHistoryDao,
+      masterDao: MutableChatHistoryDao,
       masterDs: Dataset,
       slaveDao: ChatHistoryDao,
       slaveDs: Dataset,
-      usersToMerge: Map[User, User],
-      chatsToMerge: Seq[ChangedChatMergeOption]
+      usersToMerge: Seq[UserMergeOption],
+      chatsToMerge: Seq[ChatMergeOption]
   ): Unit = {
-    val merger = new ChatHistoryMerger(masterDao, masterDs, slaveDao, slaveDs)
-    val chatsMergeAnalysis = chatsToMerge.collect {
-      case ChatMergeOption.Combine(mc, sc) => (mc, sc, merger.analyzeMergingChats(mc, sc))
+    val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
+    Swing.onEDT {
+      freezeTheWorld("Analyzing chat messages...")
     }
-    // TODO: Make lazy and async
-    val chatsMergeResolutionsOption: Option[Seq[(Chat, Chat, Map[Mismatch, MismatchResolution])]] =
-      chatsMergeAnalysis.foldLeft(Option(Seq.empty[(Chat, Chat, Map[Mismatch, MismatchResolution])])) {
-        case (None, _) =>
-          // Some selection has been cancelled, ignore everything else
-          None
-        case (Some(acc), (mc, sc, analysis)) if analysis.isEmpty =>
-          // No mismatches, nothing to ask user about
-          Some(acc :+ (mc, sc, Map.empty[Mismatch, MismatchResolution]))
-        case (Some(acc), (mc, sc, analysis)) =>
-          val dialog =
-            new SelectMergeMessagesDialog(masterDao, mc, slaveDao, sc, analysis.toIndexedSeq, htmlKit, msgService)
-          dialog.visible = true
-          dialog.selection map { resolutions =>
-            acc :+ (mc, sc, resolutions)
+    Future {
+      // Analyze
+      val analyzed = chatsToMerge.map(merger.analyzeChatHistoryMerge)
+      val (resolved, cancelled) = analyzed.foldLeft((Seq.empty[ChatMergeOption], false)) {
+        case ((res, stop), _) if stop =>
+          (res, true)
+        case ((res, _), (cmo @ ChatMergeOption.Combine(mc, sc, mismatches))) =>
+          // Resolve mismatches
+          if (mismatches.forall(_.isInstanceOf[MessagesMergeOption.Keep])) {
+            // User has no choice - pass them as-is
+            (res :+ cmo, false)
+          } else {
+            val dialog =
+              new SelectMergeMessagesDialog(masterDao, mc, slaveDao, sc, mismatches, htmlKit, msgService)
+            dialog.visible = true
+            dialog.selection
+              .map(resolution => (res :+ (cmo.copy(messageMergeOptions = resolution)), false))
+              .getOrElse((res, true))
           }
+        case ((res, _), cmo) =>
+          (res :+ cmo, false)
       }
-    chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
-      val newDs = Dataset(
-        uuid       = UUID.randomUUID(),
-        alias      = masterDs.alias,
-        sourceType = masterDs.sourceType
-      )
-      ???
-      // FIXE: Add users, merge users
-      // FIXE: Add chats
-      chatsMergeResolutions foreach {
-        case (mc, sc, resolutions) => merger.mergeChats(newDs, mc, sc, resolutions)
+      if (cancelled) None else Some(resolved)
+    } map { chatsMergeResolutionsOption: Option[Seq[ChatMergeOption]] =>
+      // Merge
+      Swing.onEDTWait {
+        freezeTheWorld("Merging...")
+      }
+      chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
+        MutationLock.synchronized {
+          merger.merge(usersToMerge, chatsMergeResolutions)
+          Swing.onEDT {
+            chatList.replaceWith(loadedDaos.keys.toSeq)
+            chatsOuterPanel.revalidate()
+            chatsOuterPanel.repaint()
+          }
+        }
+      }
+    } onComplete { res =>
+      res.failed.foreach(handleException)
+      Swing.onEDT {
+        unfreezeTheWorld()
       }
     }
   }
-*/
+
   def loadDaoInEDT(dao: ChatHistoryDao, daoToReplaceOption: Option[ChatHistoryDao] = None): Unit = {
     checkEdt()
     MutationLock.synchronized {
@@ -401,7 +420,7 @@ class MainFrameApp //
   override def renameDataset(dsUuid: UUID, newName: String, dao: ChatHistoryDao): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
-    freezeTheWorld()
+    freezeTheWorld("Renaming...")
     Swing.onEDT { // To release UI lock
       try {
         MutationLock.synchronized {
@@ -416,10 +435,28 @@ class MainFrameApp //
     }
   }
 
+  override def deleteDataset(dsUuid: UUID, dao: ChatHistoryDao): Unit = {
+    checkEdt()
+    require(dao.isMutable, "DAO is immutable!")
+    freezeTheWorld("Deleting...")
+    Swing.onEDT { // To release UI lock
+      try {
+        MutationLock.synchronized {
+          dao.mutable.deleteDataset(dsUuid)
+          chatList.replaceWith(loadedDaos.keys.toSeq)
+        }
+        chatsOuterPanel.revalidate()
+        chatsOuterPanel.repaint()
+      } finally {
+        unfreezeTheWorld()
+      }
+    }
+  }
+
   override def userEdited(user: User, dao: ChatHistoryDao): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
-    freezeTheWorld()
+    freezeTheWorld("Modifying...")
     asyncChangeUsers(dao, {
       dao.mutable.updateUser(user)
       Seq(user.id)
@@ -430,7 +467,7 @@ class MainFrameApp //
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     require(baseUser.dsUuid == absorbedUser.dsUuid, "Users are from different datasets!")
-    freezeTheWorld()
+    freezeTheWorld("Modifying...")
     asyncChangeUsers(dao, {
       dao.mutable.mergeUsers(baseUser, absorbedUser)
       Seq(baseUser.id, absorbedUser.id)
@@ -438,11 +475,11 @@ class MainFrameApp //
   }
 
   override def deleteChat(cc: ChatWithDao): Unit = {
-    freezeTheWorld()
+    freezeTheWorld("Deleting...")
     Swing.onEDT {
       try {
         MutationLock.synchronized {
-          cc.dao.mutable.delete(cc.chat)
+          cc.dao.mutable.deleteChat(cc.chat)
           evictFromCache(cc.dao, cc.chat)
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
@@ -461,7 +498,7 @@ class MainFrameApp //
       if (!loadedDaos(cc.dao).contains(cc.chat)) {
         updateCache(cc.dao, cc.chat, ChatCache(None, None))
       }
-      freezeTheWorld()
+      freezeTheWorld("Loading chat...")
     }
     val f = Future {
       val cache = loadedDaos(cc.dao)(cc.chat)
@@ -506,7 +543,7 @@ class MainFrameApp //
           val loadStatus = cache.loadStatusOption.get
           log.debug(s"Loading messages: loadStatus = ${loadStatus}")
           if (!loadStatus.beginReached) {
-            freezeTheWorld()
+            freezeTheWorld("Loading messages...")
             loadMessagesInProgress set true
             val msgDoc = cache.msgDocOption.get
             val f = Future {
@@ -615,10 +652,13 @@ class MainFrameApp //
       }
     }
 
-  @tailrec
   private def handleException(thread: Thread, ex: Throwable): Unit =
+    handleException(ex)
+
+  @tailrec
+  private def handleException(ex: Throwable): Unit =
     if (ex.getCause != null && ex.getCause != ex) {
-      handleException(thread, ex.getCause)
+      handleException(ex.getCause)
     } else {
       ex match {
         case ex: IllegalArgumentException =>

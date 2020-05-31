@@ -1,14 +1,11 @@
 package org.fs.chm.ui.swing.merge
 
-import java.awt.Color
-
-import scala.collection.mutable.ArrayBuffer
 import scala.swing._
 
+import com.github.nscala_time.time.Imports._
 import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao._
-//import org.fs.chm.dao.merge.ChatHistoryMerger.Mismatch
-//import org.fs.chm.dao.merge.ChatHistoryMerger.MismatchResolution
+import org.fs.chm.dao.merge.DatasetMerger.MessagesMergeOption
 import org.fs.chm.ui.swing.MessagesAreaContainer
 import org.fs.chm.ui.swing.MessagesService
 import org.fs.chm.ui.swing.MessagesService.MessageInsertPosition
@@ -18,213 +15,153 @@ import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.utility.EntityUtils._
 import org.fs.utility.Imports._
 
-/*
+/**
+ * Show dialog for merging chat messages.
+ * Unlike other merge dialogs, this one does not perform a mismatch analysis, and relies on the provided one instead.
+ * Rules:
+ * - Checkbox option will be present for all `Add`/`Replace` mismatches
+ * - `Add` mismatch that was unchecked will be removed from output
+ * - `Replace` mismatch that was unchecked will be replaced by `Keep` mismatch
+ * This means that master messages coverage should not change in the output
+ */
 class SelectMergeMessagesDialog(
     masterDao: ChatHistoryDao,
     masterChat: Chat,
     slaveDao: ChatHistoryDao,
     slaveChat: Chat,
-    mismatches: IndexedSeq[Mismatch],
+    mismatches: IndexedSeq[MessagesMergeOption],
     htmlKit: HTMLEditorKit,
     msgService: MessagesService
-) extends CustomDialog[Map[Mismatch, MismatchResolution]] {
+) extends CustomDialog[IndexedSeq[MessagesMergeOption]] {
   import SelectMergeMessagesDialog._
 
+  private lazy val MaxMessageWidth = 500
+
+  private lazy val originalTitle =
+    s"Select messages to merge (${masterChat.nameOption.getOrElse(ChatHistoryDao.Unnamed)})"
+
   {
-    title = "Select messages to merge"
+    title = originalTitle
   }
 
-  private lazy val table = new SelectMergesTable[RenderableMismatch, (Mismatch, MismatchResolution)](new Models)
+  private lazy val models = new Models
+
+  private lazy val table = new SelectMergesTable[RenderableMismatch, MessagesMergeOption](models)
 
   override protected lazy val dialogComponent: Component = {
     table.wrapInScrollpaneAndAdjustWidth()
   }
 
-  override protected def validateChoices(): Option[Map[Mismatch, MismatchResolution]] = {
-    Some(table.selected.toMap)
+  override protected def validateChoices(): Option[IndexedSeq[MessagesMergeOption]] = {
+    Some(table.selected.toIndexedSeq)
   }
 
   import SelectMergesTable._
 
-  private class Models extends MergeModels[RenderableMismatch, (Mismatch, MismatchResolution)] {
+  private class Models extends MergeModels[RenderableMismatch, MessagesMergeOption] {
     override val allElems: Seq[RowData[RenderableMismatch]] = {
       require(mismatches.nonEmpty)
       val masterCwd = ChatWithDao(masterChat, masterDao)
-      val slaveCwd  = ChatWithDao(slaveChat, slaveDao)
-
-      def cxtToRowDataOption(masterFetchResult: CxtFetchResult,
-                             slaveFetchResult: CxtFetchResult): Option[RowData[RenderableMismatch]] = {
-        def cxtToRaw(fetchResult: CxtFetchResult) = fetchResult match {
-          case CxtFetchResult.Discrete(msf, n, msl) =>
-            (msf map Right.apply) ++ Seq(Left(n)) ++ (msl map Right.apply)
-          case CxtFetchResult.Continuous(ms) =>
-            ms map Right.apply
-        }
-        val masterRaw = cxtToRaw(masterFetchResult)
-        val slaveRaw  = cxtToRaw(slaveFetchResult)
-        if (masterRaw.isEmpty && slaveRaw.isEmpty) {
-          None
-        } else {
-          Some(
-            RowData.InBoth(
-              masterValue = RenderableMismatch(None, masterRaw, masterCwd),
-              slaveValue  = RenderableMismatch(None, slaveRaw, slaveCwd)
-            )
-          )
-        }
-      }
-
-      def messageToRowData(mismatch: Mismatch): RowData[RenderableMismatch] = {
-        /*
-        val slaveMessages = slaveDao
-          .messagesBetween(slaveChat, mismatch.firstSlaveMsgId, mismatch.lastSlaveMsgId) map Right.apply
-        mismatch match {
-          case Mismatch.Addition(prevMasterMsgId, _) =>
-            RowData.InSlaveOnly(RenderableMismatch(Some(mismatch), slaveMessages, slaveCwd))
-          case mismatch: Mismatch.Conflict =>
-            val masterMessages = masterDao
-              .messagesBetween(masterChat, mismatch.firstMasterMsgId, mismatch.lastMasterMsgId) map Right.apply
-            RowData.InBoth(
-              masterValue = RenderableMismatch(Some(mismatch), masterMessages, masterCwd),
-              slaveValue  = RenderableMismatch(Some(mismatch), slaveMessages, slaveCwd)
-            )
-        }
-         */
-        ???
-      }
-
-      def messageIdToOption(id: Message.DaoId) = if (id == -1) None else Some(id)
+      val slaveCwd = ChatWithDao(slaveChat, slaveDao)
 
       val masterCxtFetcher = new ContextFetcher(masterDao, masterChat)
-      val slaveCxtFetcher  = new ContextFetcher(slaveDao, slaveChat)
+      val slaveCxtFetcher = new ContextFetcher(slaveDao, slaveChat)
 
-      val acc = ArrayBuffer.empty[RowData[RenderableMismatch]]
-
-      val masterCxtBefore = masterCxtFetcher(None, messageIdToOption(mismatches.head.firstMasterMsgId))
-      val slaveCxtBefore  = slaveCxtFetcher(None, messageIdToOption(mismatches.head.firstSlaveMsgId))
-      cxtToRowDataOption(masterCxtBefore, slaveCxtBefore) foreach (acc += _)
-
-      if (mismatches.size >= 2) {
-        // Display message with its following context
-        mismatches.sliding(2).foreach {
-          case Seq(currMismatch, nextMismatch) =>
-            val current = messageToRowData(currMismatch)
-            acc += current
-
-            val masterCxtAfter = masterCxtFetcher(
-              messageIdToOption(currMismatch.lastMasterMsgId),
-              messageIdToOption(nextMismatch.firstMasterMsgId))
-            val slaveCxtAfter = masterCxtFetcher(
-              messageIdToOption(currMismatch.lastSlaveMsgId),
-              messageIdToOption(nextMismatch.firstSlaveMsgId))
-            cxtToRowDataOption(masterCxtAfter, slaveCxtAfter) foreach (acc += _)
-        }
+      def cxtToRaw(fetchResult: CxtFetchResult): Seq[Either[Int, Message]] = fetchResult match {
+        case CxtFetchResult.Discrete(msf, n, msl) =>
+          (msf map Right.apply) ++ Seq(Left(n)) ++ (msl map Right.apply)
+        case CxtFetchResult.Continuous(ms) =>
+          ms map Right.apply
       }
 
-      // Last element (might also be the only element)
-      val current = messageToRowData(mismatches.last)
-      acc += current
-
-      val masterCxtAfter = masterCxtFetcher(messageIdToOption(mismatches.last.lastMasterMsgId), None)
-      val slaveCxtAfter  = masterCxtFetcher(messageIdToOption(mismatches.last.lastSlaveMsgId), None)
-      cxtToRowDataOption(masterCxtAfter, slaveCxtAfter) foreach (acc += _)
-
-      acc.toIndexedSeq
+      mismatches map { mismatch =>
+        val masterFetchResult = masterCxtFetcher(mismatch.firstMasterMsgOption, mismatch.lastMasterMsgOption)
+        val slaveFetchResult  = slaveCxtFetcher(mismatch.firstSlaveMsgOption, mismatch.lastSlaveMsgOption)
+        val masterValue       = RenderableMismatch(mismatch, cxtToRaw(masterFetchResult), masterCwd)
+        val slaveValue        = RenderableMismatch(mismatch, cxtToRaw(slaveFetchResult), slaveCwd)
+        mismatch match {
+          case MessagesMergeOption.Keep(_, _, Some(_), Some(_)) => RowData.InBoth(masterValue, slaveValue)
+          case _: MessagesMergeOption.Keep                      => RowData.InMasterOnly(masterValue)
+          case _: MessagesMergeOption.Add                       => RowData.InSlaveOnly(slaveValue)
+          case _: MessagesMergeOption.Replace                   => RowData.InBoth(masterValue, slaveValue)
+        }
+      }
     }
 
-    override val renderer = (renderable: ChatRenderable[RenderableMismatch]) => {
+    override val cellsAreInteractive = true
+
+    override val renderer = (renderable: ListItemRenderable[RenderableMismatch]) => {
+      // FIXME: Figure out what to do with a shitty layout!
       val msgAreaContainer = new MessagesAreaContainer(htmlKit)
-      val msgDoc           = msgService.createStubDoc
+//      msgAreaContainer.textPane.peer.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.box(true))
+      val msgDoc = msgService.createStubDoc
+//      msgDoc.doc.getStyleSheet.addRule("#messages { background-color: #FFE0E0; }")
       if (renderable.isSelectable) {
         val color = if (renderable.isAdd) Colors.AdditionBg else Colors.CombineBg
         msgAreaContainer.textPane.background = color
       }
-      for (either <- renderable.v.messageOptions) {
+      val allRendered = for (either <- renderable.v.messageOptions) yield {
         val rendered = either match {
           case Right(msg) => msgService.renderMessageHtml(renderable.v.cwd, msg)
           case Left(num)  => s"<hr>${num} messages<hr><p>"
         }
-        msgDoc.insert(rendered, MessageInsertPosition.Trailing)
+        rendered
       }
+      msgDoc.insert(allRendered.mkString.replaceAll("\n", ""), MessageInsertPosition.Trailing)
       msgAreaContainer.document = msgDoc.doc
-      msgAreaContainer.scrollPane
+      val ui = msgAreaContainer.textPane.peer.getUI
+      val rootView = ui.getRootView(null)
+      val view = rootView.getView(0)
+
+//      val prefSize = msgAreaContainer.textPane.preferredSize
+//      rootView.setSize(prefSize.width, prefSize.height)
+//      val height = view.getPreferredSpan(1).round
+      // = height
+
+//      msgAreaContainer.textPane.preferredHeight = 1639
+
+      // For some reason, maximumWidth is ignored
+      msgAreaContainer.textPane.preferredWidth = MaxMessageWidth
+
+      val res = msgAreaContainer.textPane
+
+      // If we don't call it here, we might get an NPE later, under some unknown and rare conditions. Magic!
+      res.peer.getPreferredSize
+
+      res
     }
 
-    override protected def isInBothSelectable(mv: RenderableMismatch, sv: RenderableMismatch): Boolean = !mv.isContext
-    override protected def isInSlaveSelectable(sv: RenderableMismatch):                        Boolean = true
-    override protected def isInMasterSelectable(mv: RenderableMismatch):                       Boolean = false
+    override protected def isInBothSelectable(mv: RenderableMismatch, sv: RenderableMismatch): Boolean = mv.isSelectable
+    override protected def isInSlaveSelectable(sv: RenderableMismatch):                        Boolean = sv.isSelectable
+    override protected def isInMasterSelectable(mv: RenderableMismatch):                       Boolean = mv.isSelectable
 
     override protected def rowDataToResultOption(
         rd: RowData[RenderableMismatch],
         isSelected: Boolean
-    ): Option[(Mismatch, MismatchResolution)] = {
-      val res = if (isSelected) MismatchResolution.Apply else MismatchResolution.Reject
+    ): Option[MessagesMergeOption] = {
+      import MessagesMergeOption._
       rd match {
-        case RowData.InBoth(mmd, _)   => mmd.mismatchOption map (_ -> res)
-        case RowData.InSlaveOnly(smd) => smd.mismatchOption map (_ -> res)
-        case RowData.InMasterOnly(_)  => None
+        case RowData.InMasterOnly(mmd)                                => Some(mmd.mismatch)
+        case RowData.InBoth(mmd, _) if isSelected                     => Some(mmd.mismatch)
+        case RowData.InBoth(RenderableMismatch(mm: Keep, _, _), _)    => Some(mm)
+        case RowData.InBoth(RenderableMismatch(mm: Replace, _, _), _) => Some(mm.asKeep)
+        case _ if !isSelected                                         => None
+        case RowData.InSlaveOnly(smd)                                 => Some(smd.mismatch)
       }
     }
   }
 
   private case class RenderableMismatch(
-      /** Mismatch to be rendered, None means this only a context */
-      mismatchOption: Option[Mismatch],
+      /** Mismatch to be rendered */
+      mismatch: MessagesMergeOption,
       /** Messages to be rendered, or number of messages abbreviated out */
-      messageOptions: Seq[Either[Int, Message[_]]],
+      messageOptions: Seq[Either[Int, Message]],
       cwd: ChatWithDao
   ) {
-    def isContext = mismatchOption.isEmpty
-  }
-}
-
-private object SelectMergeMessagesDialog {
-  private val MaxContinuousMsgsLength = 20
-  private val MaxCutoffMsgsPartLength = 7
-
-  class ContextFetcher(dao: ChatHistoryDao, chat: Chat) {
-    private type FirstId = Message.DaoId
-    private type LastId  = Message.DaoId
-
-    // We don't necessarily need a lock, but it's still nice to avoid double-fetches
-    val cacheLock = new Object
-
-    def apply(
-        lastIdBeforeOption: Option[FirstId],
-        firstIdAfterOption: Option[LastId]
-    ): CxtFetchResult = {
-      val lastIdBeforeVal = lastIdBeforeOption getOrElse Long.MinValue
-      val firstIdAfterVal = firstIdAfterOption getOrElse Long.MaxValue
-
-      val fetch1 = (lastIdBeforeOption map { lastIdBefore =>
-        dao.messagesAfter(chat, lastIdBefore, MaxContinuousMsgsLength + 2) dropWhile (_.sourceIdOption contains lastIdBefore)
-      } getOrElse {
-        dao.firstMessages(chat, MaxContinuousMsgsLength + 1)
-      }) take MaxContinuousMsgsLength
-
-      ??? // FIXME
-//      if (fetch1.isEmpty) {
-//        CxtFetchResult.Continuous(Seq.empty)
-//      } else if (firstIdAfterOption.isDefined && (fetch1 exists (_.idOption exists (_ >= firstIdAfterVal)))) {
-//        // Continuous sequence
-//        CxtFetchResult.Continuous(fetch1 takeWhile (m => m.idOption.isDefined && m.idOption.get < firstIdAfterVal))
-//      } else {
-//        val fetch1Ids = fetch1.map(_.id).toSet
-//        val fetch2 = (firstIdAfterOption map { firstIdAfter =>
-//          dao.messagesBefore(chat, firstIdAfter, MaxCutoffMsgsPartLength + 1)
-//        } getOrElse {
-//          dao.lastMessages(chat, MaxCutoffMsgsPartLength)
-//        }) dropWhile (m => (m.id <= lastIdBeforeVal) || (fetch1Ids contains m.id)) takeRight MaxCutoffMsgsPartLength
-//
-//        if (fetch2.isEmpty) {
-//          CxtFetchResult.Continuous(fetch1)
-//        } else {
-//          val subfetch1 = fetch1.take(MaxCutoffMsgsPartLength)
-//          val nBetween  = dao.countMessagesBetween(chat, subfetch1.last.id, fetch2.head.id)
-//          CxtFetchResult.Discrete(subfetch1, nBetween, fetch2)
-//        }
-//      }
-      ???
+    def isSelectable = mismatch match {
+      case _: MessagesMergeOption.Keep    => false
+      case _: MessagesMergeOption.Add     => true
+      case _: MessagesMergeOption.Replace => true
     }
   }
 
@@ -234,48 +171,149 @@ private object SelectMergeMessagesDialog {
     case class Continuous(msgs: Seq[Message])                                          extends CxtFetchResult
   }
 
+  class ContextFetcher(dao: ChatHistoryDao, chat: Chat) {
+    private type FirstMsg = Message
+    private type LastMsg  = Message
+
+    // We don't necessarily need a lock, but it's still nice to avoid double-fetches
+    val cacheLock = new Object
+
+    def apply(
+        firstOption: Option[FirstMsg],
+        lastOption: Option[LastMsg]
+    ): CxtFetchResult = {
+      if (firstOption.isEmpty && lastOption.isEmpty) {
+        CxtFetchResult.Continuous(Seq.empty)
+      } else {
+        val fetch1 = fetchMsgsAfterInc(firstOption, MaxContinuousMsgsLength)
+
+        if (fetch1.isEmpty) {
+          CxtFetchResult.Continuous(Seq.empty)
+        } else if (lastOption.isDefined && (fetch1 contains lastOption.get)) {
+          // Continuous sequence
+          CxtFetchResult.Continuous(fetch1 dropRightWhile (_ != lastOption.get))
+        } else {
+          val subfetch1    = fetch1.take(MaxCutoffMsgsPartLength)
+          val subfetch1Set = subfetch1.toSet
+          val fetch2 = fetchMsgsBeforeInc(lastOption, MaxCutoffMsgsPartLength).dropWhile { m =>
+            (subfetch1Set contains m) || m.time < subfetch1.last.time
+          }
+
+          if (fetch2.isEmpty) {
+            assert(lastOption.isEmpty)
+            CxtFetchResult.Continuous(fetch1)
+          } else {
+            val nBetween = dao.countMessagesBetween(chat, subfetch1.last, fetch2.head)
+            CxtFetchResult.Discrete(subfetch1, nBetween, fetch2)
+          }
+        }
+      }
+    }
+
+    private def fetchMsgsAfterInc(firstOption: Option[FirstMsg], howMany: Int): Seq[Message] = {
+      firstOption map { first =>
+        dao.messagesAfter(chat, first, howMany)
+      } getOrElse {
+        dao.firstMessages(chat, howMany)
+      }
+    }
+
+    private def fetchMsgsBeforeInc(lastOption: Option[LastMsg], howMany: Int): Seq[Message] = {
+      lastOption map { last =>
+        dao.messagesBefore(chat, last, howMany)
+      } getOrElse {
+        dao.lastMessages(chat, howMany)
+      }
+    }
+  }
+}
+
+private object SelectMergeMessagesDialog {
+  private val MaxContinuousMsgsLength = 20
+  private val MaxCutoffMsgsPartLength = 7
+
   def main(args: Array[String]): Unit = {
     import java.awt.Desktop
     import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
     import org.fs.chm.utility.TestUtils._
 
     val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
-    val htmlKit       = new ExtendedHtmlEditorKit(desktopOption)
-    val msgService    = new MessagesService(htmlKit)
+    val htmlKit = new ExtendedHtmlEditorKit(desktopOption)
+    val msgService = new MessagesService(htmlKit)
 
     val numUsers = 3
-    val msgs     = (1 to 9) map (id => createRegularMessage(id, (id % numUsers) + 1))
+    val msgs = (0 to 1000) map (id => {
+      val msg = createRegularMessage(id, (id % numUsers) + 1)
+      if ((50 to 100) contains id) {
+        val longText = (
+          Seq.fill(100)("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").mkString(" ") + " " + Seq.fill(100)("abcdefg").mkString
+        )
+        msg.asInstanceOf[Message.Regular].copy(textOption = Some(RichText(Seq(RichText.Plain(longText)))))
+      } else {
+        msg
+      }
+    })
 
-    val (mMsgs, sMsgs, mismatches) = {
-      // Addtion before first
-//      val mMsgs = msgs filter (Seq(4, 5) contains _.sourceIdOption.get)
-//      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.sourceIdOption.get)
-//      val mismatches = IndexedSeq(
-//        Mismatch.Addition(prevMasterMsgId = -1, slaveMsgIds = (1, 3))
+    val mDao = createSimpleDao("Master", msgs, numUsers)
+    val (_, _, mChat, mMsgsI) = getSimpleDaoEntities(mDao)
+    val sDao = createSimpleDao("Slave", msgs, numUsers)
+    val (_, _, sChat, sMsgsI) = getSimpleDaoEntities(sDao)
+
+    val mismatches = IndexedSeq(
+      // Prefix
+      MessagesMergeOption.Keep(
+        firstMasterMsg      = mMsgsI.bySrcId(40),
+        lastMasterMsg       = mMsgsI.bySrcId(40),
+//        firstSlaveMsgOption = None,
+//        lastSlaveMsgOption  = None
+        firstSlaveMsgOption = Some(sMsgsI.bySrcId(40)),
+        lastSlaveMsgOption  = Some(sMsgsI.bySrcId(40))
+      ),
+
+//      // Addition
+//      MessagesMergeOption.Add(
+//        firstSlaveMsg = sMsgsI.bySrcId(41),
+//        lastSlaveMsg  = sMsgsI.bySrcId(60)
 //      )
 
-      // Conflicts
-      val mMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.sourceIdOption.get)
-      val sMsgs = msgs filter (Seq(1, 2, 3, 4, 5) contains _.sourceIdOption.get)
-      val mismatches = IndexedSeq(
-        Mismatch.Conflict(masterMsgIds = (2, 3), slaveMsgIds = (2, 3)),
-        Mismatch.Conflict(masterMsgIds = (4, 5), slaveMsgIds = (4, 5))
-      )
+//      // Conflict
+//      MessagesMergeOption.Replace(
+//        firstMasterMsg = mMsgsI.bySrcId(41),
+//        lastMasterMsg  = mMsgsI.bySrcId(60),
+//        firstSlaveMsg  = sMsgsI.bySrcId(41),
+//        lastSlaveMsg   = sMsgsI.bySrcId(60)
+//      ),
 
-      (mMsgs, sMsgs, mismatches)
-    }
+      // Addition + conflict + addition
+      MessagesMergeOption.Add(
+        firstSlaveMsg = sMsgsI.bySrcId(41),
+        lastSlaveMsg  = sMsgsI.bySrcId(42)
+      ),
+      MessagesMergeOption.Replace(
+        firstMasterMsg = mMsgsI.bySrcId(43),
+        lastMasterMsg  = mMsgsI.bySrcId(44),
+        firstSlaveMsg  = sMsgsI.bySrcId(43),
+        lastSlaveMsg   = sMsgsI.bySrcId(44)
+      ),
+      MessagesMergeOption.Add(
+        firstSlaveMsg = sMsgsI.bySrcId(45),
+        lastSlaveMsg  = sMsgsI.bySrcId(46)
+      ),
 
-    val mDao          = createSimpleDao("Master", mMsgs, numUsers)
-    val (_, _, mChat) = getSimpleDaoEntities(mDao)
-    val sDao          = createSimpleDao("Slave", sMsgs, numUsers)
-    val (_, _, sChat) = getSimpleDaoEntities(sDao)
+      // Suffix
+      MessagesMergeOption.Keep(
+        firstMasterMsg      = mMsgsI.bySrcId(200),
+        lastMasterMsg       = mMsgsI.bySrcId(201),
+//        firstSlaveMsgOption = None,
+//        lastSlaveMsgOption  = None
+        firstSlaveMsgOption = Some(sMsgsI.bySrcId(200)),
+        lastSlaveMsgOption  = Some(sMsgsI.bySrcId(201))
+      ),
+    )
 
     val dialog = new SelectMergeMessagesDialog(mDao, mChat, sDao, sChat, mismatches, htmlKit, msgService)
     dialog.visible = true
     dialog.peer.setLocationRelativeTo(null)
-    println(dialog.selection)
+    println(dialog.selection map (_.mkString("\n  ", "\n  ", "\n")))
   }
 }
-*/
-
-class SelectMergeMessagesDialog()

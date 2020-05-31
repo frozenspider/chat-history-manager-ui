@@ -45,7 +45,8 @@ object SwingUtils extends Logging {
   implicit class RichComponent(el: Component) {
     def wrapInScrollpaneAndAdjustWidth(): ScrollPane = {
       val sp = wrapInScrollpane()
-      el.preferredWidth = el.preferredWidth + sp.verticalScrollBar.preferredWidth
+      el.preferredWidth += sp.verticalScrollBar.preferredWidth
+      sp.preferredWidth = el.preferredWidth
       sp
     }
 
@@ -72,12 +73,10 @@ object SwingUtils extends Logging {
     }
 
   def showWarning(msg: String): Unit = {
-    log.warn(msg)
     Dialog.showMessage(title = "Warining", message = msg, messageType = Dialog.Message.Warning)
   }
 
   def showError(msg: String): Unit = {
-    log.error(msg)
     Dialog.showMessage(title = "Error", message = msg, messageType = Dialog.Message.Error)
   }
 
@@ -106,7 +105,10 @@ object SwingUtils extends Logging {
     val CombineBg: Color = Color.decode("#F8F8CE")
 
     /** Light red */
-    val ConflictBg: Color = Color.decode("#F8CECE")
+    val ConflictBg: Color = Color.decode("#FFF0F0")
+
+    /** White */
+    val NoBg: Color = Color.WHITE
 
     val CyclingStrings = Seq(
       // User

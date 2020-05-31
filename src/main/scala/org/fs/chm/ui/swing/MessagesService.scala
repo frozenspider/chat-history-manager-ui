@@ -19,43 +19,41 @@ class MessagesService(htmlKit: HTMLEditorKit) {
   import org.fs.chm.ui.swing.MessagesService._
 
   def createStubDoc: MessageDocument = {
+    // TODO: How to limit width and do word wraps?
+    //       width, max-width acts weird,
+    //       word-wrap, word-break, overflow-wrap are ignored
     val doc     = htmlKit.createDefaultDocument().asInstanceOf[HTMLDocument]
-    val content = """|<html>
-                     | <body>
-                     |   <div id="messages"></div>
-                     | </body>
-                     |</html>""".stripMargin
+    val content = """<div id="messages"></div>"""
     htmlKit.read(new StringReader(content), doc, 0)
-    val cssRules = Seq(
-      """|body {
-         |  font-family: arial,sans-serif;
-         |}""".stripMargin,
-      """|.title {
-         |  padding-left: 5px;
-         |  padding-bottom: 5px;
-         |  font-size: 105%;
-         |}""".stripMargin,
-      """|.forwarded-from {
-         |  padding-left: 5px;
-         |  padding-bottom: 5px;
-         |  font-size: 105%;
-         |  color: #909090;
-         |}""".stripMargin,
-      """|.title-name {
-         |  font-weight: bold;
-         |}""".stripMargin,
-      """|blockquote {
-         |   border-left: 1px solid #ccc;
-         |   margin: 5px 10px;
-         |   padding: 5px 10px;
-         |}""".stripMargin,
-      """|.system-message {
-         |   border: 1px solid #A0A0A0;
-         |   margin: 5px 10px;
-         |   padding: 5px 10px;
-         |}""".stripMargin
-    )
-    cssRules foreach (doc.getStyleSheet.addRule)
+    val css = """|body {
+                 |  font-family: arial,sans-serif;
+                 |}
+                 |.title {
+                 |  padding-left: 5px;
+                 |  padding-bottom: 5px;
+                 |  font-size: 105%;
+                 |}
+                 |.forwarded-from {
+                 |  padding-left: 5px;
+                 |  padding-bottom: 5px;
+                 |  font-size: 105%;
+                 |  color: #909090;
+                 |}
+                 |.title-name {
+                 |  font-weight: bold;
+                 |}
+                 |blockquote {
+                 |  border-left: 1px solid #ccc;
+                 |  margin: 5px 10px;
+                 |  padding: 5px 10px;
+                 |}
+                 |.system-message {
+                 |  border: 1px solid #A0A0A0;
+                 |  margin: 5px 10px;
+                 |  padding: 5px 10px;
+                 |}""".stripMargin
+    doc.getStyleSheet.addRule(css)
+    doc.getStyleSheet.addRule("W3C_LENGTH_UNITS_ENABLE")
     val msgEl = doc.getElement("messages")
     MessageDocument(doc, msgEl)
   }
@@ -131,12 +129,11 @@ class MessagesService(htmlKit: HTMLEditorKit) {
   }
 
   private def renderPossiblyMissingContent(
-      pathOption: Option[String],
+      fileOption: Option[File],
       kindPrettyName: String,
       dao: ChatHistoryDao,
       dsUuid: UUID
   )(renderContentFromFile: File => String): String = {
-    val fileOption = pathOption map (new File(dao.dataPath(dsUuid), _))
     fileOption match {
       case Some(file) if file.exists => renderContentFromFile(file)
       case Some(file)                => s"[$kindPrettyName not found]"
@@ -144,14 +141,14 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     }
   }
 
-  private def renderImage(pathOption: Option[String],
+  private def renderImage(fileOption: Option[File],
                           widthOption: Option[Int],
                           heightOption: Option[Int],
                           altTextOption: Option[String],
                           imagePrettyType: String,
                           dao: ChatHistoryDao,
                           dsUuid: UUID): String = {
-    renderPossiblyMissingContent(pathOption, imagePrettyType, dao, dsUuid)(file => {
+    renderPossiblyMissingContent(fileOption, imagePrettyType, dao, dsUuid)(file => {
       val srcAttr    = Some(s"""src="${fileToLocalUriString(file)}"""")
       val widthAttr  = widthOption map (w => s"""width="${w / 2}"""")
       val heightAttr = heightOption map (h => s"""height="${h / 2}"""")

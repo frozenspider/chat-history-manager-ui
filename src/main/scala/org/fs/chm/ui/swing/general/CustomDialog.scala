@@ -2,6 +2,7 @@ package org.fs.chm.ui.swing.general
 
 import scala.swing._
 import scala.swing.event.ButtonClicked
+import org.fs.chm.ui.swing.general.SwingUtils._
 
 import javax.swing.WindowConstants
 
@@ -25,10 +26,11 @@ abstract class CustomDialog[A] extends Dialog {
 
   {
     val okBtn = new Button(okButtonText)
+    val component = dialogComponent()
 
     contents = new BorderPanel {
       import scala.swing.BorderPanel.Position._
-      layout(dialogComponent())    = Center
+      layout(component)            = Center
       layout(new FlowPanel(okBtn)) = South
     }
 
