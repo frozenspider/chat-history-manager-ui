@@ -142,6 +142,6 @@ object TestUtils {
 
     override def enableBackups(): Unit = ???
 
-    override protected def backup(): Unit = ???
+    override def backup(): Unit = ???
   }
 }

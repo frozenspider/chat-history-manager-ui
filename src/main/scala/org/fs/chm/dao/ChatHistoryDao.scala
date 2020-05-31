@@ -127,11 +127,11 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
   /** Don't do automatic backups on data changes until re-enabled */
   def disableBackups(): Unit
 
-  /** Start doing backups automatically once again. Do a backup immediately. */
+  /** Start doing backups automatically once again. */
   def enableBackups(): Unit
 
   /** Create a backup, if enabled, otherwise do nothing */
-  protected def backup(): Unit
+  def backup(): Unit
 }
 
 object ChatHistoryDao {

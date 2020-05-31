@@ -200,6 +200,7 @@ class DatasetMerger(
   ): Dataset = {
     StopWatch.measureAndCall {
       try {
+        masterDao.backup()
         masterDao.disableBackups()
         val newDs = Dataset(
           uuid = UUID.randomUUID(),

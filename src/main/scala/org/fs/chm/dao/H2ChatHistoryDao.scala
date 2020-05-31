@@ -362,7 +362,6 @@ class H2ChatHistoryDao(
     Lock.synchronized {
       _backupsEnabled = true
     }
-    backup()
   }
 
   protected[dao] def getBackupPath(): File = {
@@ -371,7 +370,7 @@ class H2ChatHistoryDao(
     backupDir
   }
 
-  override protected def backup(): Unit = {
+  override def backup(): Unit = {
     val backupsEnabled = Lock.synchronized { _backupsEnabled }
     if (backupsEnabled) {
       val backupDir = getBackupPath()
