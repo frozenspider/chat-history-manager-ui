@@ -6,12 +6,11 @@ import com.github.nscala_time.time.Imports._
 import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger.MessagesMergeOption
-import org.fs.chm.ui.swing.MessagesAreaContainer
-import org.fs.chm.ui.swing.MessagesService
-import org.fs.chm.ui.swing.MessagesService.MessageInsertPosition
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
+import org.fs.chm.ui.swing.messages.impl.MessagesService
 import org.fs.chm.utility.EntityUtils._
 import org.fs.utility.Imports._
 
@@ -30,8 +29,7 @@ class SelectMergeMessagesDialog(
     slaveDao: ChatHistoryDao,
     slaveChat: Chat,
     mismatches: IndexedSeq[MessagesMergeOption],
-    htmlKit: HTMLEditorKit,
-    msgService: MessagesService
+    htmlKit: HTMLEditorKit
 ) extends CustomDialog[IndexedSeq[MessagesMergeOption]] {
   import SelectMergeMessagesDialog._
 
@@ -94,7 +92,8 @@ class SelectMergeMessagesDialog(
       // FIXME: Figure out what to do with a shitty layout!
       val msgAreaContainer = new MessagesAreaContainer(htmlKit)
 //      msgAreaContainer.textPane.peer.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.box(true))
-      val msgDoc = msgService.createStubDoc
+      val msgService = msgAreaContainer.msgService
+      val md = msgService.createStubDoc
 //      msgDoc.doc.getStyleSheet.addRule("#messages { background-color: #FFE0E0; }")
       if (renderable.isSelectable) {
         val color = if (renderable.isAdd) Colors.AdditionBg else Colors.CombineBg
@@ -107,8 +106,8 @@ class SelectMergeMessagesDialog(
         }
         rendered
       }
-      msgDoc.insert(allRendered.mkString.replaceAll("\n", ""), MessageInsertPosition.Trailing)
-      msgAreaContainer.document = msgDoc.doc
+      md.insert(allRendered.mkString.replaceAll("\n", ""), MessagesService.MessageInsertPosition.Trailing)
+      msgAreaContainer.render(md)
       val ui = msgAreaContainer.textPane.peer.getUI
       val rootView = ui.getRootView(null)
       val view = rootView.getView(0)
@@ -309,9 +308,15 @@ private object SelectMergeMessagesDialog {
         firstSlaveMsgOption = Some(sMsgsI.bySrcId(200)),
         lastSlaveMsgOption  = Some(sMsgsI.bySrcId(201))
       ),
+      MessagesMergeOption.Keep(
+        firstMasterMsg      = mMsgsI.bySrcId(202),
+        lastMasterMsg       = mMsgsI.bySrcId(400),
+        firstSlaveMsgOption = Some(sMsgsI.bySrcId(202)),
+        lastSlaveMsgOption  = Some(sMsgsI.bySrcId(400))
+      )
     )
 
-    val dialog = new SelectMergeMessagesDialog(mDao, mChat, sDao, sChat, mismatches, htmlKit, msgService)
+    val dialog = new SelectMergeMessagesDialog(mDao, mChat, sDao, sChat, mismatches, htmlKit)
     dialog.visible = true
     dialog.peer.setLocationRelativeTo(null)
     println(dialog.selection map (_.mkString("\n  ", "\n  ", "\n")))

@@ -1,4 +1,4 @@
-package org.fs.chm.ui.swing
+package org.fs.chm.ui.swing.messages.impl
 
 import java.io.File
 import java.io.StringReader
@@ -7,7 +7,6 @@ import java.util.UUID
 import javax.swing.text.Element
 import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
-import org.apache.commons.lang3.StringEscapeUtils
 import org.fs.chm.dao.Message.Service
 import org.fs.chm.dao._
 import org.fs.chm.ui.swing.general.ChatWithDao
@@ -16,7 +15,7 @@ import org.fs.chm.utility.EntityUtils
 import org.fs.utility.Imports._
 
 class MessagesService(htmlKit: HTMLEditorKit) {
-  import org.fs.chm.ui.swing.MessagesService._
+  import MessagesService._
 
   def createStubDoc: MessageDocument = {
     // TODO: How to limit width and do word wraps?
@@ -51,18 +50,39 @@ class MessagesService(htmlKit: HTMLEditorKit) {
                  |  border: 1px solid #A0A0A0;
                  |  margin: 5px 10px;
                  |  padding: 5px 10px;
-                 |}""".stripMargin
+                 |}
+                 |#no-newer {
+                 |  color: #909090;
+                 |  font-size: 120%;
+                 |  text-align: center;
+                 |  border-bottom: 3px solid #909090;
+                 |  margin: 5px 10px;
+                 |  padding: 5px 10px;
+                 |}
+                 |""".stripMargin
     doc.getStyleSheet.addRule(css)
     doc.getStyleSheet.addRule("W3C_LENGTH_UNITS_ENABLE")
     val msgEl = doc.getElement("messages")
     MessageDocument(doc, msgEl)
   }
 
-  lazy val pleaseWaitDoc: HTMLDocument = {
+  lazy val pleaseWaitDoc: MessageDocument = {
     val md = createStubDoc
     md.insert("<div><h1>Please wait...</h1></div>", MessageInsertPosition.Leading)
-    md.doc
+    md
   }
+
+  val loadingHtml: String =
+    """|<div id="loading">
+       |  <hr>
+       |  <p>Loading...</p>
+       |  <hr>
+       |</div>""".stripMargin
+
+  val nothingNewerHtml: String =
+    """|<div id="no-newer">
+       |  <p>Start of message history</p>
+       |</div>""".stripMargin
 
   //
   // Renderers and helpers
