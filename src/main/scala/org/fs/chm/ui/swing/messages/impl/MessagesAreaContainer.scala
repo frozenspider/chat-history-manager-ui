@@ -29,18 +29,21 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     new ScrollPane(textPane)
   }
 
-  private val caret = textPane.peer.getCaret.asInstanceOf[DefaultCaret]
+  protected val viewport = scrollPane.peer.getViewport
 
-  private val viewport = scrollPane.peer.getViewport
+  private val caret = textPane.peer.getCaret.asInstanceOf[DefaultCaret]
 
   private var viewPosSizeOption: Option[(Point, Dimension)] = None
 
   private var documentOption: Option[MessageDocument] = None
 
-  override lazy val component: BorderPanel = new BorderPanel {
+  // Workaround for https://github.com/scala/bug/issues/1938: Can't call super.x if x is a lazy val
+  private lazy val _component: Component = new BorderPanel {
     import scala.swing.BorderPanel.Position._
     layout(scrollPane) = Center
   }
+
+  override def component: Component = _component
 
   //
   // Methods
@@ -115,6 +118,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   private def document_=(md: MessageDocument): Unit = {
     documentOption = Some(md)
     textPane.peer.setStyledDocument(md.doc)
+    onDocumentChange()
   }
 
   private def currentViewPosSize = {
@@ -129,6 +133,8 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   private def show(x: Int, y: Int): Unit = {
     viewport.setViewPosition(new Point(x, y))
   }
+
+  protected def onDocumentChange(): Unit = {}
 }
 
 object MessagesAreaContainer {

@@ -83,7 +83,7 @@ class MainFrameApp //
     futureSeq.reduce((a, b) => a.flatMap(_ => b))
   }
 
-  override def top = new MainFrame {
+  override lazy val top = new MainFrame {
     import org.fs.chm.BuildInfo._
     title    = s"$name v${version} b${new DateTime(builtAtMillis).toString("yyyyMMdd-HHmmss")}"
     contents = ui
@@ -157,9 +157,9 @@ class MainFrameApp //
   }
 
   lazy val msgRenderer: MessagesRenderingComponent[MD] = {
-    import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
+    import org.fs.chm.ui.swing.messages.impl.MessagesAreaOverlaidContainer
 
-    val m = new MessagesAreaContainer(htmlKit)
+    val m = new MessagesAreaOverlaidContainer(htmlKit)
 
     // Load older messages when sroll is near the top
     m.scrollPane.verticalScrollBar.peer.addAdjustmentListener((e: AdjustmentEvent) => {
