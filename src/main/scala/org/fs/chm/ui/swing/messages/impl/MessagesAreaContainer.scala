@@ -144,7 +144,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     viewPosSizeOption = Some(currentViewPosSize)
     prepended        = false
     appended         = false
-    // Allows disabling message caret updates while messages are loading to avoid scrolling
+    // Disable message caret updates while messages are loading to avoid scrolling
     caret.setUpdatePolicy(DefaultCaret.NEVER_UPDATE)
   }
 

@@ -553,16 +553,14 @@ class MainFrameApp //
             case _ =>
               loadMessagesInProgress set true
               loadFirstMessagesAndUpdateCache(cwd)
-              Swing.onEDTWait(MutationLock.synchronized {
-                val doc = loadedDaos(cwd.dao)(cwd.chat).msgDocOption.get
-                msgRenderer.render(doc, true)
-                loadMessagesInProgress set false
-              })
           }
         case None =>
           () // NOOP
       }
-      unfreezeTheWorld()
+      Swing.onEDT {
+        loadMessagesInProgress set false
+        unfreezeTheWorld()
+      }
     }
   }
 
@@ -580,30 +578,33 @@ class MainFrameApp //
             case _ =>
               loadMessagesInProgress set true
               loadLastMessagesAndUpdateCache(cwd)
-              Swing.onEDTWait(MutationLock.synchronized {
-                val doc = loadedDaos(cwd.dao)(cwd.chat).msgDocOption.get
-                msgRenderer.render(doc, false)
-                loadMessagesInProgress set false
-              })
           }
         case None =>
           () // NOOP
       }
-      unfreezeTheWorld()
+      Swing.onEDT {
+        loadMessagesInProgress set false
+        unfreezeTheWorld()
+      }
     }
   }
 
   override def navigateToDate(date: DateTime): Unit = {
     checkEdt()
     freezeTheWorld("Navigating...")
-    ???
     Future {
       currentChatOption match {
         case Some(cwd) =>
-          val cache = loadedDaos(cwd.dao)(cwd.chat)
-          cwd.dao.firstMessages()
+          // TODO: Don't replace a document if currently cached document already contains message?
+          loadMessagesInProgress set true
+          loadDateMessagesAndUpdateCache(cwd, date)
+        case None =>
+          () // NOOP
       }
-      unfreezeTheWorld()
+      Swing.onEDT {
+        loadMessagesInProgress set false
+        unfreezeTheWorld()
+      }
     }
   }
 
@@ -698,6 +699,28 @@ class MainFrameApp //
         lastOption   = msgs.lastOption,
         beginReached = msgs.size < MsgBatchLoadSize,
         endReached   = true
+      )
+      updateCache(cwd.dao, cwd.chat, ChatCache(Some(md), Some(loadStatus)))
+    }
+  }
+
+  def loadDateMessagesAndUpdateCache(cwd: ChatWithDao, date: DateTime) = {
+    val (msgsB, msgsA) = cwd.dao.messagesAroundDate(cwd.chat, date, MsgBatchLoadSize)
+    val msgs = msgsB ++ msgsA
+    Swing.onEDTWait {
+      val md = {
+        msgRenderer.render(cwd, msgsA, false, true)
+        // FIXME: Viewport is not updated!
+        msgRenderer.updateStarted()
+        val md = msgRenderer.prepend(cwd, msgsB, msgsB.size < MsgBatchLoadSize)
+        msgRenderer.updateFinished()
+        md
+      }
+      val loadStatus = LoadStatus(
+        firstOption  = msgs.headOption,
+        lastOption   = msgs.lastOption,
+        beginReached = msgsB.size < MsgBatchLoadSize,
+        endReached   = msgsA.size < MsgBatchLoadSize
       )
       updateCache(cwd.dao, cwd.chat, ChatCache(Some(md), Some(loadStatus)))
     }

@@ -5,6 +5,7 @@ import java.util.UUID
 
 import scala.collection.immutable.ListMap
 
+import com.github.nscala_time.time.Imports._
 import org.fs.utility.Imports._
 
 /**
@@ -107,6 +108,19 @@ class EagerChatHistoryDao(
       if (between.head.internalId == msg1.internalId) size -= 1
       if (between.last.internalId == msg2.internalId) size -= 1
       math.max(size, 0)
+    }
+  }
+
+  def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
+    val messages  = chatsWithMessages(chat)
+    val idx       = messages.indexWhere(m => (m.time isAfter date) || (m.time isEqual date))
+    if (idx == -1) {
+      // Not found
+      (lastMessages(chat, limit), IndexedSeq.empty)
+    } else {
+      val msgsBefore = messages.slice(idx - limit, idx)
+      val msgsAfter  = messages.slice(idx, idx + limit)
+      (msgsBefore, msgsAfter)
     }
   }
 

@@ -107,7 +107,7 @@ class SelectMergeMessagesDialog(
         rendered
       }
       md.insert(allRendered.mkString.replaceAll("\n", ""), MessagesService.MessageInsertPosition.Trailing)
-      msgAreaContainer.render(md)
+      msgAreaContainer.render(md, true)
       val ui = msgAreaContainer.textPane.peer.getUI
       val rootView = ui.getRootView(null)
       val view = rootView.getView(0)
