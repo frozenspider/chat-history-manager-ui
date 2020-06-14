@@ -105,9 +105,8 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     val titleHtml =
       s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})"""
     val sourceIdAttr = m.sourceIdOption map (id => s"""message_source_id="$id"""") getOrElse ""
-    // "date" attribute is used by overlay to show topmost message date
     s"""
-       |<div class="message" ${sourceIdAttr} date="${m.time.toString("yyyy-MM-dd")}">
+       |<div class="message" ${sourceIdAttr}">
        |   <div class="title">${titleHtml}</div>
        |   <div class="body">${msgHtml}</div>
        |</div>
