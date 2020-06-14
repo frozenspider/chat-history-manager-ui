@@ -5,6 +5,7 @@ import java.io.StringReader
 import java.util.UUID
 
 import javax.swing.text.Element
+import javax.swing.text.html.HTML
 import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao.Message.Service
@@ -335,10 +336,15 @@ object MessagesService {
   ) {
 
     // We need to account for "p-implied" parasitic element...
-    private lazy val pImplied = contentParent.getElement(0)
+    private def pImplied = contentParent.getElement(0)
 
-    def removeFirst(): Unit = {
-      doc.removeElement(contentParent.getElement(1))
+    def removeLoading(inTheBeginning: Boolean): Unit = {
+      val count         = contentParent.getElementCount
+      val elementsRange = if (inTheBeginning) (1 until count) else ((count - 1) to 1 by -1)
+      val loadingEl = elementsRange.toStream
+        .map({println("DUH!"); contentParent.getElement})
+        .find(_.getAttributes.getAttribute(HTML.Attribute.ID) == "loading")
+      loadingEl.foreach(doc.removeElement)
     }
 
     def insert(htmlToInsert: String, pos: MessageInsertPosition): Unit = {

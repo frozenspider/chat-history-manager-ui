@@ -6,7 +6,7 @@ import javax.swing.text.DefaultCaret
 import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao.Message
 import org.fs.chm.ui.swing.general.ChatWithDao
-import org.fs.chm.ui.swing.general.SwingUtils
+import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesService._
 
@@ -35,6 +35,8 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   private val caret = textPane.peer.getCaret.asInstanceOf[DefaultCaret]
 
   private var viewPosSizeOption: Option[(Point, Dimension)] = None
+  private var prepended:         Boolean                    = false
+  private var appended:          Boolean                    = false
 
   private var _documentOption: Option[MessageDocument] = None
 
@@ -51,7 +53,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   //
 
   override def renderPleaseWait(): Unit = {
-    SwingUtils.checkEdt()
+    checkEdt()
     document = msgService.pleaseWaitDoc
   }
 
@@ -61,7 +63,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
       beginReached: Boolean,
       showTop: Boolean
   ): MessageDocument = {
-    SwingUtils.checkEdt()
+    checkEdt()
     val md = msgService.createStubDoc
     val sb = new StringBuilder
     if (beginReached) {
@@ -81,7 +83,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   }
 
   override def render(md: MessageDocument, showTop: Boolean): Unit = {
-    SwingUtils.checkEdt()
+    checkEdt()
     document = md
     if (showTop) {
       scrollToBegin()
@@ -91,41 +93,74 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   }
 
   override def prependLoading(): MessageDocument = {
-    SwingUtils.checkEdt()
+    checkEdt()
     document.insert(msgService.loadingHtml, MessageInsertPosition.Leading)
     document
   }
 
+  override def appendLoading(): MessageDocument = {
+    checkEdt()
+    document.insert(msgService.loadingHtml, MessageInsertPosition.Trailing)
+    document
+  }
+
   override def prepend(cwd: ChatWithDao, msgs: IndexedSeq[Message], beginReached: Boolean): MessageDocument = {
-    SwingUtils.checkEdt()
+    checkEdt()
+    require(viewPosSizeOption.isEmpty || !appended, "Prepend and append can't happen in a single update!")
+    prepended = true
     // TODO: Prevent flickering
     // TODO: Preserve selection
     val sb = new StringBuilder
     if (beginReached) {
       sb.append(msgService.nothingNewerHtml)
     }
-    for (m <- msgs.reverse) {
+    for (m <- msgs) {
       sb.append(msgService.renderMessageHtml(cwd, m))
     }
-    document.removeFirst() // Remove "Loading"
+    document.removeLoading(true)
     document.insert(sb.toString, MessageInsertPosition.Leading)
+    document
+  }
+
+  override def append(cwd: ChatWithDao, msgs: IndexedSeq[Message], endReached: Boolean): MessageDocument = {
+    checkEdt()
+    require(viewPosSizeOption.isEmpty || !prepended, "Prepend and append can't happen in a single update!")
+    appended = true
+    // TODO: Prevent flickering
+    val sb = new StringBuilder
+    for (m <- msgs) {
+      sb.append(msgService.renderMessageHtml(cwd, m))
+    }
+    //    if (endReached) {
+    //      sb.append(msgService.nothingNewerHtml)
+    //    }
+    document.removeLoading(false)
+    document.insert(sb.toString, MessageInsertPosition.Trailing)
     document
   }
 
   override def updateStarted(): Unit = {
     scrollPane.validate()
     viewPosSizeOption = Some(currentViewPosSize)
+    prepended        = false
+    appended         = false
     // Allows disabling message caret updates while messages are loading to avoid scrolling
     caret.setUpdatePolicy(DefaultCaret.NEVER_UPDATE)
   }
 
   override def updateFinished(): Unit = {
     require(viewPosSizeOption.isDefined, "updateStarted() wasn't called?")
-    val Some((pos1, size1)) = viewPosSizeOption
-    val (_, size2)          = currentViewPosSize
-    val heightDiff          = size2.height - size1.height
-    show(pos1.x, pos1.y + heightDiff)
+    assert(!prepended || !appended)
+    // TODO: Do it right after prepend?
+    if (prepended) {
+      val Some((pos1, size1)) = viewPosSizeOption
+      val (_, size2)          = currentViewPosSize
+      val heightDiff          = size2.height - size1.height
+      show(pos1.x, pos1.y + heightDiff)
+    }
     viewPosSizeOption = None
+    prepended        = false
+    appended         = false
     caret.setUpdatePolicy(DefaultCaret.UPDATE_WHEN_ON_EDT)
   }
 
@@ -152,13 +187,12 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   }
 
   private def scrollToBegin(): Unit = {
-    // FIXME: Doesn't always work!
-    scrollPane.peer.getViewport.setViewPosition(new Point(0, 0))
+    show(0, 0)
   }
 
   private def scrollToEnd(): Unit = {
     // FIXME: Doesn't always work!
-    scrollPane.peer.getViewport.setViewPosition(new Point(0, textPane.preferredSize.height))
+    show(0, textPane.preferredHeight)
   }
 
   private def show(x: Int, y: Int): Unit = {
