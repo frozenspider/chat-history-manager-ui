@@ -13,25 +13,25 @@ class MessagesAreaEnhancedContainer(
     htmlKit: HTMLEditorKit,
     callbacks: MessageNavigationCallbacks
 ) extends MessagesAreaContainer(htmlKit) {
-  lazy val goToBeginningBtn = new Button("Beginning")
-  lazy val goToDateBtn      = new Button("Date")
-  lazy val goToEndBtn       = new Button("End")
+  lazy val goToBeginBtn = new Button("Beginning")
+  lazy val goToDateBtn  = new Button("Date")
+  lazy val goToEndBtn   = new Button("End")
 
   lazy val navPanel = new GridBagPanel {
-    val dateBtns        = Seq(goToBeginningBtn, goToDateBtn, goToEndBtn)
+    val dateBtns        = Seq(goToBeginBtn, goToDateBtn, goToEndBtn)
     val maxDateBtnWidth = dateBtns.map(_.preferredWidth).max
     dateBtns.foreach(_.preferredWidth = maxDateBtnWidth)
 
     val constraints = verticalListConstraint(this)
-    val datePanel   = new FlowPanel(goToBeginningBtn, goToDateBtn, goToEndBtn)
+    val datePanel   = new FlowPanel(goToBeginBtn, goToDateBtn, goToEndBtn)
     layout(datePanel) = constraints
 
     dateBtns.foreach(b => listenTo(b))
 
     reactions += {
-      case ButtonClicked(`goToBeginningBtn`) => callbacks.navigateToBeginning()
-      case ButtonClicked(`goToDateBtn`)      => pickDateAndNavigate()
-      case ButtonClicked(`goToEndBtn`)       => callbacks.navigateToEnd()
+      case ButtonClicked(`goToBeginBtn`) => callbacks.navigateToBeginning()
+      case ButtonClicked(`goToDateBtn`)  => pickDateAndNavigate()
+      case ButtonClicked(`goToEndBtn`)   => callbacks.navigateToEnd()
     }
   }
 

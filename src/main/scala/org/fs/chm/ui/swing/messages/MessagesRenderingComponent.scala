@@ -13,10 +13,10 @@ trait MessagesRenderingComponent[MD] {
   def renderPleaseWait(): Unit
 
   /** Replace current content with a doc rendering messages */
-  def render(cwd: ChatWithDao, msgs: IndexedSeq[Message], beginReached: Boolean): MD
+  def render(cwd: ChatWithDao, msgs: IndexedSeq[Message], beginReached: Boolean, showTop: Boolean): MD
 
   /** Replace current content with a given doc */
-  def render(msgDoc: MD): Unit
+  def render(msgDoc: MD, showTop: Boolean): Unit
 
   /** Prepend current content with "loading" section */
   def prependLoading(): MD

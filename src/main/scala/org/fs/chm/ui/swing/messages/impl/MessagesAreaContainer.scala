@@ -6,6 +6,7 @@ import javax.swing.text.DefaultCaret
 import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao.Message
 import org.fs.chm.ui.swing.general.ChatWithDao
+import org.fs.chm.ui.swing.general.SwingUtils
 import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesService._
 
@@ -50,10 +51,17 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   //
 
   override def renderPleaseWait(): Unit = {
+    SwingUtils.checkEdt()
     document = msgService.pleaseWaitDoc
   }
 
-  override def render(cwd: ChatWithDao, msgs: IndexedSeq[Message], beginReached: Boolean): MessageDocument = {
+  override def render(
+      cwd: ChatWithDao,
+      msgs: IndexedSeq[Message],
+      beginReached: Boolean,
+      showTop: Boolean
+  ): MessageDocument = {
+    SwingUtils.checkEdt()
     val md = msgService.createStubDoc
     val sb = new StringBuilder
     if (beginReached) {
@@ -64,20 +72,32 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     }
     md.insert(sb.toString, MessageInsertPosition.Leading)
     document = md
+    if (showTop) {
+      scrollToBegin()
+    } else {
+      scrollToEnd()
+    }
     document
   }
 
-  override def render(md: MessageDocument): Unit = {
+  override def render(md: MessageDocument, showTop: Boolean): Unit = {
+    SwingUtils.checkEdt()
     document = md
-    scrollToEnd()
+    if (showTop) {
+      scrollToBegin()
+    } else {
+      scrollToEnd()
+    }
   }
 
   override def prependLoading(): MessageDocument = {
+    SwingUtils.checkEdt()
     document.insert(msgService.loadingHtml, MessageInsertPosition.Leading)
     document
   }
 
   override def prepend(cwd: ChatWithDao, msgs: IndexedSeq[Message], beginReached: Boolean): MessageDocument = {
+    SwingUtils.checkEdt()
     // TODO: Prevent flickering
     // TODO: Preserve selection
     val sb = new StringBuilder
@@ -120,13 +140,20 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   protected def document = _documentOption.get
 
   private def document_=(md: MessageDocument): Unit = {
-    _documentOption = Some(md)
-    textPane.peer.setStyledDocument(md.doc)
-    onDocumentChange()
+    if (!_documentOption.contains(md)) {
+      _documentOption = Some(md)
+      textPane.peer.setStyledDocument(md.doc)
+      onDocumentChange()
+    }
   }
 
   private def currentViewPosSize = {
     (viewport.getViewPosition, viewport.getViewSize)
+  }
+
+  private def scrollToBegin(): Unit = {
+    // FIXME: Doesn't always work!
+    scrollPane.peer.getViewport.setViewPosition(new Point(0, 0))
   }
 
   private def scrollToEnd(): Unit = {

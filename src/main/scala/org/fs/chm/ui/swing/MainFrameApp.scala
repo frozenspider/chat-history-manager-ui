@@ -26,10 +26,9 @@ import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.list.DaoDatasetSelectionCallbacks
 import org.fs.chm.ui.swing.list.DaoItem
 import org.fs.chm.ui.swing.list.DaoList
-import org.fs.chm.ui.swing.list.chat.ChatListItem
-import org.fs.chm.ui.swing.list.chat.ChatListItemSelectionGroup
-import org.fs.chm.ui.swing.list.chat.ChatListSelectionCallbacks
+import org.fs.chm.ui.swing.list.chat._
 import org.fs.chm.ui.swing.merge._
+import org.fs.chm.ui.swing.messages.MessageNavigationCallbacks
 import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
 import org.fs.chm.ui.swing.user.UserDetailsMenuCallbacks
@@ -45,7 +44,8 @@ class MainFrameApp //
     with Logging
     with DaoDatasetSelectionCallbacks
     with ChatListSelectionCallbacks
-    with UserDetailsMenuCallbacks { app =>
+    with UserDetailsMenuCallbacks
+    with MessageNavigationCallbacks { app =>
 
   type MD = MessagesAreaContainer.MessageDocument
 
@@ -73,6 +73,7 @@ class MainFrameApp //
    *  - delete orphan users
    *  - better tabs?
    *  - go to date
+   *  - cache document view position
    */
 
   val preloadResult: Future[_] = {
@@ -159,11 +160,11 @@ class MainFrameApp //
   lazy val msgRenderer: MessagesRenderingComponent[MD] = {
     import org.fs.chm.ui.swing.messages.impl.MessagesAreaEnhancedContainer
 
-    val m = new MessagesAreaEnhancedContainer(htmlKit)
+    val m = new MessagesAreaEnhancedContainer(htmlKit, this)
 
     // Load older messages when sroll is near the top
     m.scrollPane.verticalScrollBar.peer.addAdjustmentListener((e: AdjustmentEvent) => {
-      if (e.getValue < 500 && !e.getValueIsAdjusting) {
+      if (e.getValue < 1000 && !e.getValueIsAdjusting) {
         tryLoadPreviousMessages()
       }
     })
@@ -510,31 +511,82 @@ class MainFrameApp //
       }
       freezeTheWorld("Loading chat...")
     }
-    val f = Future {
-      val cache = loadedDaos(cwd.dao)(cwd.chat)
-      cache.msgDocOption match {
-        case Some(_) =>
-          () // If the chat has been already rendered, restore previous document as-is
-        case None =>
-          val msgs = cwd.dao.lastMessages(cwd.chat, MsgBatchLoadSize)
-          val md   = msgRenderer.render(cwd, msgs, msgs.size < MsgBatchLoadSize)
-          val loadStatus = LoadStatus(
-            firstOption  = msgs.headOption,
-            lastOption   = msgs.lastOption,
-            beginReached = msgs.size < MsgBatchLoadSize,
-            endReached   = true
-          )
-          updateCache(cwd.dao, cwd.chat, ChatCache(Some(md), Some(loadStatus)))
-      }
-    }
-    f foreach { _ =>
-      Swing.onEDTWait(MutationLock.synchronized {
+    Future {
+      MutationLock.synchronized {
         currentChatOption = Some(cwd)
+        loadMessagesInProgress set true
+      }
+      // If the chat has been already rendered, restore previous document as-is
+      if (loadedDaos(cwd.dao)(cwd.chat).msgDocOption.isEmpty) {
+        loadLastMessagesAndUpdateCache(cwd)
+      }
+      Swing.onEDTWait(MutationLock.synchronized {
         val doc = loadedDaos(cwd.dao)(cwd.chat).msgDocOption.get
-        msgRenderer.render(doc)
+        msgRenderer.render(doc, false)
+        loadMessagesInProgress set false
         unfreezeTheWorld()
       })
     }
+  }
+
+  override def navigateToBeginning(): Unit = {
+    MutationLock.synchronized {
+      freezeTheWorld("Navigating...")
+    }
+    Future {
+      currentChatOption match {
+        case Some(cwd) =>
+          val cache = loadedDaos(cwd.dao)(cwd.chat)
+          cache.loadStatusOption match {
+            case Some(ls) if ls.beginReached =>
+              // Just scroll
+              Swing.onEDTWait(msgRenderer.render(cache.msgDocOption.get, true))
+            case _ =>
+              loadMessagesInProgress set true
+              loadFirstMessagesAndUpdateCache(cwd)
+              Swing.onEDTWait(MutationLock.synchronized {
+                val doc = loadedDaos(cwd.dao)(cwd.chat).msgDocOption.get
+                msgRenderer.render(doc, true)
+                loadMessagesInProgress set false
+              })
+          }
+        case None =>
+          () // NOOP
+      }
+      unfreezeTheWorld()
+    }
+  }
+
+  override def navigateToEnd(): Unit = {
+    MutationLock.synchronized {
+      freezeTheWorld("Navigating...")
+    }
+    Future {
+      currentChatOption match {
+        case Some(cwd) =>
+          val cache = loadedDaos(cwd.dao)(cwd.chat)
+          cache.loadStatusOption match {
+            case Some(ls) if ls.endReached =>
+              // Just scroll
+              Swing.onEDTWait(msgRenderer.render(cache.msgDocOption.get, false))
+            case _ =>
+              loadMessagesInProgress set true
+              loadLastMessagesAndUpdateCache(cwd)
+              Swing.onEDTWait(MutationLock.synchronized {
+                val doc = loadedDaos(cwd.dao)(cwd.chat).msgDocOption.get
+                msgRenderer.render(doc, false)
+                loadMessagesInProgress set false
+              })
+          }
+        case None =>
+          () // NOOP
+      }
+      unfreezeTheWorld()
+    }
+  }
+
+  override def navigateToDate(date: DateTime): Unit = {
+    ???
   }
 
   def tryLoadPreviousMessages(): Unit = {
@@ -543,50 +595,73 @@ class MainFrameApp //
       case _ if loadMessagesInProgress.get => log.debug("Loading messages: Already in progress")
       case None                            => log.debug("Loading messages: No chat selected")
       case Some(cwd) =>
-        MutationLock.synchronized {
-          val cache      = loadedDaos(cwd.dao)(cwd.chat)
-          val loadStatus = cache.loadStatusOption.get
-          log.debug(s"Loading messages: loadStatus = ${loadStatus}")
-          if (!loadStatus.beginReached) {
-            freezeTheWorld("Loading messages...")
-            msgRenderer.updateStarted()
-            loadMessagesInProgress set true
-            val f = Future {
-              MutationLock.synchronized {
-                msgRenderer.prependLoading()
-                assert(loadStatus.firstOption.isDefined)
-                val addedMessages = loadStatus.firstOption match {
-                  case Some(first) => cwd.dao.messagesBefore(cwd.chat, first, MsgBatchLoadSize + 1).dropRight(1)
-                  case None        => throw new MatchError("Uh-oh, this shouldn't happen!")
-                }
-                val beginReached = addedMessages.size < MsgBatchLoadSize
-                log.debug(s"Loading messages: Loaded ${addedMessages.size} previous messages")
-                // We're still holding the lock
-//                Swing.onEDTWait {
-                  val md = msgRenderer.prepend(cwd, addedMessages, beginReached)
-                  log.debug("Loading messages: Reloaded message container")
-                  updateCache(
-                    cwd.dao,
-                    cwd.chat,
-                    cache.copy(
-                      msgDocOption = Some(md),
-                      loadStatusOption = Some {
-                        loadStatus.copy(firstOption  = addedMessages.headOption, beginReached = beginReached)
-                      }
-                    )
-                  )
-//                }
-              }
+        val cache      = loadedDaos(cwd.dao)(cwd.chat)
+        val loadStatus = cache.loadStatusOption.get
+        log.debug(s"Loading messages: loadStatus = ${loadStatus}")
+        if (!loadStatus.beginReached) {
+          freezeTheWorld("Loading messages...")
+          msgRenderer.updateStarted()
+          loadMessagesInProgress set true
+          val f = Future {
+            Swing.onEDTWait(msgRenderer.prependLoading())
+            assert(loadStatus.firstOption.isDefined)
+            val addedMessages = loadStatus.firstOption match {
+              case Some(first) => cwd.dao.messagesBefore(cwd.chat, first, MsgBatchLoadSize + 1).dropRight(1)
+              case None        => throw new MatchError("Uh-oh, this shouldn't happen!")
             }
-            f.onComplete(_ =>
-              Swing.onEDTWait(MutationLock.synchronized {
-                loadMessagesInProgress set false
-                msgRenderer.updateFinished()
-                unfreezeTheWorld()
-              })
-            )
+            val beginReached = addedMessages.size < MsgBatchLoadSize
+            log.debug(s"Loading messages: Loaded ${addedMessages.size} previous messages")
+            // We're still holding the lock
+            Swing.onEDTWait {
+              val md = msgRenderer.prepend(cwd, addedMessages, beginReached)
+              log.debug("Loading messages: Reloaded message container")
+              updateCache(
+                cwd.dao,
+                cwd.chat,
+                cache.copy(
+                  msgDocOption = Some(md),
+                  loadStatusOption = Some {
+                    loadStatus.copy(firstOption = addedMessages.headOption, beginReached = beginReached)
+                  }
+                )
+              )
+            }
           }
+          f.onComplete(_ =>
+            Swing.onEDTWait(MutationLock.synchronized {
+              msgRenderer.updateFinished()
+              loadMessagesInProgress set false
+              unfreezeTheWorld()
+            }))
         }
+    }
+  }
+
+  def loadFirstMessagesAndUpdateCache(cwd: ChatWithDao) = {
+    val msgs = cwd.dao.firstMessages(cwd.chat, MsgBatchLoadSize)
+    Swing.onEDTWait {
+      val md = msgRenderer.render(cwd, msgs, true, true)
+      val loadStatus = LoadStatus(
+        firstOption  = msgs.headOption,
+        lastOption   = msgs.lastOption,
+        beginReached = true,
+        endReached   = msgs.size < MsgBatchLoadSize
+      )
+      updateCache(cwd.dao, cwd.chat, ChatCache(Some(md), Some(loadStatus)))
+    }
+  }
+
+  def loadLastMessagesAndUpdateCache(cwd: ChatWithDao) = {
+    val msgs = cwd.dao.lastMessages(cwd.chat, MsgBatchLoadSize)
+    Swing.onEDTWait {
+      val md = msgRenderer.render(cwd, msgs, msgs.size < MsgBatchLoadSize, false)
+      val loadStatus = LoadStatus(
+        firstOption  = msgs.headOption,
+        lastOption   = msgs.lastOption,
+        beginReached = msgs.size < MsgBatchLoadSize,
+        endReached   = true
+      )
+      updateCache(cwd.dao, cwd.chat, ChatCache(Some(md), Some(loadStatus)))
     }
   }
 
