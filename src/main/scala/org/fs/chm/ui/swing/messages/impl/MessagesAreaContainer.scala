@@ -35,7 +35,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
 
   private var viewPosSizeOption: Option[(Point, Dimension)] = None
 
-  private var documentOption: Option[MessageDocument] = None
+  private var _documentOption: Option[MessageDocument] = None
 
   // Workaround for https://github.com/scala/bug/issues/1938: Can't call super.x if x is a lazy val
   private lazy val _component: Component = new BorderPanel {
@@ -113,10 +113,14 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   // Helpers
   //
 
-  private def document = documentOption.get
+  protected def onDocumentChange(): Unit = {}
+
+  protected def documentOption = _documentOption
+
+  protected def document = _documentOption.get
 
   private def document_=(md: MessageDocument): Unit = {
-    documentOption = Some(md)
+    _documentOption = Some(md)
     textPane.peer.setStyledDocument(md.doc)
     onDocumentChange()
   }
@@ -133,8 +137,6 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   private def show(x: Int, y: Int): Unit = {
     viewport.setViewPosition(new Point(x, y))
   }
-
-  protected def onDocumentChange(): Unit = {}
 }
 
 object MessagesAreaContainer {
