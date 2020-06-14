@@ -11,7 +11,7 @@ import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.utility.Imports._
 
-class MessagesAreaOverlaidContainer(htmlKit: HTMLEditorKit) extends MessagesAreaContainer(htmlKit) {
+class MessagesAreaEnhancedContainer(htmlKit: HTMLEditorKit) extends MessagesAreaContainer(htmlKit) {
   lazy val dateBtn = new Button("<Date>") {
     visible = false
   }

@@ -157,9 +157,9 @@ class MainFrameApp //
   }
 
   lazy val msgRenderer: MessagesRenderingComponent[MD] = {
-    import org.fs.chm.ui.swing.messages.impl.MessagesAreaOverlaidContainer
+    import org.fs.chm.ui.swing.messages.impl.MessagesAreaEnhancedContainer
 
-    val m = new MessagesAreaOverlaidContainer(htmlKit)
+    val m = new MessagesAreaEnhancedContainer(htmlKit)
 
     // Load older messages when sroll is near the top
     m.scrollPane.verticalScrollBar.peer.addAdjustmentListener((e: AdjustmentEvent) => {
