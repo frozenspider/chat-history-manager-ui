@@ -19,6 +19,7 @@ import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.loader._
+import org.fs.chm.loader.telegram.TelegramFullDataLoader
 import org.fs.chm.ui.swing.MessagesService._
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
@@ -700,7 +701,7 @@ class MainFrameApp //
     val LastFileKey = "last_database_file"
 
     private val h2      = new H2DataManager
-    private val tg      = new TelegramDataLoader
+    private val tg      = new TelegramFullDataLoader
     private val gts5610 = new GTS5610DataLoader
 
     /** Initializes DAOs to speed up subsequent calls */
