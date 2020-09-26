@@ -1041,6 +1041,8 @@ class H2ChatHistoryDao(
           RichText.Bold(text = r.text)
         case "italic" =>
           RichText.Italic(text = r.text)
+        case "underline" =>
+          RichText.Underline(text = r.text)
         case "strikethrough" =>
           RichText.Strikethrough(text = r.text)
         case "link" =>
@@ -1235,6 +1237,7 @@ class H2ChatHistoryDao(
           case el: RichText.Plain         => template.copy(elementType = "plain")
           case el: RichText.Bold          => template.copy(elementType = "bold")
           case el: RichText.Italic        => template.copy(elementType = "italic")
+          case el: RichText.Underline     => template.copy(elementType = "underline")
           case el: RichText.Strikethrough => template.copy(elementType = "strikethrough")
           case el: RichText.Link =>
             template.copy(

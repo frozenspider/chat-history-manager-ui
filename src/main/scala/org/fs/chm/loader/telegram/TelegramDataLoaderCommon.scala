@@ -195,6 +195,9 @@ trait TelegramDataLoaderCommon {
         case "italic" =>
           require(values.keys == Set("type", "text"), s"Unexpected italic format: $jo")
           RichText.Italic(values("text").asInstanceOf[String])
+        case "underline" =>
+          require(values.keys == Set("type", "text"), s"Unexpected underline format: $jo")
+          RichText.Underline(values("text").asInstanceOf[String])
         case "strikethrough" =>
           require(values.keys == Set("type", "text"), s"Unexpected strikethrough format: $jo")
           RichText.Strikethrough(values("text").asInstanceOf[String])
