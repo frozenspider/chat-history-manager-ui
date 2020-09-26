@@ -485,6 +485,12 @@ class H2ChatHistoryDao(
         );
         """,
         sql"""
+        CREATE INDEX messages_order ON messages(time, source_id, internal_id);
+        """,
+        sql"""
+        CREATE INDEX messages_order_desc ON messages(time DESC, source_id DESC, internal_id DESC);
+        """,
+        sql"""
         CREATE UNIQUE INDEX messages_internal_id ON messages(ds_uuid, chat_id, source_id); -- allows duplicate NULLs
         """,
         sql"""
@@ -635,7 +641,14 @@ class H2ChatHistoryDao(
         (fr"SELECT" ++ colsFr ++ fr","
           // m.ds_uuid = c.ds_uuid here serves so that H2 could discover an index
           ++ fr"(SELECT COUNT(*) FROM messages m WHERE m.ds_uuid = c.ds_uuid AND m.chat_id = c.id) AS msg_count,"
-          ++ fr"FROM chats c WHERE c.ds_uuid = $dsUuid")
+          ++ fr"""(
+                    SELECT m.time FROM messages m
+                    WHERE m.chat_id = c.id
+                    ORDER BY m.time DESC, m.source_id DESC, m.internal_id DESC
+                    LIMIT 1
+                  ) AS last_msg_time"""
+          ++ fr"FROM chats c WHERE c.ds_uuid = $dsUuid"
+          ++ fr"ORDER BY last_msg_time DESC")
 
       private def hasMessagesFromUser(userId: Long) =
         (fr"EXISTS (SELECT m.from_id FROM messages m"
