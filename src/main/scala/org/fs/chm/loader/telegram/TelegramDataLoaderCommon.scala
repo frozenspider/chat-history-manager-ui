@@ -15,6 +15,25 @@ import org.json4s.jackson.JsonMethods
 trait TelegramDataLoaderCommon {
   implicit protected val formats: Formats = DefaultFormats.withLong.withBigDecimal
 
+  protected def checkFormatLooksRight(rootFile: File, expectedFields: Seq[String]): Option[String] ={
+    val resultJsonFile: File = new File(rootFile, "result.json").getAbsoluteFile
+    if (!resultJsonFile.exists()) {
+      Some("result.json not found in " + rootFile.getAbsolutePath)
+    } else {
+      val parsed = JsonMethods.parse(resultJsonFile)
+      expectedFields.foldLeft(Option.empty[String]) {
+        case (s: Some[String], _) => s
+        case (None, fieldName) =>
+          val res = parsed \ fieldName
+          if (res == JNothing) {
+            Some(s"Incompatible format! Field '$fieldName' not found")
+          } else {
+            None
+          }
+      }
+    }
+  }
+
   protected object MessageParser {
     def parseMessageOption(jv: JValue, rootFile: File): Option[Message] = {
       implicit val tracker = new FieldUsageTracker
@@ -40,7 +59,7 @@ trait TelegramDataLoaderCommon {
         internalId             = Message.NoInternalId,
         sourceIdOption         = Some(getCheckedField[Message.SourceId](jv, "id")),
         time                   = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-        editTimeOption         = stringToDateTimeOpt(getCheckedField[String](jv, "edited")),
+        editTimeOption         = stringOptToDateTimeOpt(getStringOpt(jv, "edited", false)),
         fromId                 = getCheckedField[Long](jv, "from_id"),
         forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
         replyToMessageIdOption = getFieldOpt[Message.SourceId](jv, "reply_to_message_id", false),
@@ -399,6 +418,10 @@ trait TelegramDataLoaderCommon {
       case dt if dt.year.get == 1970 => None // TG puts minimum timestamp in place of absent
       case other                     => Some(other)
     }
+  }
+
+  protected def stringOptToDateTimeOpt(so: Option[String]): Option[DateTime] = {
+    so flatMap stringToDateTimeOpt
   }
 
   protected def getRawField(jv: JValue, fieldName: String, mustPresent: Boolean)(

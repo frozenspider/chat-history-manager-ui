@@ -5,16 +5,23 @@ import java.io.FileNotFoundException
 import java.util.UUID
 
 import scala.collection.immutable.ListMap
+import scala.swing.Dialog
+import scala.swing.Dialog.Result
+import scala.swing.Swing
+import scala.swing.Swing.EmptyIcon
+import scala.swing.Swing.nullPeer
 
+import javax.swing.JOptionPane
 import org.fs.chm.dao._
+import org.fs.chm.utility.EntityUtils
 import org.fs.utility.Imports._
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
-class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderCommon {
+class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataLoaderCommon {
 
-  override def doesLookRight(rootFile: File): Option[String] ={
-    checkFormatLooksRight(rootFile, Seq("personal_information", "contacts", "chats"))
+  override def doesLookRight(rootFile: File): Option[String] = {
+    checkFormatLooksRight(rootFile, Seq("name", "type", "id", "messages"))
   }
 
   /** Path should point to the folder with `result.json` and other stuff */
@@ -29,20 +36,14 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
 
     val parsed = JsonMethods.parse(resultJsonFile)
 
-    val (myself, users) = parseAndCombineUsers(parsed, dataset.uuid)
+    val users = parseUsers(parsed, dataset.uuid)
+    val myself = chooseMyself(users)
 
-    val chatsWithMessages = for {
-      chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
-      if (getCheckedField[String](chat, "type") != "saved_messages")
-    } yield {
-      val messagesRes = (for {
-        message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
-      } yield MessageParser.parseMessageOption(message, rootFile)).yieldDefined
+    val messagesRes = (for {
+      message <- getCheckedField[IndexedSeq[JValue]](parsed, "messages")
+    } yield MessageParser.parseMessageOption(message, rootFile)).yieldDefined
 
-      val chatRes = parseChat(chat, dataset.uuid, messagesRes.size)
-      (chatRes, messagesRes)
-    }
-    val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
+    val chatRes = parseChat(parsed, dataset.uuid, messagesRes.size)
 
     new EagerChatHistoryDao(
       name               = "Telegram export data from " + rootFile.getName,
@@ -50,8 +51,27 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
       dataset            = dataset,
       myself1            = myself,
       users1             = users,
-      _chatsWithMessages = chatsWithMessagesLM
+      _chatsWithMessages = ListMap(chatRes -> messagesRes)
     )
+  }
+
+  protected def chooseMyself(users: Seq[User]): User = {
+    val options = users map (u => EntityUtils.getOrUnnamed(u.firstNameOption))
+    val res = JOptionPane.showOptionDialog(
+      null,
+      "Choose yourself",
+      "Which one of them is you?",
+      Dialog.Options.Default.id,
+      Dialog.Message.Question.id,
+      Swing.wrapIcon(EmptyIcon),
+      (options map (_.asInstanceOf[AnyRef])).toArray,
+      options.head
+    )
+    if (res == JOptionPane.CLOSED_OPTION) {
+      throw new IllegalArgumentException("Well, tough luck")
+    } else {
+      users(res)
+    }
   }
 
   //
@@ -108,58 +128,35 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
     }
   }
 
-  /**
-   * Parse users from contact list and chat messages and combine them to get as much info as possible.
-   * Returns `(myself, users)`
-   */
-  private def parseAndCombineUsers(parsed: JValue, dsUuid: UUID): (User, Seq[User]) = {
+  /** Parse users from chat messages to get as much info as possible. */
+  private def parseUsers(parsed: JValue, dsUuid: UUID): Seq[User] = {
     implicit val dummyTracker = new FieldUsageTracker
-
-    val myself = parseMyself(getRawField(parsed, "personal_information", true), dsUuid)
-
-    val contactUsers = for {
-      contact <- getCheckedField[Seq[JValue]](parsed, "contacts", "list")
-    } yield parseUser(contact, dsUuid)
 
     // Doing additional pass over messages to fetch all users
     val messageUsers = (
       for {
-        chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
-        if (getCheckedField[String](chat, "type") != "saved_messages")
-        message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
+        message <- getCheckedField[IndexedSeq[JValue]](parsed, "messages")
         if (getCheckedField[String](message, "type") != "unsupported")
       } yield parseShortUserFromMessage(message)
     ).toSet
-
     require(messageUsers.forall(_.id > 0), "All user IDs in messages must be positive!")
-    val combinedUsers = messageUsers.map {
-      case ShortUser(id, _) if id == myself.id =>
-        myself
+
+    val fullUsers = messageUsers.map {
       case ShortUser(id, fullNameOption) => //
-        {
-          contactUsers find (_.id == id)
-        }.orElse {
-          contactUsers find (fullNameOption contains _.prettyName)
-        }.getOrElse {
-          User(
-            dsUuid             = dsUuid,
-            id                 = id,
-            firstNameOption    = fullNameOption,
-            lastNameOption     = None,
-            usernameOption     = None,
-            phoneNumberOption  = None,
-            lastSeenTimeOption = None
-          )
-        }.copy(id = id)
+        User(
+          dsUuid             = dsUuid,
+          id                 = id,
+          firstNameOption    = fullNameOption,
+          lastNameOption     = None,
+          usernameOption     = None,
+          phoneNumberOption  = None,
+          lastSeenTimeOption = None
+        )
     }
 
-    // Append myself if not encountered in messages
-    val combinedUsers2 = if (combinedUsers contains myself) combinedUsers else (combinedUsers + myself)
-    val combinedUsers3 = combinedUsers2.toSeq sortBy (u => (u.id, u.prettyName))
-    (myself, combinedUsers3)
-  } ensuring { p =>
+    fullUsers.toSeq sortBy (u => (u.id, u.prettyName))
+  } ensuring { users =>
     // Ensuring all IDs are unique
-    val (myself, users) = p
-    (users.toStream.map(_.id).toSet + myself.id).size == users.size
+    users.toStream.map(_.id).toSet.size == users.size
   }
 }
