@@ -9,7 +9,7 @@ import com.github.nscala_time.time.Imports._
 import org.fs.chm.TestHelper
 import org.fs.chm.WithH2Dao
 import org.fs.chm.loader.H2DataManager
-import org.fs.chm.loader.TelegramDataLoader
+import org.fs.chm.loader.telegram.TelegramFullDataLoader
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.TestUtils
 import org.junit.runner.RunWith
@@ -28,7 +28,7 @@ class H2ChatHistoryDaoSpec //
     with BeforeAndAfterAll {
 
   val manager     = new H2DataManager
-  val loader      = new TelegramDataLoader
+  val loader      = new TelegramFullDataLoader
   val telegramDir = new File(resourcesFolder, "telegram")
 
   var tgDao:  ChatHistoryDao   = _

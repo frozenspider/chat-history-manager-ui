@@ -1,4 +1,4 @@
-package org.fs.chm.loader
+package org.fs.chm.loader.telegram
 
 import java.io.File
 import java.io.FileNotFoundException
@@ -6,170 +6,42 @@ import java.util.UUID
 
 import scala.collection.immutable.ListMap
 
-import com.github.nscala_time.time.Imports.DateTime
+import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao._
 import org.fs.utility.Imports._
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
-class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
-  implicit private val formats: Formats = DefaultFormats.withLong.withBigDecimal
+trait TelegramDataLoaderCommon {
+  implicit protected val formats: Formats = DefaultFormats.withLong.withBigDecimal
 
-  /** Path should point to the folder with `result.json` and other stuff */
-  override protected def loadDataInner(rootFile: File): EagerChatHistoryDao = {
-    implicit val dummyTracker = new FieldUsageTracker
+  protected def checkFormatLooksRight(rootFile: File, expectedFields: Seq[String]): Option[String] ={
     val resultJsonFile: File = new File(rootFile, "result.json").getAbsoluteFile
     if (!resultJsonFile.exists()) {
-      throw new FileNotFoundException("result.json not found in " + rootFile.getAbsolutePath)
-    }
-
-    val dataset = Dataset.createDefault("Telegram", "telegram")
-
-    val parsed = JsonMethods.parse(resultJsonFile)
-
-    val (myself, users) = parseAndCombineUsers(parsed, dataset.uuid)
-
-    val chatsWithMessages = for {
-      chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
-      if (getCheckedField[String](chat, "type") != "saved_messages")
-    } yield {
-      val messagesRes = (for {
-        message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
-      } yield MessageParser.parseMessageOption(message, rootFile)).yieldDefined
-
-      val chatRes = parseChat(chat, dataset.uuid, messagesRes.size)
-      (chatRes, messagesRes)
-    }
-    val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
-
-    new EagerChatHistoryDao(
-      name               = "Telegram export data from " + rootFile.getName,
-      _dataRootFile      = rootFile.getAbsoluteFile,
-      dataset            = dataset,
-      myself1            = myself,
-      users1             = users,
-      _chatsWithMessages = chatsWithMessagesLM
-    )
-  }
-
-  //
-  // Parsers
-  //
-
-  private def parseMyself(jv: JValue, dsUuid: UUID): User = {
-    implicit val tracker = new FieldUsageTracker
-    tracker.markUsed("bio") // Ignoring bio
-    tracker.ensuringUsage(jv) {
-      User(
-        dsUuid             = dsUuid,
-        id                 = getCheckedField[Long](jv, "user_id"),
-        firstNameOption    = getStringOpt(jv, "first_name", true),
-        lastNameOption     = getStringOpt(jv, "last_name", true),
-        usernameOption     = getStringOpt(jv, "username", true),
-        phoneNumberOption  = getStringOpt(jv, "phone_number", true),
-        lastSeenTimeOption = None
-      )
+      Some("result.json not found in " + rootFile.getAbsolutePath)
+    } else {
+      val parsed = JsonMethods.parse(resultJsonFile)
+      expectedFields.foldLeft(Option.empty[String]) {
+        case (s: Some[String], _) => s
+        case (None, fieldName) =>
+          val res = parsed \ fieldName
+          if (res == JNothing) {
+            Some(s"Incompatible format! Field '$fieldName' not found")
+          } else {
+            None
+          }
+      }
     }
   }
 
-  private def parseUser(jv: JValue, dsUuid: UUID): User = {
-    implicit val tracker = new FieldUsageTracker
-    tracker.ensuringUsage(jv) {
-      User(
-        dsUuid             = dsUuid,
-        id                 = getCheckedField[Long](jv, "user_id"),
-        firstNameOption    = getStringOpt(jv, "first_name", true),
-        lastNameOption     = getStringOpt(jv, "last_name", true),
-        usernameOption     = None,
-        phoneNumberOption  = getStringOpt(jv, "phone_number", true),
-        lastSeenTimeOption = stringToDateTimeOpt(getCheckedField[String](jv, "date"))
-      )
-    }
-  }
-
-  private def parseShortUserFromMessage(jv: JValue): ShortUser = {
-    implicit val dummyTracker = new FieldUsageTracker
-    getCheckedField[String](jv, "type") match {
-      case "message" =>
-        ShortUser(
-          id             = getCheckedField[Long](jv, "from_id"),
-          fullNameOption = getStringOpt(jv, "from", true)
-        )
-      case "service" =>
-        ShortUser(
-          id             = getCheckedField[Long](jv, "actor_id"),
-          fullNameOption = getStringOpt(jv, "actor", true)
-        )
-      case other =>
-        throw new IllegalArgumentException(
-          s"Don't know how to parse message of type '$other' for ${jv.toString.take(500)}")
-    }
-  }
-
-  /**
-   * Parse users from contact list and chat messages and combine them to get as much info as possible.
-   * Returns `(myself, users)`
-   */
-  private def parseAndCombineUsers(parsed: JValue, dsUuid: UUID): (User, Seq[User]) = {
-    implicit val dummyTracker = new FieldUsageTracker
-
-    val myself = parseMyself(getRawField(parsed, "personal_information", true), dsUuid)
-
-    val contactUsers = for {
-      contact <- getCheckedField[Seq[JValue]](parsed, "contacts", "list")
-    } yield parseUser(contact, dsUuid)
-
-    // Doing additional pass over messages to fetch all users
-    val messageUsers = (
-      for {
-        chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
-        if (getCheckedField[String](chat, "type") != "saved_messages")
-        message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
-        if (getCheckedField[String](message, "type") != "unsupported")
-      } yield parseShortUserFromMessage(message)
-    ).toSet
-
-    require(messageUsers.forall(_.id > 0), "All user IDs in messages must be positive!")
-    val combinedUsers = messageUsers.map {
-      case ShortUser(id, _) if id == myself.id =>
-        myself
-      case ShortUser(id, fullNameOption) => //
-        {
-          contactUsers find (_.id == id)
-        }.orElse {
-          contactUsers find (fullNameOption contains _.prettyName)
-        }.getOrElse {
-          User(
-            dsUuid             = dsUuid,
-            id                 = id,
-            firstNameOption    = fullNameOption,
-            lastNameOption     = None,
-            usernameOption     = None,
-            phoneNumberOption  = None,
-            lastSeenTimeOption = None
-          )
-        }.copy(id = id)
-    }
-
-    // Append myself if not encountered in messages
-    val combinedUsers2 = if (combinedUsers contains myself) combinedUsers else (combinedUsers + myself)
-    val combinedUsers3 = combinedUsers2.toSeq sortBy (u => (u.id, u.prettyName))
-    (myself, combinedUsers3)
-  } ensuring { p =>
-    // Ensuring all IDs are unique
-    val (myself, users) = p
-    (users.toStream.map(_.id).toSet + myself.id).size == users.size
-  }
-
-  private object MessageParser {
-
+  protected object MessageParser {
     def parseMessageOption(jv: JValue, rootFile: File): Option[Message] = {
       implicit val tracker = new FieldUsageTracker
       tracker.markUsed("via_bot") // Ignored
       tracker.ensuringUsage(jv) {
         getCheckedField[String](jv, "type") match {
-          case "message" => Some(parseRegular(jv, rootFile))
-          case "service" => Some(parseService(jv, rootFile))
+          case "message"     => Some(parseRegular(jv, rootFile))
+          case "service"     => Some(parseService(jv, rootFile))
           case "unsupported" =>
             // Not enough data is provided even for a placeholder
             tracker.markUsed("id")
@@ -187,7 +59,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
         internalId             = Message.NoInternalId,
         sourceIdOption         = Some(getCheckedField[Message.SourceId](jv, "id")),
         time                   = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-        editTimeOption         = stringToDateTimeOpt(getCheckedField[String](jv, "edited")),
+        editTimeOption         = stringOptToDateTimeOpt(getStringOpt(jv, "edited", false)),
         fromId                 = getCheckedField[Long](jv, "from_id"),
         forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
         replyToMessageIdOption = getFieldOpt[Message.SourceId](jv, "reply_to_message_id", false),
@@ -290,7 +162,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     }
   }
 
-  private object RichTextParser {
+  protected object RichTextParser {
     def parseRichTextOption(jv: JValue)(implicit tracker: FieldUsageTracker): Option[RichText] = {
       val jText = getRawField(jv, "text", true)
       jText match {
@@ -323,6 +195,9 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
         case "italic" =>
           require(values.keys == Set("type", "text"), s"Unexpected italic format: $jo")
           RichText.Italic(values("text").asInstanceOf[String])
+        case "underline" =>
+          require(values.keys == Set("type", "text"), s"Unexpected underline format: $jo")
+          RichText.Underline(values("text").asInstanceOf[String])
         case "strikethrough" =>
           require(values.keys == Set("type", "text"), s"Unexpected strikethrough format: $jo")
           RichText.Strikethrough(values("text").asInstanceOf[String])
@@ -390,14 +265,14 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     }
   }
 
-  private object ContentParser {
+  protected object ContentParser {
     def parseContentOption(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Option[Content] = {
-      val mediaTypeOption     = getFieldOpt[String](jv, "media_type", false)
-      val photoOption         = getFieldOpt[String](jv, "photo", false)
-      val fileOption          = getFieldOpt[String](jv, "file", false)
-      val locPresent          = (jv \ "location_information") != JNothing
+      val mediaTypeOption = getFieldOpt[String](jv, "media_type", false)
+      val photoOption = getFieldOpt[String](jv, "photo", false)
+      val fileOption = getFieldOpt[String](jv, "file", false)
+      val locPresent = (jv \ "location_information") != JNothing
       val pollQuestionPresent = (jv \ "poll" \ "question") != JNothing
-      val contactInfoPresent  = (jv \ "contact_information") != JNothing
+      val contactInfoPresent = (jv \ "contact_information") != JNothing
       (mediaTypeOption, photoOption, fileOption, locPresent, pollQuestionPresent, contactInfoPresent) match {
         case (None, None, None, false, false, false)                     => None
         case (Some("sticker"), None, Some(_), false, false, false)       => Some(parseSticker(jv, rootFile))
@@ -495,15 +370,15 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
         implicit tracker: FieldUsageTracker): Content.SharedContact = {
       val ci = getRawField(jv, "contact_information", true)
       Content.SharedContact(
-        firstNameOption = getStringOpt(ci, "first_name", true),
-        lastNameOption = getStringOpt(ci, "last_name", true),
+        firstNameOption   = getStringOpt(ci, "first_name", true),
+        lastNameOption    = getStringOpt(ci, "last_name", true),
         phoneNumberOption = getStringOpt(ci, "phone_number", true),
-        vcardPathOption = getFileOpt(jv, "contact_vcard", false, rootFile)
+        vcardPathOption   = getFileOpt(jv, "contact_vcard", false, rootFile)
       )
     }
   }
 
-  private def parseChat(jv: JValue, dsUuid: UUID, msgCount: Int): Chat = {
+  protected def parseChat(jv: JValue, dsUuid: UUID, msgCount: Int): Chat = {
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("messages")
     tracker.ensuringUsage(jv) {
@@ -527,7 +402,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
   // Utility
   //
 
-  private def stringToOption(s: String): Option[String] = {
+  protected def stringToOption(s: String): Option[String] = {
     s match {
       case ""                                                                 => None
       case "(File not included. Change data exporting settings to download.)" => None
@@ -535,65 +410,73 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
     }
   }
 
-  private def isWhitespaceOrInvisible(s: String): Boolean = {
+  protected def isWhitespaceOrInvisible(s: String): Boolean = {
     // Accounts for invisible formatting indicator, e.g. zero-width space \u200B
     s matches "[\\s\\p{Cf}]*"
   }
 
   /** Dates in TG history is exported in local timezone, so we'll try to import in current one as well */
-  private def stringToDateTimeOpt(s: String): Option[DateTime] = {
+  protected def stringToDateTimeOpt(s: String): Option[DateTime] = {
     DateTime.parse(s) match {
       case dt if dt.year.get == 1970 => None // TG puts minimum timestamp in place of absent
       case other                     => Some(other)
     }
   }
 
-  private def getRawField(jv: JValue, fieldName: String, mustPresent: Boolean)(
+  protected def stringOptToDateTimeOpt(so: Option[String]): Option[DateTime] = {
+    so flatMap stringToDateTimeOpt
+  }
+
+  protected def getRawField(jv: JValue, fieldName: String, mustPresent: Boolean)(
       implicit tracker: FieldUsageTracker): JValue = {
     val res = jv \ fieldName
     tracker.markUsed(fieldName)
-    if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in ${jv.toString.take(500)}")
+    if (mustPresent) {
+      require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in ${jv.toString.take(500)}")
+    }
     res
   }
 
-  private def getFieldOpt[A](jv: JValue, fieldName: String, mustPresent: Boolean)(
+  protected def getFieldOpt[A](jv: JValue, fieldName: String, mustPresent: Boolean)(
       implicit formats: Formats,
       mf: scala.reflect.Manifest[A],
       tracker: FieldUsageTracker): Option[A] = {
     getRawField(jv, fieldName, mustPresent).extractOpt[A]
   }
 
-  private def getStringOpt(jv: JValue, fieldName: String, mustPresent: Boolean)(
+  protected def getStringOpt(jv: JValue, fieldName: String, mustPresent: Boolean)(
       implicit formats: Formats,
       tracker: FieldUsageTracker): Option[String] = {
     val res = jv \ fieldName
     tracker.markUsed(fieldName)
-    if (mustPresent) require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in ${jv.toString.take(500)}")
+    if (mustPresent) {
+      require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in ${jv.toString.take(500)}")
+    }
     res.extractOpt[String] flatMap stringToOption
   }
 
-  private def getFileOpt(jv: JValue, fieldName: String, mustPresent: Boolean, rootFile: File)(
+  protected def getFileOpt(jv: JValue, fieldName: String, mustPresent: Boolean, rootFile: File)(
       implicit formats: Formats,
       tracker: FieldUsageTracker): Option[File] = {
     getStringOpt(jv, fieldName, mustPresent) map (p => new File(rootFile, p).getAbsoluteFile)
   }
 
-  private def getCheckedField[A](jv: JValue, fieldName: String)(implicit formats: Formats,
-                                                                mf: scala.reflect.Manifest[A],
-                                                                tracker: FieldUsageTracker): A = {
+  protected def getCheckedField[A](jv: JValue, fieldName: String)(implicit formats: Formats,
+                                                                  mf: scala.reflect.Manifest[A],
+                                                                  tracker: FieldUsageTracker): A = {
     getRawField(jv, fieldName, true).extract[A]
   }
 
-  private def getCheckedField[A](jv: JValue, fn1: String, fn2: String)(implicit formats: Formats,
-                                                                       mf: scala.reflect.Manifest[A],
-                                                                       tracker: FieldUsageTracker): A = {
+  protected def getCheckedField[A](jv: JValue, fn1: String, fn2: String)(implicit formats: Formats,
+                                                                         mf: scala.reflect.Manifest[A],
+                                                                         tracker: FieldUsageTracker): A = {
     val res = jv \ fn1 \ fn2
     require(res != JNothing, s"Incompatible format! Path '$fn1 \\ $fn2' not found in $jv")
     tracker.markUsed(fn1)
     res.extract[A]
   }
 
-  private case class ShortUser(id: Long, fullNameOption: Option[String])
+  protected case class ShortUser(id: Long, fullNameOption: Option[String])
 
   /** Tracks JSON fields being used and ensures that nothing is left unattended */
   class FieldUsageTracker {
@@ -613,7 +496,7 @@ class TelegramDataLoader extends DataLoader[EagerChatHistoryDao] {
       jv match {
         case JObject(children) =>
           val objFields = Set.empty ++ children.map(_._1)
-          val unused    = objFields.diff(markedFields)
+          val unused = objFields.diff(markedFields)
           if (unused.nonEmpty) {
             throw new IllegalArgumentException(s"Unused fields! $unused for ${jv.toString.take(500)}")
           }

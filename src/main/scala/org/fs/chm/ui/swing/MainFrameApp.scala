@@ -19,6 +19,7 @@ import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.loader._
+import org.fs.chm.loader.telegram._
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils
@@ -65,6 +66,8 @@ class MainFrameApp //
 
   /*
    * TODO:
+   *  - sort chats after merging datasets
+   *  - merge only newer messages
    *  - reply-to (make clickable)
    *  - word-wrap and narrower width
    *  - search
@@ -828,9 +831,10 @@ class MainFrameApp //
   private object DataLoaders {
     val LastFileKey = "last_database_file"
 
-    private val h2      = new H2DataManager
-    private val tg      = new TelegramDataLoader
-    private val gts5610 = new GTS5610DataLoader
+    private val h2       = new H2DataManager
+    private val tgFull   = new TelegramFullDataLoader
+    private val tgSingle = new TelegramSingleChatDataLoader
+    private val gts5610  = new GTS5610DataLoader
 
     /** Initializes DAOs to speed up subsequent calls */
     def preload(): Seq[Future[_]] = {
@@ -857,12 +861,26 @@ class MainFrameApp //
     }
 
     def load(file: File): ChatHistoryDao = {
+      val f = file.getParentFile
       if (h2ff.accept(file)) {
-        h2.loadData(file.getParentFile)
+        h2.loadData(f)
       } else if (tgFf.accept(file)) {
-        tg.loadData(file.getParentFile)
+        val tgFullError = tgFull.doesLookRight(f)
+        if (tgFullError.isEmpty) {
+          tgFull.loadData(file.getParentFile)
+        } else {
+          val tgSingleError = tgSingle.doesLookRight(f)
+          if (tgSingleError.isEmpty) {
+            tgSingle.loadData(file.getParentFile)
+          } else {
+            throw new IllegalStateException(
+              "Not a telegram format: Errors:\n"
+                + s"(as a full history) ${tgFullError.get}\n"
+                + s"(as a single chat) ${tgSingleError.get}")
+          }
+        }
       } else if (gts5610Ff.accept(file)) {
-        gts5610.loadData(file.getParentFile)
+        gts5610.loadData(f)
       } else {
         throw new IllegalStateException("Unknown file type!")
       }

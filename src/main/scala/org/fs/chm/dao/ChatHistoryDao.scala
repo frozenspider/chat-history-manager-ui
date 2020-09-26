@@ -251,6 +251,12 @@ object RichText {
     override val plainSearchableString = text.trim
   }
 
+  case class Underline(
+      text: String
+  ) extends Element {
+    override val plainSearchableString = text.trim
+  }
+
   case class Strikethrough(
       text: String
   ) extends Element {

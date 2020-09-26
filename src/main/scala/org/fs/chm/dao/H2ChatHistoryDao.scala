@@ -69,7 +69,10 @@ class H2ChatHistoryDao(
   }
 
   override def chats(dsUuid: UUID): Seq[Chat] = {
-    queries.chats.selectAll(dsUuid).transact(txctr).unsafeRunSync()
+    // FIXME: Double-call when loading a DB!
+    logPerformance {
+      queries.chats.selectAll(dsUuid).transact(txctr).unsafeRunSync()
+    }((res, ms) => s"${res.size} chats fetched in ${ms} ms")
   }
 
   override def chatOption(dsUuid: UUID, id: ChatId): Option[Chat] = {
@@ -101,33 +104,45 @@ class H2ChatHistoryDao(
     } yield c2) getOrElse Seq.empty
 
   override def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message] = {
-    val raws = queries.rawMessages.selectSlice(chat, offset, limit).transact(txctr).unsafeRunSync()
-    raws map Raws.toMessage
+    logPerformance {
+      val raws = queries.rawMessages.selectSlice(chat, offset, limit).transact(txctr).unsafeRunSync()
+      raws map Raws.toMessage
+    }((res, ms) => s"${res.size} messages fetched in ${ms} ms [scrollMessages]")
   }
 
   override def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message] = {
-    val raws = queries.rawMessages.selectLastInversed(chat, limit).transact(txctr).unsafeRunSync().reverse
-    raws map Raws.toMessage
+    logPerformance {
+      val raws = queries.rawMessages.selectLastInversed(chat, limit).transact(txctr).unsafeRunSync().reverse
+      raws map Raws.toMessage
+    }((res, ms) => s"${res.size} messages fetched in ${ms} ms [lastMessages]")
   }
 
   override def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
-    val raws = queries.rawMessages.selectBeforeInversedInc(chat, msg, limit).transact(txctr).unsafeRunSync().reverse
-    raws map Raws.toMessage
+    logPerformance {
+      val raws = queries.rawMessages.selectBeforeInversedInc(chat, msg, limit).transact(txctr).unsafeRunSync().reverse
+      raws map Raws.toMessage
+    }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesBeforeImpl]")
   } ensuring (seq => seq.nonEmpty && seq.last =~= msg)
 
   override def messagesAfterImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
-    val raws = queries.rawMessages.selectAfterInc(chat, msg, limit).transact(txctr).unsafeRunSync()
-    raws map Raws.toMessage
+    logPerformance {
+      val raws = queries.rawMessages.selectAfterInc(chat, msg, limit).transact(txctr).unsafeRunSync()
+      raws map Raws.toMessage
+    }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesAfterImpl]")
   }
 
   override def messagesBetweenImpl(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] = {
-    val raws = queries.rawMessages.selectBetweenInc(chat, msg1, msg2).transact(txctr).unsafeRunSync()
-    raws map Raws.toMessage
+    logPerformance {
+      val raws = queries.rawMessages.selectBetweenInc(chat, msg1, msg2).transact(txctr).unsafeRunSync()
+      raws map Raws.toMessage
+    }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesBetweenImpl]")
   }
 
   override def countMessagesBetween(chat: Chat, msg1: Message, msg2: Message): Int = {
-    require(msg1.time <= msg2.time)
-    queries.rawMessages.countBetweenExc(chat, msg1, msg2).transact(txctr).unsafeRunSync()
+    logPerformance {
+      require(msg1.time <= msg2.time)
+      queries.rawMessages.countBetweenExc(chat, msg1, msg2).transact(txctr).unsafeRunSync()
+    }((res, ms) => s"${res} messages counted in ${ms} ms [countMessagesBetween]")
   }
 
   def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
@@ -610,10 +625,12 @@ class H2ChatHistoryDao(
 
     object chats {
       private val colsFr     = fr"ds_uuid, id, name, type, img_path"
-      private val msgCountFr = fr"(SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id) AS msg_count"
 
       private def selectFr(dsUuid: UUID) =
-        fr"SELECT" ++ colsFr ++ fr"," ++ msgCountFr ++ fr"FROM chats c WHERE c.ds_uuid = $dsUuid"
+        (fr"SELECT" ++ colsFr ++ fr","
+          // m.ds_uuid = c.ds_uuid here serves so that H2 could discover an index
+          ++ fr"(SELECT COUNT(*) FROM messages m WHERE m.ds_uuid = c.ds_uuid AND m.chat_id = c.id) AS msg_count,"
+          ++ fr"FROM chats c WHERE c.ds_uuid = $dsUuid")
 
       private def hasMessagesFromUser(userId: Long) =
         (fr"EXISTS (SELECT m.from_id FROM messages m"
@@ -1045,6 +1062,8 @@ class H2ChatHistoryDao(
           RichText.Bold(text = r.text)
         case "italic" =>
           RichText.Italic(text = r.text)
+        case "underline" =>
+          RichText.Underline(text = r.text)
         case "strikethrough" =>
           RichText.Strikethrough(text = r.text)
         case "link" =>
@@ -1239,6 +1258,7 @@ class H2ChatHistoryDao(
           case el: RichText.Plain         => template.copy(elementType = "plain")
           case el: RichText.Bold          => template.copy(elementType = "bold")
           case el: RichText.Italic        => template.copy(elementType = "italic")
+          case el: RichText.Underline     => template.copy(elementType = "underline")
           case el: RichText.Strikethrough => template.copy(elementType = "strikethrough")
           case el: RichText.Link =>
             template.copy(
@@ -1384,6 +1404,10 @@ class H2ChatHistoryDao(
         case f2                 => f2.isChildOf(parent)
       }
     }
+  }
+
+  private def logPerformance[R](cb: => R)(msg: (R, Long) => String): R = {
+    StopWatch.measureAndCall(cb)((res, ms) => if (ms > 50) log.debug(msg(res, ms)))
   }
 }
 
