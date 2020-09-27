@@ -90,10 +90,12 @@ object SwingUtils extends Logging {
     }
 
   def checkEdt() = {
-    require(EventQueue.isDispatchThread, "Should be called from EDT! " + {
-      log.error("Should be called from EDT!", new IllegalArgumentException("Should be called from EDT!"))
-      ""
-    })
+    require(
+      EventQueue.isDispatchThread, {
+        log.error("Should be called from EDT!", new IllegalArgumentException("Should be called from EDT!"))
+        "Should be called from EDT! "
+      }
+    )
   }
 
   /** Execute a code block on EDT, returning the result */

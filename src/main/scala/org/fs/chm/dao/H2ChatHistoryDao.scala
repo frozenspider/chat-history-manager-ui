@@ -146,6 +146,10 @@ class H2ChatHistoryDao(
     }((res, ms) => s"${res} messages counted in ${ms} ms [countMessagesBetween]")
   }
 
+  def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
+    ???
+  }
+
   override def messageOption(chat: Chat, id: Message.SourceId): Option[Message] = {
     queries.rawMessages.selectOptionBySourceId(chat, id).transact(txctr).unsafeRunSync().map(Raws.toMessage)
   }

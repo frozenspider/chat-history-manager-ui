@@ -41,6 +41,7 @@ libraryDependencies ++= Seq(
   "ch.qos.logback"                %  "logback-classic"          % "1.1.2",
   // UI
   "org.scala-lang.modules"        %% "scala-swing"              % "2.1.1",
+  "org.jdatepicker"               %  "jdatepicker"              % "1.3.4",
   // Audio
   "org.gagravarr"                 %  "vorbis-java-core"         % "0.8",
   "org.gagravarr"                 %  "vorbis-java-tika"         % "0.8",
@@ -53,7 +54,7 @@ libraryDependencies ++= Seq(
   "com.github.frozenspider"       %% "fs-common-utils"          % "0.1.3",
   "commons-codec"                 %  "commons-codec"            % "1.13",
   "org.apache.commons"            %  "commons-lang3"            % "3.9",
-  "com.github.nscala-time"        %% "nscala-time"              % "2.16.0",
+  "com.github.nscala-time"        %% "nscala-time"              % "2.24.0",
   // Database
   "org.tpolecat"                  %% "doobie-core"              % "0.8.8",
   "org.tpolecat"                  %% "doobie-h2"                % "0.8.8",

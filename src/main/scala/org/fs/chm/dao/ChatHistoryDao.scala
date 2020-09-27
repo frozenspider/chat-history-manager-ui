@@ -83,6 +83,9 @@ trait ChatHistoryDao extends AutoCloseable {
    */
   def countMessagesBetween(chat: Chat, msg1: Message, msg2: Message): Int
 
+  /** Returns N messages before and N at-or-after the given date */
+  def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message])
+
   def messageOption(chat: Chat, id: Message.SourceId): Option[Message]
 
   def messageOptionByInternalId(chat: Chat, id: Message.InternalId): Option[Message]
