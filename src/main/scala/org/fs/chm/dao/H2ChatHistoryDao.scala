@@ -687,7 +687,6 @@ class H2ChatHistoryDao(
           chatId: Long,
           msg: Message,
       ): ConnectionIO[Unit] = {
-        msg.sourceIdOption foreach (id => require(id > 0, "Source IDs should be positive!"))
         val (rm, rcOption, rrtEls) = Raws.fromMessage(dsUuid, dsRoot, chatId, msg)
 
         for {
