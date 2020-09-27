@@ -42,6 +42,10 @@ trait ChatHistoryDao extends AutoCloseable {
    */
   def interlocutors(chat: Chat): Seq[User]
 
+  //
+  // Messages
+  //
+
   /** Return N messages after skipping first M of them. Trivial pagination in a nutshell. */
   def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message]
 
@@ -86,9 +90,25 @@ trait ChatHistoryDao extends AutoCloseable {
   /** Returns N messages before and N at-or-after the given date */
   def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message])
 
+  def messagesAround(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message]
+
   def messageOption(chat: Chat, id: Message.SourceId): Option[Message]
 
   def messageOptionByInternalId(chat: Chat, id: Message.InternalId): Option[Message]
+
+  //
+  // Search
+  //
+
+  /**
+   * Find all messages containing text, either as exact string or as a pattern.
+   * Messages should be historically ordered.
+   */
+  def search(chat: Chat, text: String, exact: Boolean): IndexedSeq[Message]
+
+  //
+  // Other
+  //
 
   def isMutable: Boolean = this.isInstanceOf[MutableChatHistoryDao]
 
@@ -568,6 +588,33 @@ object Message {
         override def withInternalId(internalId: Message.InternalId): MigrateTo = copy(internalId = internalId)
 
         override def files: Set[JFile] = Set.empty
+      }
+    }
+  }
+
+  /** If message dates and plain strings are equal, we consider this enough */
+  implicit val Ordering = new Ordering[Message] {
+    override def compare(x: Message, y: Message): Int = {
+      (x, y) match {
+        case _ if x.time != y.time =>
+          x.time compareTo y.time
+        case _ if x.sourceIdOption.isDefined && y.sourceIdOption.isDefined =>
+          x.sourceIdOption.get compareTo y.sourceIdOption.get
+        case _ if x.plainSearchableString == y.plainSearchableString =>
+          0
+        case _ =>
+          throw new IllegalStateException(s"Cannot compare messages $x and $y!")
+      }
+    }
+  }
+
+  implicit val OptionOrdering = new Ordering[Option[Message]] {
+    override def compare(xo: Option[Message], yo: Option[Message]): Int = {
+      (xo, yo) match {
+        case (None, None)       => 0
+        case (None, _)          => 1
+        case (_, None)          => -1
+        case (Some(x), Some(y)) => Ordering.compare(x, y)
       }
     }
   }

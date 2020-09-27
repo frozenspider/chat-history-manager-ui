@@ -146,7 +146,11 @@ class H2ChatHistoryDao(
     }((res, ms) => s"${res} messages counted in ${ms} ms [countMessagesBetween]")
   }
 
-  def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
+  override def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
+    ???
+  }
+
+  override def messagesAround(chat: Chat, msg: Message,limit: Int): IndexedSeq[Message] = {
     ???
   }
 
@@ -156,6 +160,11 @@ class H2ChatHistoryDao(
 
   override def messageOptionByInternalId(chat: Chat, id: Message.InternalId): Option[Message] =
     queries.rawMessages.selectOption(chat, id).transact(txctr).unsafeRunSync().map(Raws.toMessage)
+
+
+  override def search(chat: Chat, text: String, exact: Boolean): IndexedSeq[Message] = {
+    ???
+  }
 
   def createTables(): Unit = {
     queries.createDdl.transact(txctr).unsafeRunSync()

@@ -282,33 +282,6 @@ class DatasetMerger(
   // Helpers
   //
 
-  /** If message dates and plain strings are equal, we consider this enough */
-  private val msgOrdering = new Ordering[Message] {
-    override def compare(x: Message, y: Message): Int = {
-      (x, y) match {
-        case _ if x.time != y.time =>
-          x.time compareTo y.time
-        case _ if x.sourceIdOption.isDefined && y.sourceIdOption.isDefined =>
-          x.sourceIdOption.get compareTo y.sourceIdOption.get
-        case _ if x.plainSearchableString == y.plainSearchableString =>
-          0
-        case _ =>
-          throw new IllegalStateException(s"Cannot compare messages $x and $y!")
-      }
-    }
-  }
-
-  private val msgOptionOrdering = new Ordering[Option[Message]] {
-    override def compare(xo: Option[Message], yo: Option[Message]): Int = {
-      (xo, yo) match {
-        case (None, None)       => 0
-        case (None, _)          => 1
-        case (_, None)          => -1
-        case (Some(x), Some(y)) => msgOrdering.compare(x, y)
-      }
-    }
-  }
-
   private type MsgIterationContext =
     ((Stream[TaggedMessage.M], Option[TaggedMessage.M]), (Stream[TaggedMessage.S], Option[TaggedMessage.S]))
 
@@ -319,7 +292,7 @@ class DatasetMerger(
     def prevSm:   Option[TaggedMessage.S] = cxt._2._2
 
     def cmpMasterSlave(): Int = {
-      msgOptionOrdering.compare(mmStream.headOption, smStream.headOption)
+      Message.OptionOrdering.compare(mmStream.headOption, smStream.headOption)
     }
 
     def advanceBoth(): MsgIterationContext = {

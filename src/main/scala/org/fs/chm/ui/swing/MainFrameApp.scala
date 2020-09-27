@@ -1,7 +1,7 @@
 package org.fs.chm.ui.swing
 
 import java.awt.Desktop
-import java.awt.event.AdjustmentEvent
+import java.awt.event._
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -10,10 +10,16 @@ import scala.annotation.tailrec
 import scala.collection.immutable.ListMap
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
+import scala.swing.BorderPanel.Position._
 import scala.swing._
+import scala.swing.event._
 
 import com.github.nscala_time.time.Imports._
 import javax.swing.SwingUtilities
+import javax.swing.JComponent
+import javax.swing.JPanel
+import javax.swing.KeyStroke
+import javax.swing.border.EmptyBorder
 import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
@@ -23,7 +29,6 @@ import org.fs.chm.loader._
 import org.fs.chm.loader.telegram._
 import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
-import org.fs.chm.ui.swing.general.SwingUtils
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.list.DaoDatasetSelectionCallbacks
 import org.fs.chm.ui.swing.list.DaoItem
@@ -59,7 +64,7 @@ class MainFrameApp //
 
   private var loadedDaos: ListMap[ChatHistoryDao, Map[Chat, ChatCache]] = ListMap.empty
 
-  private var currentChatOption:      Option[ChatWithDao] = None
+  private var currentContextOption:   Option[Context]    = None
   private var loadMessagesInProgress: AtomicBoolean       = new AtomicBoolean(false)
 
   private val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
@@ -73,6 +78,7 @@ class MainFrameApp //
    *  - reply-to (make clickable)
    *  - word-wrap and narrower width
    *  - search
+   *  - jump to date
    *  - better pictures rendering
    *  - emoji and fonts
    *  - fucked up merge layout
@@ -80,6 +86,7 @@ class MainFrameApp //
    *  - better tabs?
    *  - go to date
    *  - cache document view position
+   *  - better chat switching
    */
 
   val preloadResult: Future[_] = {
@@ -108,12 +115,17 @@ class MainFrameApp //
 
     layout(menuBar) = North
     layout(chatsOuterPanel) = West
-    layout(msgRenderer.component) = Center
+    layout(new BorderPanel {
+      layout(msgRenderer.component) = Center
+      layout(searchPanel) = South
+    }) = Center
     layout {
       new BorderPanel {
         layout(statusLabel) = West
       }
     } = South
+
+    addHotkey(peer, "search", InputEvent.CTRL_MASK, KeyEvent.VK_F, searchOpened())
   }
 
   lazy val (menuBar, dbEmbeddedMenu) = {
@@ -224,6 +236,38 @@ class MainFrameApp //
       case f: FillerComponent => // NOOP
     }
     changeClickableRecursive(chatsOuterPanel)
+  }
+
+  //
+  // Search
+  //
+
+  lazy val searchTextField = new TextField
+
+  lazy val searchPanel = new BorderPanel {
+    visible = false
+
+    val prevBtn  = new Button("Previous")
+    val nextBtn  = new Button("Next")
+    val closeBtn = new Button("Close")
+
+    layout(new BorderPanel {
+      layout(searchTextField) = Center
+      border = new EmptyBorder(5, 5, 5, 5)
+    }) = Center
+    layout(new FlowPanel(prevBtn, nextBtn, closeBtn)) = East
+
+    def closeClicked(): Unit = {
+      visible = false
+    }
+    listenTo(prevBtn, nextBtn, closeBtn)
+    reactions += {
+      case ButtonClicked(`prevBtn`)  => searchClicked(false)
+      case ButtonClicked(`nextBtn`)  => searchClicked(true)
+      case ButtonClicked(`closeBtn`) => closeClicked()
+    }
+    addHotkey(peer, "searchPrev", 0 /* mod */, KeyEvent.VK_ENTER, searchClicked(false))
+    addHotkey(peer, "searchClose", 0 /* mod */, KeyEvent.VK_ESCAPE, closeClicked())
   }
 
   //
@@ -544,7 +588,7 @@ class MainFrameApp //
   override def chatSelected(cwd: ChatWithDao): Unit = {
     checkEdt()
     MutationLock.synchronized {
-      currentChatOption = None
+      currentContextOption = None
       msgRenderer.renderPleaseWait()
       if (!loadedDaos(cwd.dao).contains(cwd.chat)) {
         updateCache(cwd.dao, cwd.chat, ChatCache(None, None))
@@ -553,7 +597,7 @@ class MainFrameApp //
     }
     Future {
       MutationLock.synchronized {
-        currentChatOption = Some(cwd)
+        currentContextOption = Some(Context(cwd))
         loadMessagesInProgress set true
       }
       // If the chat has been already rendered, restore previous document as-is
@@ -573,8 +617,8 @@ class MainFrameApp //
     checkEdt()
     freezeTheWorld("Navigating...")
     Future {
-      currentChatOption match {
-        case Some(cwd) =>
+      currentContextOption match {
+        case Some(Context(cwd)) =>
           val cache = loadedDaos(cwd.dao)(cwd.chat)
           cache.loadStatusOption match {
             case Some(ls) if ls.beginReached =>
@@ -598,8 +642,8 @@ class MainFrameApp //
     checkEdt()
     freezeTheWorld("Navigating...")
     Future {
-      currentChatOption match {
-        case Some(cwd) =>
+      currentContextOption match {
+        case Some(Context(cwd)) =>
           val cache = loadedDaos(cwd.dao)(cwd.chat)
           cache.loadStatusOption match {
             case Some(ls) if ls.endReached =>
@@ -624,8 +668,8 @@ class MainFrameApp //
     checkEdt()
     freezeTheWorld("Navigating...")
     Future {
-      currentChatOption match {
-        case Some(cwd) =>
+      currentContextOption match {
+        case Some(Context(cwd)) =>
           // TODO: Don't replace a document if currently cached document already contains message?
           loadMessagesInProgress set true
           loadDateMessagesAndUpdateCache(cwd, date)
@@ -638,6 +682,72 @@ class MainFrameApp //
       }
     }
   }
+
+  def searchOpened(): Unit = currentContextOption foreach { c =>
+    searchPanel.visible = true
+    searchTextField.requestFocus()
+  }
+
+  def searchClicked(forward: Boolean): Unit =
+    // Everything is done with a lock since we're constantly altering vars.
+    // This can possibly be optimized though.
+    MutationLock.synchronized {
+      import scala.collection.Searching._
+      val cxt = currentContextOption.get
+      val ChatWithDao(chat, dao) = cxt.cwd
+
+      try {
+        val text = searchTextField.text.trim
+
+        if (text.nonEmpty) {
+          // If search isn't performed yet, or if the text changed - reset the search
+          cxt.searchStateOption match {
+            case Some(s) if s.text == text => // NOOP
+            case _                         => cxt.searchStateOption = Some(SearchState(text))
+          }
+
+          val searchState = cxt.searchStateOption.get
+          if (searchState.resultsOption.isEmpty) {
+            searchState.resultsOption = Some(dao.search(chat, text, true))
+          }
+
+          val msgsFound = searchState.resultsOption.get
+          println(msgsFound.size)
+          if (msgsFound.isEmpty) {
+            // NOOP
+            println("Empty!")
+          } else {
+            val msgToShow = searchState.lastHighlightedMessageOption match {
+              case Some(msg) =>
+                val Found(idx) = msgsFound.search(msg)(MessagesOrdering)
+                val newIdx     = ((if (forward) idx + 1 else idx - 1) + msgsFound.length) % msgsFound.length
+                msgsFound(newIdx)
+              case _ =>
+                msgsFound.last
+            }
+            val loadStatus = loadedDaos(dao)(chat).loadStatusOption.get
+            val distance1  = dao.countMessagesBetween(chat, msgToShow, loadStatus.firstOption.get)
+            val distance2  = dao.countMessagesBetween(chat, msgToShow, loadStatus.lastOption.get)
+            //    if ((distance1 min distance2) < MsgBatchLoadSize) {
+            //      // TODO
+            //    }
+            val messages = dao.messagesAround(chat, msgToShow, MsgBatchLoadSize)
+            println(messages.size)
+            // TODO: Render
+            ???
+            searchState.lastHighlightedMessageOption = Some(msgToShow)
+          }
+        }
+      } catch {
+        case ex: Exception =>
+          cxt.searchStateOption = None
+          throw ex
+      }
+    }
+
+  //
+  // Additional logic
+  //
 
   def tryLoadPreviousMessages(): Unit = {
     log.debug("Trying to load previous messages")
@@ -674,10 +784,10 @@ class MainFrameApp //
       load: (ChatWithDao, LoadStatus) => (IndexedSeq[Message], LoadStatus),
       addToRender: (ChatWithDao, IndexedSeq[Message], LoadStatus) => MD
   ): Unit = {
-    currentChatOption match {
+    currentContextOption match {
       case _ if loadMessagesInProgress.get => log.debug("Loading messages: Already in progress")
       case None                            => log.debug("Loading messages: No chat selected")
-      case Some(cwd) =>
+      case Some(Context(cwd)) =>
         val cache      = loadedDaos(cwd.dao)(cwd.chat)
         val loadStatus = cache.loadStatusOption.get
         log.debug(s"Loading messages: loadStatus = ${loadStatus}")
@@ -780,7 +890,7 @@ class MainFrameApp //
 
           // Reload currently selected chat
           val chatItemToReload = for {
-            cwd  <- currentChatOption
+            cwd  <- currentContextOption map (_.cwd)
             item <- chatList.innerItems.find(i => i.chat.id == cwd.chat.id && i.chat.dsUuid == cwd.dsUuid)
           } yield item
 
@@ -797,12 +907,21 @@ class MainFrameApp //
         }
       } catch {
         case ex: Exception =>
-          SwingUtils.showError(ex.getMessage)
+          showError(ex.getMessage)
           Swing.onEDT {
             unfreezeTheWorld()
           }
       }
     }
+  }
+
+  def addHotkey(peer: JComponent, key: String, mod: Int, event: Int, f: => Unit): Unit = {
+    peer
+      .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+      .put(KeyStroke.getKeyStroke(event, mod), key)
+    peer.getActionMap.put(key, new javax.swing.AbstractAction {
+      def actionPerformed(arg: java.awt.event.ActionEvent): Unit = f
+    })
   }
 
   def updateCache(dao: ChatHistoryDao, chat: Chat, cache: ChatCache): Unit =
@@ -828,10 +947,10 @@ class MainFrameApp //
       ex match {
         case ex: IllegalArgumentException =>
           log.warn("Caught an exception:", ex)
-          SwingUtils.showWarning(ex.getMessage)
+          showWarning(ex.getMessage)
         case _ =>
           log.error("Caught an exception:", ex)
-          SwingUtils.showError(ex.getMessage)
+          showError(ex.getMessage)
       }
     }
 
@@ -843,6 +962,15 @@ class MainFrameApp //
           dao.chats(ds.uuid) map (c => new ChatListItem(ChatWithDao(c, dao), Some(chatSelGroup), Some(this)))
         }
       )
+
+  case class Context(cwd: ChatWithDao) {
+    var searchStateOption: Option[SearchState] = None
+  }
+
+  case class SearchState(text: String) {
+    var resultsOption:                Option[IndexedSeq[Message]] = None
+    var lastHighlightedMessageOption: Option[Message]             = None
+  }
 
   private case class ChatCache(
       msgDocOption: Option[MD],
@@ -925,6 +1053,15 @@ class MainFrameApp //
       val dstDao = h2.loadData(dir)
       dstDao.copyAllFrom(srcDao)
       dstDao
+    }
+  }
+
+  object MessagesOrdering extends Ordering[Message] {
+    override def compare(x: Message, y: Message): Int = {
+      x.time compare y.time match {
+        case 0       => x.internalId compare y.internalId
+        case nonZero => nonZero
+      }
     }
   }
 }

@@ -6,6 +6,7 @@ import java.util.UUID
 import scala.collection.immutable.ListMap
 
 import com.github.nscala_time.time.Imports._
+import org.apache.commons.lang3.StringUtils
 import org.fs.utility.Imports._
 
 /**
@@ -71,6 +72,10 @@ class EagerChatHistoryDao(
 
   override def interlocutors(chat: Chat): Seq[User] = interlocutorsMap(chat)
 
+  //
+  // Messages
+  //
+
   override def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
     val messages = chatsWithMessages(chat)
     val idx      = messages.lastIndexWhere(_.internalId <= msg.internalId)
@@ -124,6 +129,14 @@ class EagerChatHistoryDao(
     }
   }
 
+  override def messagesAround(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
+    val messages = chatsWithMessages(chat)
+    val idx      = messages.indexWhere(_.internalId == msg.internalId)
+    require(idx > -1, "Message not found, that's unexpected")
+    val upperBound = (idx - (limit / 2)) max 0
+    messages.slice(upperBound, upperBound + limit)
+  }
+
   override def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message] = {
     chatsWithMessages.get(chat) map (_.slice(offset, offset + limit)) getOrElse IndexedSeq.empty
   }
@@ -137,6 +150,20 @@ class EagerChatHistoryDao(
 
   override def messageOptionByInternalId(chat: Chat, id: Message.InternalId): Option[Message] =
     chatsWithMessages.get(chat) flatMap (_ find (_.internalId == id))
+
+  //
+  // Search
+  //
+
+  override def search(chat: Chat, text: String, exact: Boolean): IndexedSeq[Message] = {
+    require(exact, "Non-exact search not supported yet")
+    val messages = chatsWithMessages(chat)
+    messages.filter(m => StringUtils.containsIgnoreCase(m.plainSearchableString, text))
+  }
+
+  //
+  // Other
+  //
 
   override def toString: String = {
     Seq(
