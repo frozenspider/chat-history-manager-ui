@@ -25,7 +25,8 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
     //"TRACE_LEVEL_FILE=2",
     //"TRACE_LEVEL_SYSTEM_OUT=2",
     "COMPRESS=TRUE",
-    "DATABASE_TO_UPPER=false"
+    "DATABASE_TO_UPPER=false",
+    "DEFRAG_ALWAYS=true"
   )
   private val optionsString = options.mkString(";", ";", "")
 

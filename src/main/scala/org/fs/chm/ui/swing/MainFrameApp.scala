@@ -13,6 +13,7 @@ import scala.concurrent.Future
 import scala.swing._
 
 import com.github.nscala_time.time.Imports._
+import javax.swing.SwingUtilities
 import javax.swing.event.HyperlinkEvent
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao._
@@ -35,6 +36,7 @@ import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
 import org.fs.chm.ui.swing.user.UserDetailsMenuCallbacks
 import org.fs.chm.ui.swing.user.UserDetailsPane
 import org.fs.chm.ui.swing.webp.Webp
+import org.fs.chm.utility.EntityUtils
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.SimpleConfigAware
 import org.slf4s.Logging
@@ -189,16 +191,26 @@ class MainFrameApp //
     m
   }
 
+  def setStatus(statusMsg: String): Unit = {
+    log.info("Status: " + statusMsg)
+    if (SwingUtilities.isEventDispatchThread) {
+      statusLabel.text = statusMsg
+    } else {
+      Swing.onEDTWait {
+        statusLabel.text = statusMsg
+      }
+    }
+  }
   def freezeTheWorld(statusMsg: String): Unit = {
     checkEdt()
-    statusLabel.text = statusMsg
+    setStatus(statusMsg)
     menuBar.contents foreach (_.enabled = false)
     changeChatsClickable(false)
   }
 
   def unfreezeTheWorld(): Unit = {
     checkEdt()
-    statusLabel.text = " " // Empty string to prevent collapse
+    setStatus(" ") // Empty string to prevent collapse
     menuBar.contents foreach (_.enabled = true)
     changeChatsClickable(true)
   }
@@ -250,12 +262,21 @@ class MainFrameApp //
 
   def close(dao: ChatHistoryDao): Unit = {
     checkEdt()
-    MutationLock.synchronized {
-      loadedDaos = loadedDaos - dao
-      chatList.replaceWith(loadedDaos.keys.toSeq)
-      dao.close()
+    Future {
+      freezeTheWorld("Closing...")
+      Swing.onEDT {
+        try {
+          MutationLock.synchronized {
+            loadedDaos = loadedDaos - dao
+            chatList.replaceWith(loadedDaos.keys.toSeq)
+            dao.close()
+          }
+          daoListChanged()
+        } finally {
+          unfreezeTheWorld()
+        }
+      }
     }
-    daoListChanged()
   }
 
   def showSaveAsDialog(srcDao: ChatHistoryDao): Unit = {
@@ -323,6 +344,7 @@ class MainFrameApp //
   }
 
   def showSelectDatasetsToMergeDialog(): Unit = {
+    checkEdt()
     if (loadedDaos.isEmpty) {
       showWarning("Load a database first!")
     } else if (!loadedDaos.exists(_._1.isMutable)) {
@@ -363,19 +385,26 @@ class MainFrameApp //
     freezeTheWorld("Analyzing chat messages...")
     val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
     Future {
+      // TODO: Make async, with other chats merging working in the background while users makes the choice
       // Analyze
-      val analyzed = chatsToMerge.map(merger.analyzeChatHistoryMerge)
+      val analyzed = chatsToMerge.map { cmo =>
+        val chat = (cmo.slaveChatOption orElse cmo.masterChatOption).get
+        setStatus(s"Analyzing '${EntityUtils.getOrUnnamed(chat.nameOption)}' (${chat.msgCount} messages)...")
+        merger.analyzeChatHistoryMerge(cmo)
+      }
       val (resolved, cancelled) = analyzed.foldLeft((Seq.empty[ChatMergeOption], false)) {
         case ((res, stop), _) if stop =>
           (res, true)
         case ((res, _), (cmo @ ChatMergeOption.Combine(mc, sc, mismatches))) =>
+          setStatus(s"Combining '${EntityUtils.getOrUnnamed(sc.nameOption)}' (${sc.msgCount} messages)...")
           // Resolve mismatches
           if (mismatches.forall(_.isInstanceOf[MessagesMergeOption.Keep])) {
             // User has no choice - pass them as-is
             (res :+ cmo, false)
           } else {
-            val dialog =
+            val dialog = onEdtReturning {
               new SelectMergeMessagesDialog(masterDao, mc, slaveDao, sc, mismatches, htmlKit)
+            }
             dialog.visible = true
             dialog.selection
               .map(resolution => (res :+ (cmo.copy(messageMergeOptions = resolution)), false))
@@ -387,13 +416,11 @@ class MainFrameApp //
       if (cancelled) None else Some(resolved)
     } map { chatsMergeResolutionsOption: Option[Seq[ChatMergeOption]] =>
       // Merge
-      Swing.onEDTWait {
-        freezeTheWorld("Merging...")
-      }
+      setStatus("Merging...")
       chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
         MutationLock.synchronized {
           merger.merge(usersToMerge, chatsMergeResolutions)
-          Swing.onEDT {
+          Swing.onEDTWait {
             chatList.replaceWith(loadedDaos.keys.toSeq)
             chatsOuterPanel.revalidate()
             chatsOuterPanel.repaint()

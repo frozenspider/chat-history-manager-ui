@@ -36,6 +36,7 @@ class H2ChatHistoryDao(
 
   private var _interlocutorsCacheOption: Option[Map[UUID, Map[ChatId, Seq[User]]]] = None
   private var _backupsEnabled = true
+  private var _closed = false
 
   override def name: String = s"${dataPathRoot.getName} database"
 
@@ -410,9 +411,13 @@ class H2ChatHistoryDao(
     }
   }
 
-  override def close(): Unit = {
-    closeTransactor()
-  }
+  override def close(): Unit =
+    Lock.synchronized {
+      if (!_closed) {
+        _closed = true;
+        closeTransactor()
+      }
+    }
 
   override def isLoaded(dataPathRoot: File): Boolean = {
     dataPathRoot != null && this.dataPathRoot == dataPathRoot
@@ -691,7 +696,6 @@ class H2ChatHistoryDao(
           chatId: Long,
           msg: Message,
       ): ConnectionIO[Unit] = {
-        msg.sourceIdOption foreach (id => require(id > 0, "Source IDs should be positive!"))
         val (rm, rcOption, rrtEls) = Raws.fromMessage(dsUuid, dsRoot, chatId, msg)
 
         for {
@@ -995,17 +999,6 @@ class H2ChatHistoryDao(
             fromId         = rm.fromId,
             textOption     = textOption,
           )
-        case "service_edit_photo" =>
-          Message.Service.EditPhoto(
-            internalId     = rm.internalId,
-            sourceIdOption = rm.sourceIdOption,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            pathOption     = rm.pathOption map (_.toFile(rm.dsUuid)),
-            widthOption    = rm.widthOption,
-            heightOption   = rm.heightOption
-          )
         case "service_group_create" =>
           Message.Service.Group.Create(
             internalId     = rm.internalId,
@@ -1015,6 +1008,26 @@ class H2ChatHistoryDao(
             textOption     = textOption,
             title          = rm.titleOption.get,
             members        = rm.members
+          )
+        case "service_edit_title" =>
+          Message.Service.Group.EditTitle(
+            internalId     = rm.internalId,
+            sourceIdOption = rm.sourceIdOption,
+            time           = rm.time,
+            fromId         = rm.fromId,
+            textOption     = textOption,
+            title          = rm.titleOption.get
+          )
+        case "service_edit_photo" =>
+          Message.Service.Group.EditPhoto(
+            internalId     = rm.internalId,
+            sourceIdOption = rm.sourceIdOption,
+            time           = rm.time,
+            fromId         = rm.fromId,
+            textOption     = textOption,
+            pathOption     = rm.pathOption map (_.toFile(rm.dsUuid)),
+            widthOption    = rm.widthOption,
+            heightOption   = rm.heightOption
           )
         case "service_invite_group_members" =>
           Message.Service.Group.InviteMembers(
@@ -1209,18 +1222,23 @@ class H2ChatHistoryDao(
           template.copy(
             messageType = "service_clear_history",
           ) -> None
-        case msg: Message.Service.EditPhoto =>
-          template.copy(
-            messageType  = "service_edit_photo",
-            pathOption   = msg.pathOption map (_.toRelativePath(dsRoot)),
-            widthOption  = msg.widthOption,
-            heightOption = msg.heightOption
-          ) -> None
         case msg: Message.Service.Group.Create =>
           template.copy(
             messageType = "service_group_create",
             titleOption = Some(msg.title),
             members     = msg.members
+          ) -> None
+        case msg: Message.Service.Group.EditTitle =>
+          template.copy(
+            messageType = "service_edit_title",
+            titleOption = Some(msg.title)
+          ) -> None
+        case msg: Message.Service.Group.EditPhoto =>
+          template.copy(
+            messageType  = "service_edit_photo",
+            pathOption   = msg.pathOption map (_.toRelativePath(dsRoot)),
+            widthOption  = msg.widthOption,
+            heightOption = msg.heightOption
           ) -> None
         case msg: Message.Service.Group.InviteMembers =>
           template.copy(

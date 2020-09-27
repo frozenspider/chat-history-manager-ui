@@ -33,7 +33,10 @@ class SelectMergeChatsDialog(
 
   private lazy val models = new Models(masterDao.chats(masterDs.uuid), slaveDao.chats(slaveDs.uuid))
 
-  private lazy val table = new SelectMergesTable[ChatWithDao, ChatMergeOption](models)
+  private lazy val table = {
+    checkEdt()
+    new SelectMergesTable[ChatWithDao, ChatMergeOption](models)
+  }
 
   override protected lazy val dialogComponent: Component = {
     table.wrapInScrollpaneAndAdjustWidth()
@@ -160,9 +163,11 @@ object SelectMergeChatsDialog {
     val sDao           = createMultiChatDao(ds => for (i <- 2 to 6 by 2) yield createChat(ds.uuid, i, i.toString, 0))
     val (sDs, _, _, _) = getSimpleDaoEntities(sDao)
 
-    val dialog = new SelectMergeChatsDialog(mDao, mDs, sDao, sDs)
-    dialog.visible = true
-    dialog.peer.setLocationRelativeTo(null)
-    println(dialog.selection map (_.mkString("\n  ", "\n  ", "\n")))
+    Swing.onEDTWait {
+      val dialog = new SelectMergeChatsDialog(mDao, mDs, sDao, sDs)
+      dialog.visible = true
+      dialog.peer.setLocationRelativeTo(null)
+      println(dialog.selection map (_.mkString("\n  ", "\n  ", "\n")))
+    }
   }
 }

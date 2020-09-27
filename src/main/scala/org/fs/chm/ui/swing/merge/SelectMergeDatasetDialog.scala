@@ -27,8 +27,14 @@ class SelectMergeDatasetDialog(
   private lazy val daosWithDatasets        = daos map (dao => (dao, dao.datasets))
   private lazy val mutableDaosWithDatasets = daosWithDatasets filter (_._1.isMutable)
 
-  private lazy val masterTable = createTable("Base dataset", mutableDaosWithDatasets)
-  private lazy val slaveTable  = createTable("Dataset to be added to it", daosWithDatasets)
+  private lazy val masterTable = {
+    checkEdt()
+    createTable("Base dataset", mutableDaosWithDatasets)
+  }
+  private lazy val slaveTable  = {
+    checkEdt()
+    createTable("Dataset to be added to it", daosWithDatasets)
+  }
 
   private def createTable(title: String, data: Seq[(ChatHistoryDao, Seq[Dataset])]): Table = {
     val models = new MergeDatasetModels(title, data)

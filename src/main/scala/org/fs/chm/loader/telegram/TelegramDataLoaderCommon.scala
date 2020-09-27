@@ -99,8 +99,18 @@ trait TelegramDataLoaderCommon {
             fromId         = getCheckedField[Long](jv, "actor_id"),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
+        case "create_group" =>
+          Message.Service.Group.Create(
+            internalId     = Message.NoInternalId,
+            sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
+            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId         = getCheckedField[Long](jv, "actor_id"),
+            title          = getCheckedField[String](jv, "title"),
+            members        = getCheckedField[Seq[String]](jv, "members"),
+            textOption     = RichTextParser.parseRichTextOption(jv)
+          )
         case "edit_group_photo" =>
-          Message.Service.EditPhoto(
+          Message.Service.Group.EditPhoto(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
@@ -110,14 +120,13 @@ trait TelegramDataLoaderCommon {
             heightOption   = getFieldOpt[Int](jv, "height", false),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
-        case "create_group" =>
-          Message.Service.Group.Create(
+        case "edit_group_title" =>
+          Message.Service.Group.EditTitle(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getCheckedField[Long](jv, "actor_id"),
             title          = getCheckedField[String](jv, "title"),
-            members        = getCheckedField[Seq[String]](jv, "members"),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
         case "invite_members" =>
@@ -136,6 +145,17 @@ trait TelegramDataLoaderCommon {
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getCheckedField[Long](jv, "actor_id"),
             members        = getCheckedField[Seq[String]](jv, "members"),
+            textOption     = RichTextParser.parseRichTextOption(jv)
+          )
+        case "join_group_by_link" =>
+          // Maps into usual InviteMembers
+          tracker.markUsed("inviter")
+          Message.Service.Group.InviteMembers(
+            internalId     = Message.NoInternalId,
+            sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
+            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId         = getCheckedField[Long](jv, "actor_id"),
+            members        = Seq(getCheckedField[String](jv, "actor")),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
         case "migrate_from_group" =>
@@ -254,6 +274,10 @@ trait TelegramDataLoaderCommon {
           // No special treatment for bot_command
           require(values.keys == Set("type", "text"), s"Unexpected bot_command format: $jo")
           RichText.Plain(values("text").asInstanceOf[String])
+        case "bank_card" =>
+          // No special treatment for bank_card
+          require(values.keys == Set("type", "text"), s"Unexpected bank_card format: $jo")
+          RichText.Plain(values("text").asInstanceOf[String])
         case other =>
           throw new IllegalArgumentException(
             s"Don't know how to parse RichText element of type '${values("type")}' for ${jo.toString.take(500)}")
@@ -312,7 +336,7 @@ trait TelegramDataLoaderCommon {
     private def parseAnimation(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Animation = {
       Content.Animation(
         pathOption          = getFileOpt(jv, "file", true, rootFile),
-        thumbnailPathOption = getFileOpt(jv, "thumbnail", true, rootFile),
+        thumbnailPathOption = getFileOpt(jv, "thumbnail", false, rootFile),
         mimeTypeOption      = Some(getCheckedField[String](jv, "mime_type")),
         durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
         width               = getCheckedField[Int](jv, "width"),
