@@ -447,35 +447,6 @@ object Message {
       override def files: Set[JFile] = Set.empty
     }
 
-    case class EditPhoto(
-        internalId: InternalId,
-        sourceIdOption: Option[SourceId],
-        time: DateTime,
-        fromId: Long,
-        textOption: Option[RichText],
-        pathOption: Option[JFile],
-        widthOption: Option[Int],
-        heightOption: Option[Int]
-    ) extends Service {
-      override def withInternalId(internalId: Message.InternalId): EditPhoto = copy(internalId = internalId)
-
-      override def files: Set[JFile] = Set(pathOption).yieldDefined
-
-      override def =~=(that: Message) = that match {
-        case that: Message.Service.EditPhoto =>
-          (this.pathOption =~= that.pathOption) &&
-            (this.copy(
-              internalId = Message.NoInternalId,
-              pathOption = None
-            ) == that.copy(
-              internalId = Message.NoInternalId,
-              pathOption = None
-            ))
-        case _ =>
-          super.=~=(that)
-      }
-    }
-
     object Group {
       case class Create(
           internalId: InternalId,
@@ -492,6 +463,48 @@ object Message {
 
         override val plainSearchableString =
           (plainSearchableMsgString +: title +: members).mkString(" ").trim
+      }
+
+      case class EditTitle(
+          internalId: InternalId,
+          sourceIdOption: Option[SourceId],
+          time: DateTime,
+          fromId: Long,
+          textOption: Option[RichText],
+          title: String,
+      ) extends Service {
+        override def withInternalId(internalId: Message.InternalId): EditTitle = copy(internalId = internalId)
+
+        override def files: Set[JFile] = Set.empty
+      }
+
+      case class EditPhoto(
+          internalId: InternalId,
+          sourceIdOption: Option[SourceId],
+          time: DateTime,
+          fromId: Long,
+          textOption: Option[RichText],
+          pathOption: Option[JFile],
+          widthOption: Option[Int],
+          heightOption: Option[Int]
+      ) extends Service {
+        override def withInternalId(internalId: Message.InternalId): EditPhoto = copy(internalId = internalId)
+
+        override def files: Set[JFile] = Set(pathOption).yieldDefined
+
+        override def =~=(that: Message) = that match {
+          case that: Message.Service.Group.EditPhoto =>
+            (this.pathOption =~= that.pathOption) &&
+              (this.copy(
+                internalId = Message.NoInternalId,
+                pathOption = None
+              ) == that.copy(
+                internalId = Message.NoInternalId,
+                pathOption = None
+              ))
+          case _ =>
+            super.=~=(that)
+        }
       }
 
       case class InviteMembers(

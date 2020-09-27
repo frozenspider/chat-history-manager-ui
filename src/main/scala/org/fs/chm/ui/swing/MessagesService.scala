@@ -169,7 +169,8 @@ class MessagesService(htmlKit: HTMLEditorKit) {
         case sm: Message.Service.PinMessage        => "Pinned message" + renderSourceMessage(cc, sm.messageId)
         case sm: Message.Service.MembershipChange  => renderMembershipChangeMessage(cc, sm)
         case sm: Message.Service.ClearHistory      => s"History cleared"
-        case sm: Message.Service.EditPhoto         => renderEditPhotoMessage(sm, cc.dao, cc.dsUuid)
+        case sm: Message.Service.Group.EditTitle   => renderEditTitleMessage(sm, cc.dao, cc.dsUuid)
+        case sm: Message.Service.Group.EditPhoto   => renderEditPhotoMessage(sm, cc.dao, cc.dsUuid)
         case sm: Message.Service.Group.MigrateFrom => renderMigratedFrom(sm)
         case sm: Message.Service.Group.MigrateTo   => "Migrated to another group"
       }
@@ -184,7 +185,11 @@ class MessagesService(htmlKit: HTMLEditorKit) {
       ).yieldDefined.mkString(" ")
     }
 
-    private def renderEditPhotoMessage(sm: Service.EditPhoto, dao: ChatHistoryDao, dsUuid: UUID) = {
+    private def renderEditTitleMessage(sm: Service.Group.EditTitle, dao: ChatHistoryDao, dsUuid: UUID) = {
+      s"Changed group title to <b>${sm.title}</b>"
+    }
+
+    private def renderEditPhotoMessage(sm: Service.Group.EditPhoto, dao: ChatHistoryDao, dsUuid: UUID) = {
       val image = renderImage(sm.pathOption, sm.widthOption, sm.heightOption, None, "Photo", dao, dsUuid)
       s"Changed group photo<br>$image"
     }

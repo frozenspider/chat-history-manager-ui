@@ -96,6 +96,16 @@ object SwingUtils extends Logging {
     })
   }
 
+  /** Execute a code block on EDT, returning the result */
+  def onEdtReturning[A](cb: => A) = {
+    require(!EventQueue.isDispatchThread, "Shouldn't be called from EDT!")
+    val holder = new ResultHolder[A]
+    Swing.onEDTWait {
+      holder.res = cb
+    }
+    holder.res
+  }
+
   object Colors {
 
     /** Light green */
@@ -181,5 +191,10 @@ object SwingUtils extends Logging {
     def insert(i: Int, item: Component): Unit = {
       m.contents.insert(i, item)
     }
+  }
+
+  /** To work around having to initialize local vars */
+  private class ResultHolder[A] {
+    var res: A = _
   }
 }

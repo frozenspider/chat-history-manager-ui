@@ -46,7 +46,10 @@ class SelectMergeMessagesDialog(
 
   private lazy val models = new Models
 
-  private lazy val table = new SelectMergesTable[RenderableMismatch, MessagesMergeOption](models)
+  private lazy val table = {
+    checkEdt()
+    new SelectMergesTable[RenderableMismatch, MessagesMergeOption](models)
+  }
 
   override protected lazy val dialogComponent: Component = {
     table.wrapInScrollpaneAndAdjustWidth()
@@ -90,8 +93,9 @@ class SelectMergeMessagesDialog(
 
     override val cellsAreInteractive = true
 
-    override val renderer = (renderable: ListItemRenderable[RenderableMismatch]) => {
+    override lazy val renderer = (renderable: ListItemRenderable[RenderableMismatch]) => {
       // FIXME: Figure out what to do with a shitty layout!
+      checkEdt()
       val msgAreaContainer = new MessagesAreaContainer(htmlKit)
 //      msgAreaContainer.textPane.peer.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.box(true))
       val msgDoc = msgService.createStubDoc
@@ -127,7 +131,6 @@ class SelectMergeMessagesDialog(
 
       // If we don't call it here, we might get an NPE later, under some unknown and rare conditions. Magic!
       res.peer.getPreferredSize
-
       res
     }
 
@@ -311,9 +314,11 @@ private object SelectMergeMessagesDialog {
       ),
     )
 
-    val dialog = new SelectMergeMessagesDialog(mDao, mChat, sDao, sChat, mismatches, htmlKit, msgService)
-    dialog.visible = true
-    dialog.peer.setLocationRelativeTo(null)
-    println(dialog.selection map (_.mkString("\n  ", "\n  ", "\n")))
+    Swing.onEDTWait {
+      val dialog = new SelectMergeMessagesDialog(mDao, mChat, sDao, sChat, mismatches, htmlKit, msgService)
+      dialog.visible = true
+      dialog.peer.setLocationRelativeTo(null)
+      println(dialog.selection map (_.mkString("\n  ", "\n  ", "\n")))
+    }
   }
 }
