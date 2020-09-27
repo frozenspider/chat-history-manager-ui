@@ -36,6 +36,7 @@ class H2ChatHistoryDao(
 
   private var _interlocutorsCacheOption: Option[Map[UUID, Map[ChatId, Seq[User]]]] = None
   private var _backupsEnabled = true
+  private var _closed = false
 
   override def name: String = s"${dataPathRoot.getName} database"
 
@@ -406,9 +407,13 @@ class H2ChatHistoryDao(
     }
   }
 
-  override def close(): Unit = {
-    closeTransactor()
-  }
+  override def close(): Unit =
+    Lock.synchronized {
+      if (!_closed) {
+        _closed = true;
+        closeTransactor()
+      }
+    }
 
   override def isLoaded(dataPathRoot: File): Boolean = {
     dataPathRoot != null && this.dataPathRoot == dataPathRoot

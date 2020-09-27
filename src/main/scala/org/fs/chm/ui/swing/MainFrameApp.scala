@@ -246,12 +246,21 @@ class MainFrameApp //
 
   def close(dao: ChatHistoryDao): Unit = {
     checkEdt()
-    MutationLock.synchronized {
-      loadedDaos = loadedDaos - dao
-      chatList.replaceWith(loadedDaos.keys.toSeq)
-      dao.close()
+    Future {
+      freezeTheWorld("Closing...")
+      Swing.onEDT {
+        try {
+          MutationLock.synchronized {
+            loadedDaos = loadedDaos - dao
+            chatList.replaceWith(loadedDaos.keys.toSeq)
+            dao.close()
+          }
+          daoListChanged()
+        } finally {
+          unfreezeTheWorld()
+        }
+      }
     }
-    daoListChanged()
   }
 
   def showSaveAsDialog(srcDao: ChatHistoryDao): Unit = {
@@ -395,7 +404,7 @@ class MainFrameApp //
       chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
         MutationLock.synchronized {
           merger.merge(usersToMerge, chatsMergeResolutions)
-          Swing.onEDT {
+          Swing.onEDTWait {
             chatList.replaceWith(loadedDaos.keys.toSeq)
             chatsOuterPanel.revalidate()
             chatsOuterPanel.repaint()
