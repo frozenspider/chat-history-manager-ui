@@ -641,7 +641,6 @@ class MainFrameApp //
   }
 
   override def navigateToDate(date: DateTime): Unit = {
-    // FIXME: This doesn't work!
     checkEdt()
     freezeTheWorld("Navigating...")
     Future {

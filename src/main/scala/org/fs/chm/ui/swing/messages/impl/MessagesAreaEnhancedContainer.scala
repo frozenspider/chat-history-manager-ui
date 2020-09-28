@@ -24,7 +24,7 @@ class MessagesAreaEnhancedContainer(
     callbacks: MessageNavigationCallbacks
 ) extends MessagesAreaContainer(htmlKit) {
   private lazy val goToBeginBtn = new Button("Beginning")
-  private lazy val goToDateBtn  = new Button("Date (NYI)")
+  private lazy val goToDateBtn  = new Button("Date")
   private lazy val goToEndBtn   = new Button("End")
 
   private val dtf = DateTimeFormat.forPattern("yyyy-MM-dd")
@@ -33,7 +33,6 @@ class MessagesAreaEnhancedContainer(
   private var shownDate: DateTime = DateTime.now()
 
   lazy val navPanel = new GridBagPanel {
-    goToDateBtn.enabled = false // FIXME: Change after this is fixed
     val dateBtns        = Seq(goToBeginBtn, goToDateBtn, goToEndBtn)
     val maxDateBtnWidth = dateBtns.map(_.preferredWidth).max
     dateBtns.foreach(_.preferredWidth = maxDateBtnWidth)
