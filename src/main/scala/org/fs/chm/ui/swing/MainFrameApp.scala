@@ -8,8 +8,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.annotation.tailrec
 import scala.collection.immutable.ListMap
+import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
+import scala.concurrent.Promise
 import scala.swing._
 
 import com.github.nscala_time.time.Imports._
@@ -36,6 +38,7 @@ import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
 import org.fs.chm.ui.swing.user.UserDetailsMenuCallbacks
 import org.fs.chm.ui.swing.user.UserDetailsPane
 import org.fs.chm.ui.swing.webp.Webp
+import org.fs.chm.utility.CliUtils
 import org.fs.chm.utility.EntityUtils
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.SimpleConfigAware
@@ -56,6 +59,8 @@ class MainFrameApp //
   private val MutationLock           = new Object
   private val MsgBatchLoadSize       = 100
   private val MinScrollToTriggerLoad = 1000
+
+  private var initialFileOption: Option[File] = None
 
   private var loadedDaos: ListMap[ChatHistoryDao, Map[Chat, ChatCache]] = ListMap.empty
 
@@ -97,13 +102,19 @@ class MainFrameApp //
     size     = new Dimension(1000, 700)
     peer.setLocationRelativeTo(null)
 
-    // Install EDT exception handler
     Swing.onEDTWait {
+      // Install EDT exception handler
       Thread.currentThread.setUncaughtExceptionHandler(handleException)
+
+      if (initialFileOption.isDefined) {
+        freezeTheWorld("")
+      }
     }
+
+    initialFileOption map (f => Future { Swing.onEDT { openDb(f) } })
   }
 
-  val ui = new BorderPanel {
+  lazy val ui = new BorderPanel {
     import scala.swing.BorderPanel.Position._
 
     layout(menuBar) = North
@@ -120,7 +131,7 @@ class MainFrameApp //
     val separatorBeforeDb = new Separator()
     val separatorAfterDb  = new Separator()
     val dbMenu = new Menu("Database") {
-      contents += menuItem("Open")(showOpenDialog())
+      contents += menuItem("Open")(showOpenDbDialog())
       contents += separatorBeforeDb
       contents += separatorAfterDb
     }
@@ -201,6 +212,7 @@ class MainFrameApp //
       }
     }
   }
+
   def freezeTheWorld(statusMsg: String): Unit = {
     checkEdt()
     setStatus(statusMsg)
@@ -230,8 +242,7 @@ class MainFrameApp //
   // Events
   //
 
-  def showOpenDialog(): Unit = {
-    // TODO: Show errors
+  def showOpenDbDialog(): Unit = {
     val chooser = DataLoaders.openChooser
     for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
       val lastFile = new File(lastFileString)
@@ -243,27 +254,37 @@ class MainFrameApp //
       case FileChooser.Result.Error  => // Mostly means that dialog was dismissed, also NOOP
       case FileChooser.Result.Approve if loadedDaos.keys.exists(_ isLoaded chooser.selectedFile.getParentFile) =>
         showWarning(s"File '${chooser.selectedFile}' is already loaded")
-      case FileChooser.Result.Approve => {
-        freezeTheWorld("Loading data...")
-        config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
-        Future { // To release UI lock
-          Swing.onEDT {
-            try {
-              val dao = DataLoaders.load(chooser.selectedFile)
-              loadDaoInEDT(dao)
-            } finally {
-              unfreezeTheWorld()
-            }
+      case FileChooser.Result.Approve =>
+        openDb(chooser.selectedFile)
+    }
+  }
+
+  def openDb(file: File): Unit = {
+    checkEdt()
+    freezeTheWorld("Loading data...")
+    config.update(DataLoaders.LastFileKey, file.getAbsolutePath)
+    Future { // To release UI lock
+      try {
+        val dao = DataLoaders.load(file)
+        Swing.onEDT {
+          try {
+            loadDaoInEDT(dao)
+          } finally {
+            unfreezeTheWorld()
           }
         }
+      } catch {
+        case th: Throwable =>
+          Swing.onEDT { unfreezeTheWorld() }
+          showError(th.getMessage)
       }
     }
   }
 
-  def close(dao: ChatHistoryDao): Unit = {
+  def closeDb(dao: ChatHistoryDao): Unit = {
     checkEdt()
+    freezeTheWorld("Closing...")
     Future {
-      freezeTheWorld("Closing...")
       Swing.onEDT {
         try {
           MutationLock.synchronized {
@@ -279,7 +300,7 @@ class MainFrameApp //
     }
   }
 
-  def showSaveAsDialog(srcDao: ChatHistoryDao): Unit = {
+  def showSaveDbAsDialog(srcDao: ChatHistoryDao): Unit = {
     val chooser = DataLoaders.saveAsChooser
     for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
       val lastFile = new File(lastFileString)
@@ -458,8 +479,8 @@ class MainFrameApp //
     dbEmbeddedMenu.clear()
     for (dao <- loadedDaos.keys) {
       val daoMenu = new Menu(dao.name) {
-        contents += menuItem("Save As...")(showSaveAsDialog(dao))
-        contents += menuItem("Close")(close(dao))
+        contents += menuItem("Save As...")(showSaveDbAsDialog(dao))
+        contents += menuItem("Close")(closeDb(dao))
       }
       dbEmbeddedMenu.append(daoMenu)
     }
@@ -816,6 +837,19 @@ class MainFrameApp //
         loadedDaos = loadedDaos + (dao -> (loadedDaos(dao) - chat))
       }
     }
+
+  //
+  // Utility and classes
+  //
+
+  override def startup(args: Array[String]): Unit = {
+    try {
+      initialFileOption = CliUtils.parse(args, "db", true).map(new File(_))
+    } catch {
+      case ex: Throwable => handleException(ex)
+    }
+    super.startup(args)
+  }
 
   private def handleException(thread: Thread, ex: Throwable): Unit =
     handleException(ex)
