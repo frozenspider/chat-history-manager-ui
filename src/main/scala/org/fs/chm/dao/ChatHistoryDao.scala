@@ -325,6 +325,12 @@ sealed trait Message extends Searchable {
    */
   def withInternalId(internalId: Message.InternalId): Message
 
+  /**
+   * Should return self type, but F-bound polymorphism turns type inference into pain - so no type-level enforcement, unfortunately.
+   * Just make sure subclasses have correct return type.
+   */
+  def withFromId(fromId: Long): Message
+
   /** All file paths, which might or might not exist */
   def files: Set[JFile]
 
@@ -365,6 +371,8 @@ object Message {
       contentOption: Option[Content]
   ) extends Message {
     override def withInternalId(internalId: Message.InternalId): Regular = copy(internalId = internalId)
+
+    override def withFromId(fromId: Long): Regular = copy(fromId = fromId)
 
     override def files: Set[JFile] = {
       (contentOption match {
@@ -422,6 +430,8 @@ object Message {
     ) extends Service {
       override def withInternalId(internalId: Message.InternalId): PhoneCall = copy(internalId = internalId)
 
+      override def withFromId(fromId: Long): PhoneCall = copy(fromId = fromId)
+
       override def files: Set[JFile] = Set.empty
     }
 
@@ -435,6 +445,8 @@ object Message {
     ) extends Service {
       override def withInternalId(internalId: Message.InternalId): PinMessage = copy(internalId = internalId)
 
+      override def withFromId(fromId: Long): PinMessage = copy(fromId = fromId)
+
       override def files: Set[JFile] = Set.empty
     }
 
@@ -447,6 +459,8 @@ object Message {
         textOption: Option[RichText]
     ) extends Service {
       override def withInternalId(internalId: Message.InternalId): ClearHistory = copy(internalId = internalId)
+
+      override def withFromId(fromId: Long): ClearHistory = copy(fromId = fromId)
 
       override def files: Set[JFile] = Set.empty
     }
@@ -462,6 +476,8 @@ object Message {
           members: Seq[String]
       ) extends MembershipChange {
         override def withInternalId(internalId: Message.InternalId): Create = copy(internalId = internalId)
+
+        override def withFromId(fromId: Long): Create = copy(fromId = fromId)
 
         override def files: Set[JFile] = Set.empty
 
@@ -479,6 +495,8 @@ object Message {
       ) extends Service {
         override def withInternalId(internalId: Message.InternalId): EditTitle = copy(internalId = internalId)
 
+        override def withFromId(fromId: Long): EditTitle = copy(fromId = fromId)
+
         override def files: Set[JFile] = Set.empty
       }
 
@@ -493,6 +511,8 @@ object Message {
           heightOption: Option[Int]
       ) extends Service {
         override def withInternalId(internalId: Message.InternalId): EditPhoto = copy(internalId = internalId)
+
+        override def withFromId(fromId: Long): EditPhoto = copy(fromId = fromId)
 
         override def files: Set[JFile] = Set(pathOption).yieldDefined
 
@@ -521,6 +541,8 @@ object Message {
       ) extends MembershipChange {
         override def withInternalId(internalId: Message.InternalId): InviteMembers = copy(internalId = internalId)
 
+        override def withFromId(fromId: Long): InviteMembers = copy(fromId = fromId)
+
         override def files: Set[JFile] = Set.empty
 
         override val plainSearchableString =
@@ -536,6 +558,8 @@ object Message {
           members: Seq[String]
       ) extends MembershipChange {
         override def withInternalId(internalId: Message.InternalId): RemoveMembers = copy(internalId = internalId)
+
+        override def withFromId(fromId: Long): RemoveMembers = copy(fromId = fromId)
 
         override def files: Set[JFile] = Set.empty
 
@@ -553,6 +577,8 @@ object Message {
       ) extends Service {
         override def withInternalId(internalId: Message.InternalId): MigrateFrom = copy(internalId = internalId)
 
+        override def withFromId(fromId: Long): MigrateFrom = copy(fromId = fromId)
+
         override def files: Set[JFile] = Set.empty
 
         override val plainSearchableString =
@@ -567,6 +593,8 @@ object Message {
           textOption: Option[RichText]
       ) extends Service {
         override def withInternalId(internalId: Message.InternalId): MigrateTo = copy(internalId = internalId)
+
+        override def withFromId(fromId: Long): MigrateTo = copy(fromId = fromId)
 
         override def files: Set[JFile] = Set.empty
       }

@@ -65,7 +65,7 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("bio") // Ignoring bio
     tracker.ensuringUsage(jv) {
-      User(
+      normalize(User(
         dsUuid             = dsUuid,
         id                 = getCheckedField[Long](jv, "user_id"),
         firstNameOption    = getStringOpt(jv, "first_name", true),
@@ -73,14 +73,14 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
         usernameOption     = getStringOpt(jv, "username", true),
         phoneNumberOption  = getStringOpt(jv, "phone_number", true),
         lastSeenTimeOption = None
-      )
+      ))
     }
   }
 
   private def parseUser(jv: JValue, dsUuid: UUID): User = {
     implicit val tracker = new FieldUsageTracker
     tracker.ensuringUsage(jv) {
-      User(
+      normalize(User(
         dsUuid             = dsUuid,
         id                 = getCheckedField[Long](jv, "user_id"),
         firstNameOption    = getStringOpt(jv, "first_name", true),
@@ -88,26 +88,7 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
         usernameOption     = None,
         phoneNumberOption  = getStringOpt(jv, "phone_number", true),
         lastSeenTimeOption = stringToDateTimeOpt(getCheckedField[String](jv, "date"))
-      )
-    }
-  }
-
-  private def parseShortUserFromMessage(jv: JValue): ShortUser = {
-    implicit val dummyTracker = new FieldUsageTracker
-    getCheckedField[String](jv, "type") match {
-      case "message" =>
-        ShortUser(
-          id             = getCheckedField[Long](jv, "from_id"),
-          fullNameOption = getStringOpt(jv, "from", true)
-        )
-      case "service" =>
-        ShortUser(
-          id             = getCheckedField[Long](jv, "actor_id"),
-          fullNameOption = getStringOpt(jv, "actor", true)
-        )
-      case other =>
-        throw new IllegalArgumentException(
-          s"Don't know how to parse message of type '$other' for ${jv.toString.take(500)}")
+      ))
     }
   }
 
