@@ -18,7 +18,8 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
   }
 
   /** Path should point to the folder with `result.json` and other stuff */
-  override protected def loadDataInner(rootFile: File): EagerChatHistoryDao = {
+  override protected def loadDataInner(rootFile: File, createNew: Boolean): EagerChatHistoryDao = {
+    require(!createNew, "Creating new dataset is not supported for Telegram (as it makes no sense)")
     implicit val dummyTracker = new FieldUsageTracker
     val resultJsonFile: File = new File(rootFile, "result.json").getAbsoluteFile
     if (!resultJsonFile.exists()) {
@@ -39,7 +40,9 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
         message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
       } yield MessageParser.parseMessageOption(message, rootFile)).yieldDefined
 
-      val chatRes = parseChat(chat, dataset.uuid, messagesRes.size)
+      val memberIds = (myself.id +: messagesRes.toStream.map(_.fromId)).toSet
+
+      val chatRes = parseChat(chat, dataset.uuid, memberIds, messagesRes.size)
       (chatRes, messagesRes)
     }
     val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)

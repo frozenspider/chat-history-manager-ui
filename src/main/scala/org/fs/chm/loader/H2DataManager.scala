@@ -37,7 +37,7 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
       StopWatch.measureAndCall {
         val dao = daoFromUrlPath("jdbc:h2:mem:preload1", new File("."))
         try {
-          dao.createTables()
+          dao.preload()
         } finally {
           dao.close()
         }
@@ -56,20 +56,14 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
     Seq(f1, f2)
   }
 
-  def create(path: File): Unit = {
-    val dataDbFile: File = new File(path, dataFileName)
-    if (dataDbFile.exists()) throw new FileNotFoundException(s"$dataFileName already exists in " + path.getAbsolutePath)
-    val dao = daoFromFile(dataDbFile)
-    dao.createTables()
-    dao.close()
-    val flyway = Flyway.configure.dataSource(dbUrl(dataDbFile), "sa", "").load
-    flyway.baseline()
-  }
-
   /** Path should point to the folder with `data.h2.db` and other stuff */
-  override protected def loadDataInner(path: File): H2ChatHistoryDao = {
+  override protected def loadDataInner(path: File, createNew: Boolean): H2ChatHistoryDao = {
     val dataDbFile: File = new File(path, dataFileName)
-    if (!dataDbFile.exists()) throw new FileNotFoundException(s"$dataFileName not found in " + path.getAbsolutePath)
+    if (createNew && dataDbFile.exists())
+      throw new FileNotFoundException(s"$dataFileName already exists in " + path.getAbsolutePath)
+    if (!createNew && !dataDbFile.exists())
+      throw new FileNotFoundException(s"$dataFileName not found in " + path.getAbsolutePath)
+    // This will create a new DB if data.mv.db does not exist
     val flyway = Flyway.configure.dataSource(dbUrl(dataDbFile), "sa", "").load
     flyway.migrate()
     daoFromFile(dataDbFile)

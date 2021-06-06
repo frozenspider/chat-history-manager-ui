@@ -402,7 +402,7 @@ trait TelegramDataLoaderCommon {
     }
   }
 
-  protected def parseChat(jv: JValue, dsUuid: UUID, msgCount: Int): Chat = {
+  protected def parseChat(jv: JValue, dsUuid: UUID, memberIds: Set[Long], msgCount: Int): Chat = {
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("messages")
     tracker.ensuringUsage(jv) {
@@ -417,6 +417,7 @@ trait TelegramDataLoaderCommon {
           case s                    => throw new IllegalArgumentException(s"Illegal format, unknown chat type '$s'")
         },
         imgPathOption = None,
+        memberIds     = memberIds,
         msgCount      = msgCount
       )
     }

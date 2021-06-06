@@ -25,7 +25,8 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
   }
 
   /** Path should point to the folder with `result.json` and other stuff */
-  override protected def loadDataInner(rootFile: File): EagerChatHistoryDao = {
+  override protected def loadDataInner(rootFile: File, createNew: Boolean): EagerChatHistoryDao = {
+    require(!createNew, "Creating new dataset is not supported for Telegram (as it makes no sense)")
     implicit val dummyTracker = new FieldUsageTracker
     val resultJsonFile: File = new File(rootFile, "result.json").getAbsoluteFile
     if (!resultJsonFile.exists()) {
@@ -43,7 +44,9 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
       message <- getCheckedField[IndexedSeq[JValue]](parsed, "messages")
     } yield MessageParser.parseMessageOption(message, rootFile)).yieldDefined
 
-    val chatRes = parseChat(parsed, dataset.uuid, messagesRes.size)
+    val memberIds = (myself.id +: messagesRes.toStream.map(_.fromId)).toSet
+
+    val chatRes = parseChat(parsed, dataset.uuid, memberIds, messagesRes.size)
 
     new EagerChatHistoryDao(
       name               = "Telegram export data from " + rootFile.getName,

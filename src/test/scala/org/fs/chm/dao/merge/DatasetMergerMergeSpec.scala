@@ -295,14 +295,14 @@ class DatasetMergerMergeSpec //
   }
 
   object H2MergerHelper {
-    private val noChatMsgs1 = ListMap(createChat(noUuid, 1, "One", 0) -> Seq.empty[Message])
-    private val noChatMsgs2 = ListMap(createChat(noUuid, 2, "Two", 0) -> Seq.empty[Message])
+    private val noChatMsgs1 = ListMap(createChat(noUuid, 1, "One", Seq.empty, 0) -> Seq.empty[Message])
+    private val noChatMsgs2 = ListMap(createChat(noUuid, 2, "Two", Seq.empty, 0) -> Seq.empty[Message])
 
     def fromMessages(msgs1: Seq[Message], msgs2: Seq[Message]): H2MergerHelper = {
       val users1    = (1 to msgs1.map(_.fromId).max.toInt).map(i => createUser(noUuid, i))
       val users2    = (1 to msgs2.map(_.fromId).max.toInt).map(i => createUser(noUuid, i))
-      val chatMsgs1 = ListMap(createChat(noUuid, 1, "One", msgs1.size) -> msgs1)
-      val chatMsgs2 = ListMap(createChat(noUuid, 2, "Two", msgs2.size) -> msgs2)
+      val chatMsgs1 = ListMap(createChat(noUuid, 1, "One", users1.map(_.id), msgs1.size) -> msgs1)
+      val chatMsgs2 = ListMap(createChat(noUuid, 2, "Two", users1.map(_.id), msgs2.size) -> msgs2)
       new H2MergerHelper(users1, chatMsgs1, users2, chatMsgs2)
     }
 

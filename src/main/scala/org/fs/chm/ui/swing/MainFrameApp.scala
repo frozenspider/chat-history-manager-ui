@@ -795,7 +795,7 @@ class MainFrameApp //
           // Evict chats containing edited user from cache
           val chatsToEvict = for {
             (chat, _) <- loadedDaos(dao)
-            if dao.interlocutors(chat) exists (u => userIds contains u.id)
+            if userIds.toSet.intersect(chat.memberIds).nonEmpty
           } yield chat
           chatsToEvict foreach (c => evictFromCache(dao, c))
 
@@ -955,8 +955,7 @@ class MainFrameApp //
     }
 
     def saveAs(srcDao: ChatHistoryDao, dir: File): ChatHistoryDao = {
-      h2.create(dir)
-      val dstDao = h2.loadData(dir)
+      val dstDao = h2.create(dir)
       dstDao.copyAllFrom(srcDao)
       dstDao
     }

@@ -27,7 +27,7 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def myself(dsUuid: UUID): User
 
-  /** Contains myself as well. Order must be stable. */
+  /** Contains myself as the first element. Order must be stable. Method is expected to be fast. */
   def users(dsUuid: UUID): Seq[User]
 
   def userOption(dsUuid: UUID, id: Long): Option[User]
@@ -40,7 +40,7 @@ trait ChatHistoryDao extends AutoCloseable {
    * First returned element MUST be myself, the rest should be in some fixed order.
    * This method should be fast.
    */
-  def interlocutors(chat: Chat): Seq[User]
+  def chatMembers(chat: Chat): Seq[User]
 
   /** Return N messages after skipping first M of them. Trivial pagination in a nutshell. */
   def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message]
@@ -119,7 +119,7 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
    */
   def mergeUsers(baseUser: User, absorbedUser: User): Unit
 
-  /** Insert a new chat. It should not yet exist. */
+  /** Insert a new chat. It should not yet exist, and all users must already be inserted. */
   def insertChat(dsRoot: JFile, chat: Chat): Unit
 
   def deleteChat(chat: Chat): Unit
@@ -205,6 +205,7 @@ case class Chat(
     nameOption: Option[String],
     tpe: ChatType,
     imgPathOption: Option[JFile],
+    memberIds: Set[Long],
     msgCount: Int
 ) extends WithId
 

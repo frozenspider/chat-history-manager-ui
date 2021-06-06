@@ -17,8 +17,7 @@ trait WithH2Dao extends BeforeAndAfter with Logging { this: Suite =>
     val manager = new H2DataManager
     dir = Files.createTempDirectory(null).toFile
     log.info(s"Using temp dir $dir")
-    manager.create(dir)
-    h2dao = manager.loadData(dir)
+    h2dao = manager.create(dir)
   }
 
   protected def freeH2Dao(): Unit = {

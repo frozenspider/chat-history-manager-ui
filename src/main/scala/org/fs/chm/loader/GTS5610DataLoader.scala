@@ -23,7 +23,8 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
   private val filenameRegex = ("\\d{14}_(.+)\\." + DefaultExt).r
 
   /** Path should point to the folder with a bunch of `*.vmg` files */
-  override protected def loadDataInner(path: File): EagerChatHistoryDao = {
+  override protected def loadDataInner(path: File, createNew: Boolean): EagerChatHistoryDao = {
+    require(!createNew, "Creating new dataset is not supported for GT-S5610 (as it makes no sense)")
     val vmsgFiles = path.listFiles((f, n) => n.endsWith("." + DefaultExt)).toSeq
     require(vmsgFiles.nonEmpty, s"No $DefaultExt files to import!")
 
@@ -83,6 +84,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
             nameOption    = user.firstNameOption,
             tpe           = ChatType.Personal,
             imgPathOption = None,
+            memberIds     = Set(myself, user).map(_.id),
             msgCount      = msgs.size
           )
           user -> (chat, msgs)
