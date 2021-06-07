@@ -117,15 +117,15 @@ class MessagesService(htmlKit: HTMLEditorKit) {
   }
 
   private def renderTitleName(cc: ChatWithDao, idOption: Option[Long], nameOption: Option[String]): String = {
-    val intl = cc.dao.interlocutors(cc.chat)
+    val members = cc.dao.chatMembers(cc.chat)
     val idx = {
-      val idx1 = idOption map (id => intl indexWhere (_.id == id)) getOrElse -1
-      val idx2 = intl indexWhere (u => nameOption contains u.prettyName)
+      val idx1 = idOption map (id => members indexWhere (_.id == id)) getOrElse -1
+      val idx2 = members indexWhere (u => nameOption contains u.prettyName)
       if (idx1 != -1) idx1 else idx2
     }
     val color = if (idx >= 0) Colors.stringForIdx(idx) else "#000000"
     val resolvedName = nameOption getOrElse {
-      EntityUtils.getOrUnnamed(idOption flatMap (id => intl.find(_.id == id)) map (_.prettyName))
+      EntityUtils.getOrUnnamed(idOption flatMap (id => members.find(_.id == id)) map (_.prettyName))
     }
 
     s"""<span class="title-name" style="color: $color;">${resolvedName}</span>"""

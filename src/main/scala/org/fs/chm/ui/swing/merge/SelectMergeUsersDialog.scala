@@ -141,7 +141,7 @@ object SelectMergeUsersDialog {
         sourceType = "test source"
       )
       val users        = usersProducer(ds)
-      val chat         = createChat(ds.uuid, 1, "One", 0)
+      val chat         = createChat(ds.uuid, 1, "One", users.map(_.id), 0)
       val dataPathRoot = Files.createTempDirectory(null).toFile
       dataPathRoot.deleteOnExit()
       new EagerChatHistoryDao(

@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 import java.util.UUID
 
+import scala.collection.Iterable
 import scala.collection.immutable.ListMap
 import scala.util.Random
 
@@ -31,13 +32,14 @@ object TestUtils {
       lastSeenTimeOption = Some(baseDate.plusMinutes(idx))
     )
 
-  def createChat(dsUuid: UUID, idx: Int, nameSuffix: String, messagesSize: Int): Chat =
+  def createChat(dsUuid: UUID, idx: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat =
     Chat(
       dsUuid        = dsUuid,
       id            = idx,
       nameOption    = Some("Chat " + nameSuffix),
       tpe           = ChatType.Personal,
       imgPathOption = None,
+      memberIds     = memberIds.toSet,
       msgCount      = messagesSize
     )
 
@@ -60,7 +62,7 @@ object TestUtils {
   }
 
   def createSimpleDao(nameSuffix: String, msgs: Seq[Message], numUsers: Int): MutableChatHistoryDao = {
-    val chat  = createChat(noUuid, 1, "One", msgs.size)
+    val chat  = createChat(noUuid, 1, "One", (1L to numUsers).toSet, msgs.size)
     val users = (1 to numUsers).map(i => createUser(noUuid, i))
     createDao(nameSuffix, users, ListMap(chat -> msgs.toIndexedSeq))
   }

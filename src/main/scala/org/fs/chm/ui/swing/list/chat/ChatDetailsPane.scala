@@ -21,7 +21,7 @@ class ChatDetailsPane(
         case ChatType.PrivateGroup => "Private Group"
       })),
       ("Members:", cc.chat.tpe match {
-        case ChatType.PrivateGroup => Some(cc.dao.interlocutors(cc.chat).map(_.prettyName).mkString("\n"))
+        case ChatType.PrivateGroup => Some(cc.dao.chatMembers(cc.chat).map(_.prettyName).mkString("\n"))
         case ChatType.Personal     => None
       }),
       ("Image:", Some(if (cc.chat.imgPathOption.isDefined) "(Yes)" else "(None)")),

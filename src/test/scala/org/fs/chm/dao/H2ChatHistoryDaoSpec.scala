@@ -154,7 +154,7 @@ class H2ChatHistoryDaoSpec //
     def personalChatWith(u: User): Option[Chat] =
       h2dao.chats(dsUuid) find { c =>
         c.tpe == ChatType.Personal &&
-        h2dao.interlocutors(c).exists(_.id == u.id) &&
+        c.memberIds.contains(u.id) &&
         h2dao.firstMessages(c, 99999).exists(_.fromId == myself.id)
       }
 
@@ -213,8 +213,7 @@ class H2ChatHistoryDaoSpec //
     val msgs        = localTgDao.firstMessages(chat, 999999)
     dir = Files.createTempDirectory(null).toFile
 
-    manager.create(dir)
-    h2dao = manager.loadData(dir)
+    h2dao = manager.create(dir)
     h2dao.copyAllFrom(localTgDao)
 
     val dsUuid = localTgDao.datasets.head.uuid
@@ -267,7 +266,7 @@ class H2ChatHistoryDaoSpec //
 
   test("merge (absorb) user") {
     def fetchPersonalChat(u: User): Chat = {
-      h2dao.chats(dsUuid).find(c => c.tpe == ChatType.Personal && h2dao.interlocutors(c).contains(u)) getOrElse {
+      h2dao.chats(dsUuid).find(c => c.tpe == ChatType.Personal && c.memberIds.contains(u.id)) getOrElse {
         fail(s"Chat for user $u not found!")
       }
     }

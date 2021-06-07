@@ -138,14 +138,14 @@ object SelectMergeChatsDialog {
 
     import org.fs.chm.utility.TestUtils._
 
-    def createMultiChatDao(chatsProducer: Dataset => Seq[Chat]): MutableChatHistoryDao = {
+    def createMultiChatDao(chatsProducer: (Dataset, Seq[User]) => Seq[Chat]): MutableChatHistoryDao = {
       val ds = Dataset(
         uuid = UUID.randomUUID(),
         alias = "Dataset",
         sourceType = "test source"
       )
-      val chats        = chatsProducer(ds)
       val user         = createUser(ds.uuid, 1)
+      val chats        = chatsProducer(ds, Seq(user))
       val dataPathRoot = Files.createTempDirectory(null).toFile
       dataPathRoot.deleteOnExit()
       new EagerChatHistoryDao(
@@ -158,9 +158,11 @@ object SelectMergeChatsDialog {
       ) with EagerMutableDaoTrait
     }
 
-    val mDao           = createMultiChatDao(ds => for (i <- 1 to 5 if i != 4) yield createChat(ds.uuid, i, i.toString, 0))
+    val mDao = createMultiChatDao(
+      (ds, us) => for (i <- 1 to 5 if i != 4) yield createChat(ds.uuid, i, i.toString, us.map(_.id), 0))
     val (mDs, _, _, _) = getSimpleDaoEntities(mDao)
-    val sDao           = createMultiChatDao(ds => for (i <- 2 to 6 by 2) yield createChat(ds.uuid, i, i.toString, 0))
+    val sDao = createMultiChatDao(
+      (ds, us) => for (i <- 2 to 6 by 2) yield createChat(ds.uuid, i, i.toString, us.map(_.id), 0))
     val (sDs, _, _, _) = getSimpleDaoEntities(sDao)
 
     Swing.onEDTWait {

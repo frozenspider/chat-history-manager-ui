@@ -30,7 +30,7 @@ class ChatListItem(
 
   private val labelBorderWidth = 3
 
-  private val interlocutors = cc.dao.interlocutors(cc.chat)
+  private val members = cc.dao.chatMembers(cc.chat)
 
   private val popupMenu = new PopupMenu {
     contents += menuItem("Details")(showDetailsPopup())
@@ -72,7 +72,7 @@ class ChatListItem(
     // Type
     val tpeString = cc.chat.tpe match {
       case Personal     => ""
-      case PrivateGroup => "(" + interlocutors.size + ")"
+      case PrivateGroup => "(" + members.size + ")"
     }
     val tpeLabel = new Label(tpeString)
     tpeLabel.preferredWidth    = 30
@@ -146,11 +146,11 @@ class ChatListItem(
 
   private def simpleRenderMsg(msg: Message): String = {
     val prefix =
-      if (interlocutors.size == 2 && msg.fromId == interlocutors(1).id) ""
+      if (members.size == 2 && msg.fromId == members(1).id) ""
       else {
         // Avoid querying DB if possible
         val fromNameOption =
-          (interlocutors find (_.id == msg.fromId))
+          (members find (_.id == msg.fromId))
             .orElse(cc.dao.userOption(cc.dsUuid, msg.fromId))
             .flatMap(_.prettyNameOption)
         (EntityUtils.getOrUnnamed(fromNameOption) + ": ")
