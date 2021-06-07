@@ -503,7 +503,7 @@ class H2ChatHistoryDao(
       def deleteOrphans(dsUuid: UUID): ConnectionIO[Int] =
         sql"""
             DELETE FROM users u
-            WHERE u.id IN (
+            WHERE u.ds_uuid = $dsUuid AND u.id IN (
               SELECT id FROM (
                 SELECT
                   u2.id,
