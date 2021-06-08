@@ -34,12 +34,39 @@ trait TelegramDataLoaderCommon {
     }
   }
 
+  /** Starting with Telegram 2020-10, user IDs are shifted by this value */
+  private val UserIdShift: Long = 0x100000000L
+
+  protected def normalize(u: User): User = {
+    if (u.id >= UserIdShift) {
+      u.copy(id = u.id - UserIdShift)
+    } else {
+      u
+    }
+  }
+
+  protected def normalize(su: ShortUser): ShortUser = {
+    if (su.id >= UserIdShift) {
+      su.copy(id = su.id - UserIdShift)
+    } else {
+      su
+    }
+  }
+
+  protected def normalize(m: Message): Message = {
+    if (m.fromId >= UserIdShift) {
+      m.withFromId(fromId = m.fromId - UserIdShift)
+    } else {
+      m
+    }
+  }
+
   protected object MessageParser {
     def parseMessageOption(jv: JValue, rootFile: File): Option[Message] = {
       implicit val tracker = new FieldUsageTracker
       tracker.markUsed("via_bot") // Ignored
       tracker.ensuringUsage(jv) {
-        getCheckedField[String](jv, "type") match {
+        (getCheckedField[String](jv, "type") match {
           case "message"     => Some(parseRegular(jv, rootFile))
           case "service"     => Some(parseService(jv, rootFile))
           case "unsupported" =>
@@ -49,7 +76,7 @@ trait TelegramDataLoaderCommon {
           case other =>
             throw new IllegalArgumentException(
               s"Don't know how to parse message of type '$other' for ${jv.toString.take(500)}")
-        }
+        }) map (normalize)
       }
     }
 
@@ -421,6 +448,25 @@ trait TelegramDataLoaderCommon {
         msgCount      = msgCount
       )
     }
+  }
+
+  protected def parseShortUserFromMessage(jv: JValue): ShortUser = {
+    implicit val dummyTracker = new FieldUsageTracker
+    normalize(getCheckedField[String](jv, "type") match {
+      case "message" =>
+        ShortUser(
+          id             = getCheckedField[Long](jv, "from_id"),
+          fullNameOption = getStringOpt(jv, "from", true)
+        )
+      case "service" =>
+        ShortUser(
+          id             = getCheckedField[Long](jv, "actor_id"),
+          fullNameOption = getStringOpt(jv, "actor", true)
+        )
+      case other =>
+        throw new IllegalArgumentException(
+          s"Don't know how to parse message of type '$other' for ${jv.toString.take(500)}")
+    })
   }
 
   //

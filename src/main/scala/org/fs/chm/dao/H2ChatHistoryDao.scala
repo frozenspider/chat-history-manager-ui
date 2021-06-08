@@ -388,7 +388,7 @@ class H2ChatHistoryDao(
     require(chat.id > 0, "ID should be positive!")
     require(chat.memberIds.nonEmpty, "Chat should have more than one member!")
     val me = myself(chat.dsUuid)
-    require(chat.memberIds.head == me.id, "Chat members list should start with self!")
+    require(chat.memberIds contains me.id, "Chat members list should contain self!")
     backup()
     val query = for {
       _ <- queries.chats.insert(dsRoot, chat)
