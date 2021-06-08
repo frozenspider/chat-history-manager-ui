@@ -408,7 +408,7 @@ object Message {
           )
         )
       case _ =>
-        super.=~=(that)
+        false
     }
   }
 
@@ -527,7 +527,7 @@ object Message {
                 pathOption = None
               ))
           case _ =>
-            super.=~=(that)
+            false
         }
       }
 

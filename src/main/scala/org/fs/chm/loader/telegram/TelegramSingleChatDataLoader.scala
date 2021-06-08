@@ -37,8 +37,9 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
 
     val parsed = JsonMethods.parse(resultJsonFile)
 
-    val users = parseUsers(parsed, dataset.uuid)
-    val myself = chooseMyself(users)
+    val preUsers = parseUsers(parsed, dataset.uuid)
+    val myself = chooseMyself(preUsers)
+    val users = myself +: preUsers.filter(_ != myself)
 
     val messagesRes = (for {
       message <- getCheckedField[IndexedSeq[JValue]](parsed, "messages")

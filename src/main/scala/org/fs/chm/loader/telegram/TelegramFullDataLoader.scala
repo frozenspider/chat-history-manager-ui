@@ -137,10 +137,9 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
         }.copy(id = id)
     }
 
-    // Append myself if not encountered in messages
-    val combinedUsers2 = if (combinedUsers contains myself) combinedUsers else (combinedUsers + myself)
-    val combinedUsers3 = combinedUsers2.toSeq sortBy (u => (u.id, u.prettyName))
-    (myself, combinedUsers3)
+    // Make sure self is the first user, sort all the rest
+    val combinedUsers2 = myself +: combinedUsers.filter(_ != myself).toSeq.sortBy(u => (u.id, u.prettyName))
+    (myself, combinedUsers2)
   } ensuring { p =>
     // Ensuring all IDs are unique
     val (myself, users) = p

@@ -66,6 +66,42 @@ class DatasetMerger(
     }
   }
 
+  private def mismatchAfterConflictEnd(cxt: MsgIterationContext,
+                                       state: IterationState.StateInProgress): MessagesMergeOption = {
+    import IterationState._
+    state match {
+      case MatchInProgress(_, startMasterMsg, _, startSlaveMsg) =>
+        MessagesMergeOption.Keep(
+          firstMasterMsg      = startMasterMsg,
+          lastMasterMsg       = cxt.prevMm.get,
+          firstSlaveMsgOption = Some(startSlaveMsg),
+          lastSlaveMsgOption  = cxt.prevSm
+        )
+      case RetentionInProgress(_, startMasterMsg, _) =>
+        MessagesMergeOption.Keep(
+          firstMasterMsg      = startMasterMsg,
+          lastMasterMsg       = cxt.prevMm.get,
+          firstSlaveMsgOption = None,
+          lastSlaveMsgOption  = None
+        )
+      case AdditionInProgress(prevMasterMsgOption, prevSlaveMsgOption, startSlaveMsg) =>
+        assert(cxt.prevMm == prevMasterMsgOption) // Master stream hasn't advanced
+        assert(cxt.prevSm.isDefined)
+        MessagesMergeOption.Add(
+          firstSlaveMsg = startSlaveMsg,
+          lastSlaveMsg  = cxt.prevSm.get
+        )
+      case ConflictInProgress(prevMasterMsgOption, startMasterMsg, prevSlaveMsgOption, startSlaveMsg) =>
+        assert(cxt.prevMm.isDefined && cxt.prevSm.isDefined)
+        MessagesMergeOption.Replace(
+          firstMasterMsg = startMasterMsg,
+          lastMasterMsg  = cxt.prevMm.get,
+          firstSlaveMsg  = startSlaveMsg,
+          lastSlaveMsg   = cxt.prevSm.get
+        )
+    }
+  }
+
   /** Iterate through both master and slave streams using state machine like approach */
   @tailrec
   private def iterate(
@@ -74,39 +110,6 @@ class DatasetMerger(
       onMismatch: MessagesMergeOption => Unit
   ): Unit = {
     import IterationState._
-    def mismatchAfterConflictEnd(state: StateInProgress): MessagesMergeOption = {
-      state match {
-        case MatchInProgress(_, startMasterMsg, _, startSlaveMsg) =>
-          MessagesMergeOption.Keep(
-            firstMasterMsg = startMasterMsg,
-            lastMasterMsg = cxt.prevMm.get,
-            firstSlaveMsgOption = Some(startSlaveMsg),
-            lastSlaveMsgOption = cxt.prevSm
-          )
-        case RetentionInProgress(_, startMasterMsg, _) =>
-          MessagesMergeOption.Keep(
-            firstMasterMsg = startMasterMsg,
-            lastMasterMsg = cxt.prevMm.get,
-            firstSlaveMsgOption = None,
-            lastSlaveMsgOption = None
-          )
-        case AdditionInProgress(prevMasterMsgOption, prevSlaveMsgOption, startSlaveMsg) =>
-          assert(cxt.prevMm == prevMasterMsgOption) // Master stream hasn't advanced
-          assert(cxt.prevSm.isDefined)
-          MessagesMergeOption.Add(
-            firstSlaveMsg = startSlaveMsg,
-            lastSlaveMsg = cxt.prevSm.get
-          )
-        case ConflictInProgress(prevMasterMsgOption, startMasterMsg, prevSlaveMsgOption, startSlaveMsg) =>
-          assert(cxt.prevMm.isDefined && cxt.prevSm.isDefined)
-          MessagesMergeOption.Replace(
-            firstMasterMsg = startMasterMsg,
-            lastMasterMsg = cxt.prevMm.get,
-            firstSlaveMsg = startSlaveMsg,
-            lastSlaveMsg = cxt.prevSm.get
-          )
-      }
-    }
 
     (cxt.mmStream.headOption, cxt.smStream.headOption, state) match {
 
@@ -117,7 +120,7 @@ class DatasetMerger(
       case (None, None, NoState) =>
         ()
       case (None, None, state: StateInProgress) =>
-        val mismatch = mismatchAfterConflictEnd(state)
+        val mismatch = mismatchAfterConflictEnd(cxt, state)
         onMismatch(mismatch)
 
       //
@@ -128,6 +131,16 @@ class DatasetMerger(
         // Matching subsequence starts
         val state2 = MatchInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
         iterate(cxt.advanceBoth(), state2, onMismatch)
+      case (Some(mm: Message.Service.Group.MigrateFrom), Some(sm: Message.Service.Group.MigrateFrom), NoState)
+          if mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption &&
+            mm.fromId < 0x100000000L && sm.fromId > 0x100000000L &&
+            mm.copy(fromId = sm.fromId) =~= sm =>
+        // Special handling for a service message mismatch which is expected when merging Telegram after 2020-10
+        // We register this one conflict and proceed in clean state.
+        // This is dirty but relatively easy to do.
+        val singleConflictState = ConflictInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
+        onMismatch(mismatchAfterConflictEnd(cxt.advanceBoth(), singleConflictState))
+        iterate(cxt.advanceBoth(), NoState, onMismatch)
       case (Some(mm), Some(sm), NoState) if mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption =>
         // Conflict started
         // (Conflicts are only detectable if data source supply source IDs)
@@ -152,7 +165,7 @@ class DatasetMerger(
         iterate(cxt.advanceSlave(), state, onMismatch)
       case (_, _, state: AdditionInProgress) =>
         // Addition ended
-        onMismatch(mismatchAfterConflictEnd(state))
+        onMismatch(mismatchAfterConflictEnd(cxt, state))
         iterate(cxt, NoState, onMismatch)
 
       //
@@ -164,7 +177,7 @@ class DatasetMerger(
         iterate(cxt.advanceBoth(), state, onMismatch)
       case (_, _, state: MatchInProgress) =>
         // Matching subsequence ends
-        onMismatch(mismatchAfterConflictEnd(state))
+        onMismatch(mismatchAfterConflictEnd(cxt, state))
         iterate(cxt, NoState, onMismatch)
 
       //
@@ -177,7 +190,7 @@ class DatasetMerger(
         iterate(cxt.advanceMaster(), state, onMismatch)
       case (_, _, state: RetentionInProgress) =>
         // Retention ended
-        onMismatch(mismatchAfterConflictEnd(state))
+        onMismatch(mismatchAfterConflictEnd(cxt, state))
         iterate(cxt, NoState, onMismatch)
 
       //
@@ -189,7 +202,7 @@ class DatasetMerger(
         iterate(cxt.advanceBoth(), state, onMismatch)
       case (_, _, state: ConflictInProgress) =>
         // Conflict ended
-        onMismatch(mismatchAfterConflictEnd(state))
+        onMismatch(mismatchAfterConflictEnd(cxt, state))
         iterate(cxt, NoState, onMismatch)
     }
   }
