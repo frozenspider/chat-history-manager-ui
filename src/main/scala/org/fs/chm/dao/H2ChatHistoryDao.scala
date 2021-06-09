@@ -331,6 +331,14 @@ class H2ChatHistoryDao(
     }((_, t) => log.info(s"Dataset ${dsUuid} deleted in $t ms"))
   }
 
+  override def shiftDatasetTime(dsUuid: UUID, hrs: Int): Unit = {
+    backup()
+    require(hrs >= -12 && hrs <= 12, "Hours are out of bounds! Expected [-12, 12]")
+    StopWatch.measureAndCall {
+      queries.shiftDatasetTime(dsUuid, hrs).transact(txctr).unsafeRunSync()
+    }((_, t) => log.info(s"Dataset ${dsUuid} time shifted in $t ms"))
+  }
+
   override def insertUser(user: User, isMyself: Boolean): Unit = {
     require(user.id > 0, "ID should be positive!")
     if (isMyself) {
@@ -894,6 +902,15 @@ class H2ChatHistoryDao(
         msgCVcardPaths <- q("vcard_path", "messages_content")
       } yield chatImgPaths ++ msgPaths ++ msgCPaths ++ msgCThumbPaths ++ msgCVcardPaths
     } map (_.toSet)
+
+    def shiftDatasetTime(dsUuid: UUID, hrs: Int): ConnectionIO[Int] = {
+      sql"""
+        UPDATE messages SET
+          time      = DATEADD(HOUR, $hrs, time),
+          edit_time = DATEADD(HOUR, $hrs, edit_time)
+        WHERE ds_uuid = ${dsUuid}
+      """.update.run
+    }
   }
 
   object Raws {

@@ -23,6 +23,7 @@ class DatasetItem[I <: Panel](
     callbacksOption foreach { _ =>
       contents += menuItem("Rename", enabled = dao.isMutable)(rename())
       contents += menuItem("Delete", enabled = dao.isMutable)(delete())
+      contents += menuItem("Shift time", enabled = dao.isMutable)(shiftDatasetTime())
     }
   }
 
@@ -58,7 +59,7 @@ class DatasetItem[I <: Panel](
       title   = "Rename dataset",
       message = "Choose a new name",
       initial = ds.alias
-    ) foreach (newAlias => callbacksOption.get.renameDataset(ds.uuid, newAlias, dao))
+    ) foreach (newAlias => callbacksOption.get.renameDataset(dao, ds.uuid, newAlias))
   }
 
   private def delete(): Unit = {
@@ -66,9 +67,17 @@ class DatasetItem[I <: Panel](
       title   = "Delete dataset",
       message = s"Are you sure you want to delete a dataset '${ds.alias}', sourced from ${ds.sourceType}?"
     ) match {
-      case Dialog.Result.Yes => callbacksOption.get.deleteDataset(ds.uuid, dao)
+      case Dialog.Result.Yes => callbacksOption.get.deleteDataset(dao, ds.uuid)
       case _                 => // NOOP
     }
+  }
+
+  private def shiftDatasetTime(): Unit = {
+    Dialog.showInput(
+      title   = "Shift dataset time",
+      message = "Choose an hours difference",
+      initial = "0"
+    ) foreach (hrsString => callbacksOption.get.shiftDatasetTime(dao, ds.uuid, hrsString.toInt))
   }
 
   override def enabled_=(b: Boolean): Unit = {

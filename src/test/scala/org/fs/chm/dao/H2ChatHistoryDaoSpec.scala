@@ -324,4 +324,28 @@ class H2ChatHistoryDaoSpec //
     assert(!h2dao.datasetRoot(dsUuid).exists())
     assert(new File(h2dao.getBackupPath(), dsUuid.toString).exists())
   }
+
+  test("shift dataset time") {
+    val chat = h2dao.chats(dsUuid).head
+    def getMsg() = {
+      h2dao.firstMessages(chat, 1).head
+    }
+    val msg0 = getMsg()
+
+    {
+      // +8
+      h2dao.shiftDatasetTime(dsUuid, 8)
+      val msg1 = getMsg()
+      assert(msg1.internalId == msg0.internalId)
+      assert(msg1.time == msg0.time.plusHours(8))
+    }
+
+    {
+      // +8 -5
+      h2dao.shiftDatasetTime(dsUuid, -5)
+      val msg1 = getMsg()
+      assert(msg1.internalId == msg0.internalId)
+      assert(msg1.time == msg0.time.plusHours(3))
+    }
+  }
 }

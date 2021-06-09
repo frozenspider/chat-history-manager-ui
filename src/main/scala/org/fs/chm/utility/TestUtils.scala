@@ -127,6 +127,8 @@ object TestUtils {
 
     override def deleteDataset(dsUuid: UUID): Unit = ???
 
+    override def shiftDatasetTime(dsUuid: UUID, hrs: Int): Unit = ???
+
     override def insertUser(user: User, isMyself: Boolean): Unit = ???
 
     override def updateUser(user: User): Unit = ???
