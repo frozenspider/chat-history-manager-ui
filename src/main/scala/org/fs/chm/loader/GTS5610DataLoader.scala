@@ -42,8 +42,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
       firstNameOption    = Some("Me"),
       lastNameOption     = None,
       usernameOption     = None,
-      phoneNumberOption  = None,
-      lastSeenTimeOption = None
+      phoneNumberOption  = None
     )
 
     val userToChatWithMsgsMap = vmsgs
@@ -61,8 +60,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
             firstNameOption    = Some(head.name),
             lastNameOption     = None,
             usernameOption     = None,
-            phoneNumberOption  = head.phoneOption,
-            lastSeenTimeOption = None
+            phoneNumberOption  = head.phoneOption
           )
 
           val msgs = vmsgs.toIndexedSeq map { vmsg =>

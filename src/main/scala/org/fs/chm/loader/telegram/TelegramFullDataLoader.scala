@@ -72,13 +72,13 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
         lastNameOption     = getStringOpt(jv, "last_name", true),
         usernameOption     = getStringOpt(jv, "username", true),
         phoneNumberOption  = getStringOpt(jv, "phone_number", true),
-        lastSeenTimeOption = None
       ))
     }
   }
 
   private def parseUser(jv: JValue, dsUuid: UUID): User = {
     implicit val tracker = new FieldUsageTracker
+    tracker.markUsed("date") // Ignoring last seen time
     tracker.ensuringUsage(jv) {
       normalize(User(
         dsUuid             = dsUuid,
@@ -86,8 +86,7 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
         firstNameOption    = getStringOpt(jv, "first_name", true),
         lastNameOption     = getStringOpt(jv, "last_name", true),
         usernameOption     = None,
-        phoneNumberOption  = getStringOpt(jv, "phone_number", true),
-        lastSeenTimeOption = stringToDateTimeOpt(getCheckedField[String](jv, "date"))
+        phoneNumberOption  = getStringOpt(jv, "phone_number", true)
       ))
     }
   }
@@ -131,8 +130,7 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
             firstNameOption    = fullNameOption,
             lastNameOption     = None,
             usernameOption     = None,
-            phoneNumberOption  = None,
-            lastSeenTimeOption = None
+            phoneNumberOption  = None
           )
         }.copy(id = id)
     }

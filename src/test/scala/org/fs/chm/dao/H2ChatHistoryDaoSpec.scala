@@ -291,9 +291,8 @@ class H2ChatHistoryDaoSpec //
     // Verify users
     assert(usersAfter.size === usersBefore.size - 1)
     val expectedUser = absorbedUser.copy(
-      id                 = baseUser.id,
-      firstNameOption    = Some("new-name"),
-      lastSeenTimeOption = baseUser.lastSeenTimeOption
+      id              = baseUser.id,
+      firstNameOption = Some("new-name")
     )
     assert(usersAfter.find(_.id == baseUser.id) === Some(expectedUser))
     assert(!usersAfter.exists(_.id == absorbedUser.id))

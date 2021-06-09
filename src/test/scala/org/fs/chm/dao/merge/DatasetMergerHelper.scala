@@ -25,11 +25,10 @@ object DatasetMergerHelper {
     users.collect {
       case u if idCondition(u.id) =>
         u.copy(
-          firstNameOption    = Some("AnotherUserFN"),
-          lastNameOption     = Some("AnotherUserLN"),
-          usernameOption     = Some("AnotherUserUN"),
-          phoneNumberOption  = Some("123321"),
-          lastSeenTimeOption = Some(baseDate.plusDays(u.id.toInt))
+          firstNameOption   = Some("AnotherUserFN"),
+          lastNameOption    = Some("AnotherUserLN"),
+          usernameOption    = Some("AnotherUserUN"),
+          phoneNumberOption = Some(123000 + u.id.toInt).map(_.toString)
         )
       case u =>
         u

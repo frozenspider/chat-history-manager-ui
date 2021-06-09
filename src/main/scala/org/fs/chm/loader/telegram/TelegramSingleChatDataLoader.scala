@@ -103,8 +103,7 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
           firstNameOption    = fullNameOption,
           lastNameOption     = None,
           usernameOption     = None,
-          phoneNumberOption  = None,
-          lastSeenTimeOption = None
+          phoneNumberOption  = None
         )
     }
 

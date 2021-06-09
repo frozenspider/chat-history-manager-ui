@@ -114,7 +114,7 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
   def updateUser(user: User): Unit
 
   /**
-   * Merge absorbed user into base user, replacing base user's names and phone. Last "last seen time" is selected.
+   * Merge absorbed user into base user, replacing base user's names and phone.
    * Their personal chats will also be merged into one (named after the "new" user).
    */
   def mergeUsers(baseUser: User, absorbedUser: User): Unit
@@ -187,8 +187,7 @@ case class User(
     firstNameOption: Option[String],
     lastNameOption: Option[String],
     usernameOption: Option[String],
-    phoneNumberOption: Option[String],
-    lastSeenTimeOption: Option[DateTime]
+    phoneNumberOption: Option[String]
 ) extends PersonInfo
     with WithId
 

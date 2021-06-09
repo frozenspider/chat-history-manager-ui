@@ -23,13 +23,12 @@ object TestUtils {
 
   def createUser(dsUuid: UUID, idx: Int): User =
     User(
-      dsUuid             = dsUuid,
-      id                 = idx,
-      firstNameOption    = Some("User"),
-      lastNameOption     = Some(idx.toString),
-      usernameOption     = Some("user" + idx),
-      phoneNumberOption  = Some("xxx xx xx".replaceAll("x", idx.toString)),
-      lastSeenTimeOption = Some(baseDate.plusMinutes(idx))
+      dsUuid            = dsUuid,
+      id                = idx,
+      firstNameOption   = Some("User"),
+      lastNameOption    = Some(idx.toString),
+      usernameOption    = Some("user" + idx),
+      phoneNumberOption = Some("xxx xx xx".replaceAll("x", idx.toString))
     )
 
   def createChat(dsUuid: UUID, idx: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat =

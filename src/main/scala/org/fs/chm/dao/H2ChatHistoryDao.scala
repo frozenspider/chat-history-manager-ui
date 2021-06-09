@@ -365,7 +365,6 @@ class H2ChatHistoryDao(
       lastNameOption     = absorbedUser.lastNameOption,
       usernameOption     = absorbedUser.usernameOption,
       phoneNumberOption  = absorbedUser.phoneNumberOption,
-      lastSeenTimeOption = latest(baseUser.lastSeenTimeOption, absorbedUser.lastSeenTimeOption)
     )
 
     val query = for {
@@ -512,7 +511,7 @@ class H2ChatHistoryDao(
     }
 
     object users {
-      private val colsFr                 = fr"ds_uuid, id, first_name, last_name, username, phone_number, last_seen_time"
+      private val colsFr                 = fr"ds_uuid, id, first_name, last_name, username, phone_number"
       private val selectAllFr            = fr"SELECT" ++ colsFr ++ fr"FROM users"
       private def selectFr(dsUuid: UUID) = selectAllFr ++ fr"WHERE ds_uuid = $dsUuid"
       private val defaultOrder           = fr"ORDER BY id, first_name, last_name, username, phone_number"
@@ -529,7 +528,7 @@ class H2ChatHistoryDao(
       def insert(u: User, isMyself: Boolean) =
         (fr"INSERT INTO users (" ++ colsFr ++ fr", is_myself) VALUES ("
           ++ fr"${u.dsUuid}, ${u.id}, ${u.firstNameOption}, ${u.lastNameOption}, ${u.usernameOption},"
-          ++ fr"${u.phoneNumberOption}, ${u.lastSeenTimeOption}, ${isMyself}"
+          ++ fr"${u.phoneNumberOption}, ${isMyself}"
           ++ fr")").update.run
 
       def update(u: User, isMyself: Boolean) =
