@@ -31,16 +31,31 @@ object TestUtils {
       phoneNumberOption = Some("xxx xx xx".replaceAll("x", idx.toString))
     )
 
-  def createChat(dsUuid: UUID, idx: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat =
+  def createGroupChat(dsUuid: UUID, idx: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat = {
+    require(memberIds.size >= 2)
     Chat(
       dsUuid        = dsUuid,
       id            = idx,
       nameOption    = Some("Chat " + nameSuffix),
+      tpe           = ChatType.PrivateGroup,
+      imgPathOption = None,
+      memberIds     = memberIds.toSet,
+      msgCount      = messagesSize
+    )
+  }
+
+  def createPersonalChat(dsUuid: UUID, idx: Int, user: User, memberIds: Iterable[Long], messagesSize: Int): Chat = {
+    require(memberIds.size == 2)
+    Chat(
+      dsUuid        = dsUuid,
+      id            = idx,
+      nameOption    = user.prettyNameOption,
       tpe           = ChatType.Personal,
       imgPathOption = None,
       memberIds     = memberIds.toSet,
       msgCount      = messagesSize
     )
+  }
 
   def createRegularMessage(idx: Int, userId: Int): Message = {
     // Any previous message
@@ -61,7 +76,7 @@ object TestUtils {
   }
 
   def createSimpleDao(nameSuffix: String, msgs: Seq[Message], numUsers: Int): MutableChatHistoryDao = {
-    val chat  = createChat(noUuid, 1, "One", (1L to numUsers).toSet, msgs.size)
+    val chat  = createGroupChat(noUuid, 1, "One", (1L to numUsers).toSet, msgs.size)
     val users = (1 to numUsers).map(i => createUser(noUuid, i))
     createDao(nameSuffix, users, ListMap(chat -> msgs.toIndexedSeq))
   }

@@ -233,6 +233,7 @@ class DatasetMerger(
           val user2 = sourceUser.userToInsert.copy(dsUuid = newDs.uuid)
           masterDao.insertUser(user2, user2.id == masterSelf.id)
         }
+        val masterUsers = masterDao.users(newDs.uuid)
 
         // Chats
         for (cmo <- chatsToMerge) {
@@ -241,7 +242,16 @@ class DatasetMerger(
               cmo.slaveCwdOption.map(cwd => (slaveDao.datasetRoot(cwd.dsUuid), cwd.chat)),
               cmo.masterCwdOption.map(cwd => (masterDao.datasetRoot(cwd.dsUuid), cwd.chat))
             ).yieldDefined.head match {
-              case (f, c) => (f, c.copy(dsUuid = newDs.uuid))
+              case (f, c) =>
+                val c2 = if (c.tpe == ChatType.Personal) {
+                  // For merged personal chats, name should match whatever user name was chosen
+                  val userId = c.memberIds.find(_ != masterSelf.id).get
+                  val user = masterUsers.find(_.id == userId).get
+                  c.copy(nameOption = user.prettyNameOption)
+                } else {
+                  c
+                }
+                (f, c2.copy(dsUuid = newDs.uuid))
             }
           }
           masterDao.insertChat(dsRoot, chat)
