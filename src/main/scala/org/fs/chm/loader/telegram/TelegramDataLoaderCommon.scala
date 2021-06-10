@@ -109,6 +109,17 @@ trait TelegramDataLoaderCommon {
             discardReasonOption = getStringOpt(jv, "discard_reason", false),
             textOption          = RichTextParser.parseRichTextOption(jv)
           )
+        case "group_call" =>
+          // Treated the same as phone_call
+          Message.Service.PhoneCall(
+            internalId          = Message.NoInternalId,
+            sourceIdOption      = Some(getCheckedField[Message.SourceId](jv, "id")),
+            time                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId              = getCheckedField[Long](jv, "actor_id"),
+            durationSecOption   = None,
+            discardReasonOption = None,
+            textOption          = RichTextParser.parseRichTextOption(jv)
+          )
         case "pin_message" =>
           Message.Service.PinMessage(
             internalId     = Message.NoInternalId,
@@ -304,6 +315,10 @@ trait TelegramDataLoaderCommon {
         case "bank_card" =>
           // No special treatment for bank_card
           require(values.keys == Set("type", "text"), s"Unexpected bank_card format: $jo")
+          RichText.Plain(values("text").asInstanceOf[String])
+        case "cashtag" =>
+          // No special treatment for cashtag
+          require(values.keys == Set("type", "text"), s"Unexpected cashtag format: $jo")
           RichText.Plain(values("text").asInstanceOf[String])
         case other =>
           throw new IllegalArgumentException(
