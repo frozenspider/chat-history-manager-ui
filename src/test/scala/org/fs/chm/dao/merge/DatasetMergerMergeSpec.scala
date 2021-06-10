@@ -69,7 +69,7 @@ class DatasetMergerMergeSpec //
     assert(helper.dao1.datasets.size === 2)
     val newChats = helper.dao1.chats(newDs.uuid)
     assert(helper.dao1.chats(newDs.uuid).size === 1)
-    val newMessages = helper.dao1.firstMessages(newChats.head, Int.MaxValue)
+    val newMessages = helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     assert(newMessages.size === 1)
     assert(newMessages.head =~= helper.d1msgs.head)
     assertFiles(helper.dao1, newDs, msgsPaths(helper.dao1, helper.d1ds, helper.d1msgs))
@@ -86,7 +86,7 @@ class DatasetMergerMergeSpec //
     val newDs = helper.merger.merge(keepSignleUser(helper), chatMerges)
     val newMessages = {
       val newChats = helper.dao1.chats(newDs.uuid)
-      helper.dao1.firstMessages(newChats.head, Int.MaxValue)
+      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     assert(newMessages.size === helper.d1msgs.size)
     for ((nm, om) <- (newMessages zip helper.d1msgs)) {
@@ -108,7 +108,7 @@ class DatasetMergerMergeSpec //
     val newDs = helper.merger.merge(keepSignleUser(helper), chatMerges)
     val newMessages = {
       val newChats = helper.dao1.chats(newDs.uuid)
-      helper.dao1.firstMessages(newChats.head, Int.MaxValue)
+      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     assert(newMessages.size === 2)
     assert(newMessages(0) =~= helper.d2msgs.bySrcId(3))
@@ -146,7 +146,7 @@ class DatasetMergerMergeSpec //
     val newDs = helper.merger.merge(keepSignleUser(helper), chatMerges)
     val newMessages = {
       val newChats = helper.dao1.chats(newDs.uuid)
-      helper.dao1.firstMessages(newChats.head, Int.MaxValue)
+      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     assert(newMessages.size === 2)
     assert(newMessages(0) =~= helper.d2msgs.bySrcId(3))
@@ -202,7 +202,7 @@ class DatasetMergerMergeSpec //
     val newDs = helper.merger.merge(keepSignleUser(helper), chatMerges)
     val newMessages = {
       val newChats = helper.dao1.chats(newDs.uuid)
-      helper.dao1.firstMessages(newChats.head, Int.MaxValue)
+      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     assert(newMessages.size === msgs.size - 2)
     assert(newMessages(0) =~= helper.d2msgs.bySrcId(2))

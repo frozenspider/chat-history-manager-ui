@@ -7,6 +7,7 @@ import java.util.UUID
 import scala.collection.immutable.ListMap
 
 import org.fs.chm.dao._
+import org.fs.chm.utility.PerfUtils._
 import org.fs.utility.Imports._
 import org.json4s._
 import org.json4s.jackson.JsonMethods
@@ -21,40 +22,44 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
   override protected def loadDataInner(rootFile: File, createNew: Boolean): EagerChatHistoryDao = {
     require(!createNew, "Creating new dataset is not supported for Telegram (as it makes no sense)")
     implicit val dummyTracker = new FieldUsageTracker
-    val resultJsonFile: File = new File(rootFile, "result.json").getAbsoluteFile
-    if (!resultJsonFile.exists()) {
-      throw new FileNotFoundException("result.json not found in " + rootFile.getAbsolutePath)
-    }
+    logPerformance {
+      val resultJsonFile: File = new File(rootFile, "result.json").getAbsoluteFile
+      if (!resultJsonFile.exists()) {
+        throw new FileNotFoundException("result.json not found in " + rootFile.getAbsolutePath)
+      }
 
-    val dataset = Dataset.createDefault("Telegram", "telegram")
+      val dataset = Dataset.createDefault("Telegram", "telegram")
 
-    val parsed = JsonMethods.parse(resultJsonFile)
+      val parsed = JsonMethods.parse(resultJsonFile)
 
-    val (myself, users) = parseAndCombineUsers(parsed, dataset.uuid)
+      val (myself, users) = parseAndCombineUsers(parsed, dataset.uuid)
 
-    val chatsWithMessages = for {
-      chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
-      if (getCheckedField[String](chat, "type") != "saved_messages")
-    } yield {
-      val messagesRes = (for {
-        message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
-      } yield MessageParser.parseMessageOption(message, rootFile)).yieldDefined
+      val chatsWithMessages = for {
+        chat <- getCheckedField[Seq[JValue]](parsed, "chats", "list")
+        if (getCheckedField[String](chat, "type") != "saved_messages")
+      } yield {
+        logPerformance {
+          val messagesRes = (for {
+            message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
+          } yield MessageParser.parseMessageOption(message, rootFile)).yieldDefined
 
-      val memberIds = (myself.id +: messagesRes.toStream.map(_.fromId)).toSet
+          val memberIds = (myself.id +: messagesRes.toStream.map(_.fromId)).toSet
 
-      val chatRes = parseChat(chat, dataset.uuid, memberIds, messagesRes.size)
-      (chatRes, messagesRes)
-    }
-    val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
+          val chatRes = parseChat(chat, dataset.uuid, memberIds, messagesRes.size)
+          (chatRes, messagesRes)
+        }((res, ms) => s"Chat '${res._1.nameOption.getOrElse("#" + res._1.id)}' loaded in ${ms} ms")
+      }
+      val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
 
-    new EagerChatHistoryDao(
-      name               = "Telegram export data from " + rootFile.getName,
-      _dataRootFile      = rootFile.getAbsoluteFile,
-      dataset            = dataset,
-      myself1            = myself,
-      users1             = users,
-      _chatsWithMessages = chatsWithMessagesLM
-    )
+      new EagerChatHistoryDao(
+        name               = "Telegram export data from " + rootFile.getName,
+        _dataRootFile      = rootFile.getAbsoluteFile,
+        dataset            = dataset,
+        myself1            = myself,
+        users1             = users,
+        _chatsWithMessages = chatsWithMessagesLM
+      )
+    }((res, ms) => s"Telegram history loaded in ${ms} ms")
   }
 
   //

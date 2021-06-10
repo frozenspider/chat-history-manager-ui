@@ -81,7 +81,9 @@ class H2ChatHistoryDaoSpec //
   test("messages and chats are equal, retrieval methods work as needed") {
     val numMsgsToTake = 10
     assert(tgDao.chats(dsUuid).size === h2dao.chats(dsUuid).size)
-    for ((tgChat, h2Chat) <- (tgDao.chats(dsUuid).sortBy(_.id) zip h2dao.chats(dsUuid).sortBy(_.id))) {
+    for ((tgCwd, h2Cwd) <- (tgDao.chats(dsUuid).sortBy(_.id) zip h2dao.chats(dsUuid).sortBy(_.id))) {
+      val tgChat = tgCwd.chat
+      val h2Chat = h2Cwd.chat
       assert(tgChat === h2Chat)
 
       val allTg = tgDao.lastMessages(tgChat, tgChat.msgCount)
@@ -145,6 +147,12 @@ class H2ChatHistoryDaoSpec //
       val last = h2dao.lastMessages(h2Chat, numMsgsToTake)
       assert(last === allH2.takeRight(numMsgsToTake))
       assert(last =~= tgDao.lastMessages(tgChat, numMsgsToTake))
+      assert(last.lastOption === h2Cwd.lastMsgOption)
+      (last.lastOption, tgCwd.lastMsgOption) match {
+        case (Some(last1), Some(last2)) => assert(last1 =~= last2)
+        case (None, None)               => // NOOP
+        case _                          => fail("Mismatch! " + (last.lastOption, tgCwd.lastMsgOption))
+      }
     }
   }
 
@@ -152,7 +160,7 @@ class H2ChatHistoryDaoSpec //
     val myself = h2dao.myself(dsUuid)
 
     def personalChatWith(u: User): Option[Chat] =
-      h2dao.chats(dsUuid) find { c =>
+      h2dao.chats(dsUuid) map (_.chat) find { c =>
         c.tpe == ChatType.Personal &&
         c.memberIds.contains(u.id) &&
         h2dao.firstMessages(c, 99999).exists(_.fromId == myself.id)
@@ -209,7 +217,7 @@ class H2ChatHistoryDaoSpec //
       (3 to 7) map (TestUtils.createRegularMessage(_, 1))
     }, 1)
     val localDsUuid = localTgDao.datasets.head.uuid
-    val chat        = localTgDao.chats(localDsUuid).head
+    val chat        = localTgDao.chats(localDsUuid).head.chat
     val msgs        = localTgDao.firstMessages(chat, 999999)
     dir = Files.createTempDirectory(null).toFile
 
@@ -219,7 +227,7 @@ class H2ChatHistoryDaoSpec //
     val dsUuid = localTgDao.datasets.head.uuid
     for {
       dao  <- Seq(localTgDao, h2dao)
-      chat <- dao.chats(localDsUuid).sortBy(_.id)
+      chat <- dao.chats(localDsUuid).map(_.chat).sortBy(_.id)
     } {
       val clue                        = s"Dao is ${dao.getClass.getSimpleName}"
       implicit def toMessage(i: Long) = msgs.find(_.sourceIdOption contains i).get
@@ -242,7 +250,7 @@ class H2ChatHistoryDaoSpec //
   }
 
   test("delete chat") {
-    val chats = h2dao.chats(dsUuid)
+    val chats = h2dao.chats(dsUuid).map(_.chat)
     val users = h2dao.users(dsUuid)
 
     {
@@ -266,7 +274,7 @@ class H2ChatHistoryDaoSpec //
 
   test("merge (absorb) user") {
     def fetchPersonalChat(u: User): Chat = {
-      h2dao.chats(dsUuid).find(c => c.tpe == ChatType.Personal && c.memberIds.contains(u.id)) getOrElse {
+      h2dao.chats(dsUuid).map(_.chat).find(c => c.tpe == ChatType.Personal && c.memberIds.contains(u.id)) getOrElse {
         fail(s"Chat for user $u not found!")
       }
     }
@@ -303,7 +311,7 @@ class H2ChatHistoryDaoSpec //
       nameOption = expectedUser.firstNameOption,
       msgCount   = baseUserPcMsgs.size + absorbedUserPcMsgs.size
     )
-    assert(chatsAfter.find(_.id == baseUserPc.id) === Some(expectedChat))
+    assert(chatsAfter.find(_.id == baseUserPc.id).map(_.chat) === Some(expectedChat))
     assert(!chatsAfter.exists(_.id == absorbedUserPc.id))
 
     // Verify messages
@@ -313,7 +321,7 @@ class H2ChatHistoryDaoSpec //
           sourceIdOption = None,
           fromId         = baseUser.id
         ))).sortBy(_.time)
-    assert(h2dao.firstMessages(chatsAfter.find(_.id == baseUserPc.id).get, 99999) === expectedMessages)
+    assert(h2dao.firstMessages(chatsAfter.find(_.id == baseUserPc.id).get.chat, 99999) === expectedMessages)
   }
 
   test("delete dataset") {
@@ -326,7 +334,7 @@ class H2ChatHistoryDaoSpec //
   }
 
   test("shift dataset time") {
-    val chat = h2dao.chats(dsUuid).head
+    val chat = h2dao.chats(dsUuid).head.chat
     def getMsg() = {
       h2dao.firstMessages(chat, 1).head
     }

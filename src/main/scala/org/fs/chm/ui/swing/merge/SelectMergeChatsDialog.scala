@@ -4,7 +4,6 @@ import scala.swing._
 
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger._
-import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.list.chat.ChatListItem
@@ -35,7 +34,7 @@ class SelectMergeChatsDialog(
 
   private lazy val table = {
     checkEdt()
-    new SelectMergesTable[ChatWithDao, ChatMergeOption](models)
+    new SelectMergesTable[(ChatHistoryDao, ChatWithDetails), ChatMergeOption](models)
   }
 
   override protected lazy val dialogComponent: Component = {
@@ -48,40 +47,37 @@ class SelectMergeChatsDialog(
 
   import org.fs.chm.ui.swing.merge.SelectMergesTable._
 
-  private class Models(masterChats: Seq[Chat], slaveChats: Seq[Chat])
-      extends MergeModels[ChatWithDao, ChatMergeOption] {
+  private class Models(masterChats: Seq[ChatWithDetails], slaveChats: Seq[ChatWithDetails])
+      extends MergeModels[(ChatHistoryDao, ChatWithDetails), ChatMergeOption] {
 
-    def wrapMasterValue(mv: Chat): ChatWithDao = ChatWithDao(mv, masterDao)
-    def wrapSlaveValue(sv: Chat):  ChatWithDao = ChatWithDao(sv, slaveDao)
-
-    override val allElems: Seq[RowData[ChatWithDao]] = {
+    override val allElems: Seq[RowData[(ChatHistoryDao, ChatWithDetails)]] = {
       val masterChatsMap = groupById(masterChats)
 
-      val merges: Seq[RowData[ChatWithDao]] =
+      val merges: Seq[RowData[(ChatHistoryDao, ChatWithDetails)]] =
         for (sc <- slaveChats) yield {
-          masterChatsMap.get(sc.id) match {
-            case None     => RowData.InSlaveOnly(wrapSlaveValue(sc))
-            case Some(mc) => RowData.InBoth(wrapMasterValue(mc), wrapSlaveValue(sc))
+          masterChatsMap.get(sc.chat.id) match {
+            case None     => RowData.InSlaveOnly(slaveDao -> sc)
+            case Some(mc) => RowData.InBoth(masterDao -> mc, slaveDao -> sc)
           }
         }
 
-      var mergesAcc: Seq[RowData[ChatWithDao]] = Seq.empty
+      var mergesAcc: Seq[RowData[(ChatHistoryDao, ChatWithDetails)]] = Seq.empty
 
       // 1) Combined and unchanged chats
-      val combinesMasterToDataMap: Map[Chat, RowData.InBoth[ChatWithDao]] =
-        merges.collect { case rd @ RowData.InBoth(mc, sc) => (mc.chat, rd) }.toMap
+      val combinesMasterToDataMap: Map[Chat, RowData.InBoth[(ChatHistoryDao, ChatWithDetails)]] =
+        merges.collect { case rd @ RowData.InBoth((md, mc), (sd, sc)) => (mc.chat, rd) }.toMap
       for (mc <- masterChats) {
-        combinesMasterToDataMap.get(mc) match {
+        combinesMasterToDataMap.get(mc.chat) match {
           case Some(rd) => mergesAcc = mergesAcc :+ rd
-          case None     => mergesAcc = mergesAcc :+ RowData.InMasterOnly(wrapMasterValue(mc))
+          case None     => mergesAcc = mergesAcc :+ RowData.InMasterOnly((masterDao: ChatHistoryDao) -> mc)
         }
       }
 
       // 2) Added chats
-      val additionsSlaveToDataMap: Map[Chat, RowData.InSlaveOnly[ChatWithDao]] =
-        merges.collect { case rd @ RowData.InSlaveOnly(sc) => (sc.chat, rd) }.toMap
-      for (sc <- slaveChats if additionsSlaveToDataMap.contains(sc)) {
-        mergesAcc = mergesAcc :+ additionsSlaveToDataMap(sc)
+      val additionsSlaveToDataMap: Map[Chat, RowData.InSlaveOnly[(ChatHistoryDao, ChatWithDetails)]] =
+        merges.collect { case rd @ RowData.InSlaveOnly((sd, sc)) => (sc.chat, rd) }.toMap
+      for (sc <- slaveChats if additionsSlaveToDataMap.contains(sc.chat)) {
+        mergesAcc = mergesAcc :+ additionsSlaveToDataMap(sc.chat)
       }
 
       mergesAcc
@@ -89,8 +85,8 @@ class SelectMergeChatsDialog(
 
     override val cellsAreInteractive = false
 
-    override val renderer = (renderable: ListItemRenderable[ChatWithDao]) => {
-      val r = new ChatListItem(renderable.v, None, None)
+    override val renderer = (renderable: ListItemRenderable[(ChatHistoryDao, ChatWithDetails)]) => {
+      val r = new ChatListItem(renderable.v._1, renderable.v._2, None, None)
       if (renderable.isCombine) {
         r.inactiveColor = Colors.CombineBg
       } else if (renderable.isAdd) {
@@ -100,30 +96,36 @@ class SelectMergeChatsDialog(
       r
     }
 
-    override protected def isInBothSelectable(mv: ChatWithDao, sv: ChatWithDao): Boolean = true
-    override protected def isInSlaveSelectable(sv: ChatWithDao):                 Boolean = true
-    override protected def isInMasterSelectable(mv: ChatWithDao):                Boolean = false
+    override protected def isInBothSelectable(mv: (ChatHistoryDao, ChatWithDetails),
+                                              sv: (ChatHistoryDao, ChatWithDetails)): Boolean =
+      true
+
+    override protected def isInSlaveSelectable(sv: (ChatHistoryDao, ChatWithDetails)): Boolean =
+      true
+
+    override protected def isInMasterSelectable(mv: (ChatHistoryDao, ChatWithDetails)): Boolean =
+      false
 
     override protected def rowDataToResultOption(
-        rd: RowData[ChatWithDao],
+        rd: RowData[(ChatHistoryDao, ChatWithDetails)],
         isSelected: Boolean
     ): Option[ChatMergeOption] = {
       rd match {
-        case RowData.InMasterOnly(ChatWithDao(mc, _)) =>
-          Some(ChatMergeOption.Keep(mc))
-        case RowData.InBoth(ChatWithDao(mc, _), ChatWithDao(sc, _)) =>
+        case RowData.InMasterOnly((_, mcwd)) =>
+          Some(ChatMergeOption.Keep(mcwd))
+        case RowData.InBoth((_, mcwd), (_, scwd)) =>
           Some(
             if (isSelected) {
               // Mismatches have to be analyzed by DatasetMerger
-              ChatMergeOption.Combine(mc, sc, IndexedSeq.empty)
+              ChatMergeOption.Combine(mcwd, scwd, IndexedSeq.empty)
             } else {
-              ChatMergeOption.Keep(sc)
+              ChatMergeOption.Keep(scwd)
             }
           )
         case _ if !isSelected =>
           None
-        case RowData.InSlaveOnly(ChatWithDao(sc, _)) =>
-          Some(ChatMergeOption.Add(sc))
+        case RowData.InSlaveOnly((_, scwd)) =>
+          Some(ChatMergeOption.Add(scwd))
       }
     }
   }

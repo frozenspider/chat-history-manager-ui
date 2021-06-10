@@ -2,7 +2,6 @@ package org.fs.chm.ui.swing.messages.impl
 
 import java.io.File
 import java.io.StringReader
-import java.util.UUID
 
 import javax.swing.text.Element
 import javax.swing.text.html.HTML
@@ -10,7 +9,6 @@ import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao.Message.Service
 import org.fs.chm.dao._
-import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.utility.EntityUtils
 import org.fs.utility.Imports._
@@ -89,20 +87,20 @@ class MessagesService(htmlKit: HTMLEditorKit) {
   // Renderers and helpers
   //
 
-  def renderMessageHtml(cc: ChatWithDao, m: Message, isQuote: Boolean = false): String = {
+  def renderMessageHtml(dao: ChatHistoryDao, cwd: ChatWithDetails, m: Message, isQuote: Boolean = false): String = {
     val msgHtml: String = m match {
       case m: Message.Regular =>
         val textHtmlOption = renderTextOption(m.textOption)
         val contentHtmlOption = m.contentOption map { ct =>
-          s"""<div class="content">${ContentHtmlRenderer.render(cc, ct)}</div>"""
+          s"""<div class="content">${ContentHtmlRenderer.render(cwd, ct)}</div>"""
         }
-        val fwdFromHtmlOption  = m.forwardFromNameOption map (n => renderFwdFrom(cc, n))
-        val replySrcHtmlOption = if (isQuote) None else m.replyToMessageIdOption map (id => renderSourceMessage(cc, id))
+        val fwdFromHtmlOption  = m.forwardFromNameOption map (n => renderFwdFrom(cwd, n))
+        val replySrcHtmlOption = if (isQuote) None else m.replyToMessageIdOption map (id => renderSourceMessage(dao, cwd, id))
         Seq(fwdFromHtmlOption, replySrcHtmlOption, textHtmlOption, contentHtmlOption).yieldDefined.mkString
       case sm: Message.Service =>
-        ServiceMessageHtmlRenderer.render(cc, sm)
+        ServiceMessageHtmlRenderer.render(dao, cwd, sm)
     }
-    val titleNameHtml = renderTitleName(cc, Some(m.fromId), None)
+    val titleNameHtml = renderTitleName(cwd, Some(m.fromId), None)
     val titleHtml =
       s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})"""
     val sourceIdAttr = m.sourceIdOption map (id => s"""message_source_id="$id"""") getOrElse ""
@@ -116,16 +114,15 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     """.stripMargin // TODO: Remove <p>
   }
 
-  private def renderTitleName(cc: ChatWithDao, idOption: Option[Long], nameOption: Option[String]): String = {
-    val members = cc.dao.chatMembers(cc.chat)
+  private def renderTitleName(cwd: ChatWithDetails, idOption: Option[Long], nameOption: Option[String]): String = {
     val idx = {
-      val idx1 = idOption map (id => members indexWhere (_.id == id)) getOrElse -1
-      val idx2 = members indexWhere (u => nameOption contains u.prettyName)
+      val idx1 = idOption map (id => cwd.members indexWhere (_.id == id)) getOrElse -1
+      val idx2 = cwd.members indexWhere (u => nameOption contains u.prettyName)
       if (idx1 != -1) idx1 else idx2
     }
     val color = if (idx >= 0) Colors.stringForIdx(idx) else "#000000"
     val resolvedName = nameOption getOrElse {
-      EntityUtils.getOrUnnamed(idOption flatMap (id => members.find(_.id == id)) map (_.prettyName))
+      EntityUtils.getOrUnnamed(idOption flatMap (id => cwd.members.find(_.id == id)) map (_.prettyName))
     }
 
     s"""<span class="title-name" style="color: $color;">${resolvedName}</span>"""
@@ -136,25 +133,23 @@ class MessagesService(htmlKit: HTMLEditorKit) {
       s"""<div class="text">${RichTextHtmlRenderer.render(rt)}</div>"""
     }
 
-  private def renderFwdFrom(cc: ChatWithDao, fromName: String): String = {
-    val titleNameHtml = renderTitleName(cc, None, Some(fromName))
+  private def renderFwdFrom(cwd: ChatWithDetails, fromName: String): String = {
+    val titleNameHtml = renderTitleName(cwd, None, Some(fromName))
     s"""<div class="forwarded-from">Forwarded from $titleNameHtml</div>"""
   }
 
-  private def renderSourceMessage(cc: ChatWithDao, srcId: Message.SourceId): String = {
-    val m2Option = cc.dao.messageOption(cc.chat, srcId)
+  private def renderSourceMessage(dao: ChatHistoryDao, cwd: ChatWithDetails, srcId: Message.SourceId): String = {
+    val m2Option = dao.messageOption(cwd.chat, srcId)
     val html = m2Option match {
       case None     => "[Deleted message]"
-      case Some(m2) => renderMessageHtml(cc, m2, true)
+      case Some(m2) => renderMessageHtml(dao, cwd, m2, true)
     }
     s"""<blockquote>$html</blockquote> """
   }
 
   private def renderPossiblyMissingContent(
       fileOption: Option[File],
-      kindPrettyName: String,
-      dao: ChatHistoryDao,
-      dsUuid: UUID
+      kindPrettyName: String
   )(renderContentFromFile: File => String): String = {
     fileOption match {
       case Some(file) if file.exists => renderContentFromFile(file)
@@ -167,10 +162,8 @@ class MessagesService(htmlKit: HTMLEditorKit) {
                           widthOption: Option[Int],
                           heightOption: Option[Int],
                           altTextOption: Option[String],
-                          imagePrettyType: String,
-                          dao: ChatHistoryDao,
-                          dsUuid: UUID): String = {
-    renderPossiblyMissingContent(fileOption, imagePrettyType, dao, dsUuid)(file => {
+                          imagePrettyType: String): String = {
+    renderPossiblyMissingContent(fileOption, imagePrettyType)(file => {
       val srcAttr    = Some(s"""src="${fileToLocalUriString(file)}"""")
       val widthAttr  = widthOption map (w => s"""width="${w / 2}"""")
       val heightAttr = heightOption map (h => s"""height="${h / 2}"""")
@@ -184,15 +177,15 @@ class MessagesService(htmlKit: HTMLEditorKit) {
   }
 
   object ServiceMessageHtmlRenderer {
-    def render(cc: ChatWithDao, sm: Message.Service): String = {
+    def render(dao: ChatHistoryDao, cwd: ChatWithDetails, sm: Message.Service): String = {
       val textHtmlOption = renderTextOption(sm.textOption)
       val content = sm match {
         case sm: Message.Service.PhoneCall         => renderPhoneCall(sm)
-        case sm: Message.Service.PinMessage        => "Pinned message" + renderSourceMessage(cc, sm.messageId)
-        case sm: Message.Service.MembershipChange  => renderMembershipChangeMessage(cc, sm)
+        case sm: Message.Service.PinMessage        => "Pinned message" + renderSourceMessage(dao, cwd, sm.messageId)
+        case sm: Message.Service.MembershipChange  => renderMembershipChangeMessage(cwd, sm)
         case sm: Message.Service.ClearHistory      => s"History cleared"
-        case sm: Message.Service.Group.EditTitle   => renderEditTitleMessage(sm, cc.dao, cc.dsUuid)
-        case sm: Message.Service.Group.EditPhoto   => renderEditPhotoMessage(sm, cc.dao, cc.dsUuid)
+        case sm: Message.Service.Group.EditTitle   => renderEditTitleMessage(sm)
+        case sm: Message.Service.Group.EditPhoto   => renderEditPhotoMessage(sm)
         case sm: Message.Service.Group.MigrateFrom => renderMigratedFrom(sm)
         case sm: Message.Service.Group.MigrateTo   => "Migrated to another group"
       }
@@ -207,12 +200,12 @@ class MessagesService(htmlKit: HTMLEditorKit) {
       ).yieldDefined.mkString(" ")
     }
 
-    private def renderEditTitleMessage(sm: Service.Group.EditTitle, dao: ChatHistoryDao, dsUuid: UUID) = {
+    private def renderEditTitleMessage(sm: Service.Group.EditTitle) = {
       s"Changed group title to <b>${sm.title}</b>"
     }
 
-    private def renderEditPhotoMessage(sm: Service.Group.EditPhoto, dao: ChatHistoryDao, dsUuid: UUID) = {
-      val image = renderImage(sm.pathOption, sm.widthOption, sm.heightOption, None, "Photo", dao, dsUuid)
+    private def renderEditPhotoMessage(sm: Service.Group.EditPhoto) = {
+      val image = renderImage(sm.pathOption, sm.widthOption, sm.heightOption, None, "Photo")
       s"Changed group photo<br>$image"
     }
 
@@ -220,9 +213,9 @@ class MessagesService(htmlKit: HTMLEditorKit) {
       ("Migrated" + sm.titleOption.map(s => s" from $s").getOrElse("")).trim
     }
 
-    private def renderMembershipChangeMessage(cc: ChatWithDao, sm: Service.MembershipChange) = {
+    private def renderMembershipChangeMessage(cwd: ChatWithDetails, sm: Service.MembershipChange) = {
       val members = sm.members
-        .map(name => renderTitleName(cc, None, Some(name)))
+        .map(name => renderTitleName(cwd, None, Some(name)))
         .mkString("<ul><li>", "</li><li>", "</li></ul>")
       val content = sm match {
         case sm: Service.Group.Create        => s"Created group <b>${sm.title}</b>"
@@ -270,22 +263,22 @@ class MessagesService(htmlKit: HTMLEditorKit) {
   }
 
   object ContentHtmlRenderer {
-    def render(cc: ChatWithDao, ct: Content): String = {
+    def render(cwd: ChatWithDetails, ct: Content): String = {
       ct match {
-        case ct: Content.Sticker       => renderSticker(ct, cc.dao, cc.dsUuid)
-        case ct: Content.Photo         => renderPhoto(ct, cc.dao, cc.dsUuid)
-        case ct: Content.VoiceMsg      => renderVoiceMsg(ct, cc.dao, cc.dsUuid)
-        case ct: Content.VideoMsg      => renderVideoMsg(ct, cc.dao, cc.dsUuid)
-        case ct: Content.Animation     => renderAnimation(ct, cc.dao, cc.dsUuid)
-        case ct: Content.File          => renderFile(ct, cc.dao, cc.dsUuid)
+        case ct: Content.Sticker       => renderSticker(ct)
+        case ct: Content.Photo         => renderPhoto(ct)
+        case ct: Content.VoiceMsg      => renderVoiceMsg(ct)
+        case ct: Content.VideoMsg      => renderVideoMsg(ct)
+        case ct: Content.Animation     => renderAnimation(ct)
+        case ct: Content.File          => renderFile(ct)
         case ct: Content.Location      => renderLocation(ct)
         case ct: Content.Poll          => renderPoll(ct)
-        case ct: Content.SharedContact => renderSharedContact(cc, ct)
+        case ct: Content.SharedContact => renderSharedContact(cwd, ct)
       }
     }
 
-    private def renderVoiceMsg(ct: Content.VoiceMsg, dao: ChatHistoryDao, dsUuid: UUID) = {
-      renderPossiblyMissingContent(ct.pathOption, "Voice message", dao, dsUuid)(file => {
+    private def renderVoiceMsg(ct: Content.VoiceMsg) = {
+      renderPossiblyMissingContent(ct.pathOption, "Voice message")(file => {
         val mimeTypeOption = ct.mimeTypeOption map (mt => s"""type="$mt"""")
         val durationOption = ct.durationSecOption map (d => s"""duration="$d"""")
         // <audio> tag is not impemented by default AWT toolkit, we're plugging custom view
@@ -295,28 +288,28 @@ class MessagesService(htmlKit: HTMLEditorKit) {
       })
     }
 
-    private def renderVideoMsg(ct: Content.VideoMsg, dao: ChatHistoryDao, dsUuid: UUID): String = {
+    private def renderVideoMsg(ct: Content.VideoMsg): String = {
       // TODO
       "[Video messages not supported yet]"
     }
 
-    private def renderAnimation(ct: Content.Animation, dao: ChatHistoryDao, dsUuid: UUID): String = {
+    private def renderAnimation(ct: Content.Animation): String = {
       // TODO
       "[Animations not supported yet]"
     }
 
-    private def renderFile(ct: Content.File, dao: ChatHistoryDao, dsUuid: UUID): String = {
+    private def renderFile(ct: Content.File): String = {
       // TODO
       "[Files not supported yet]"
     }
 
-    def renderSticker(st: Content.Sticker, dao: ChatHistoryDao, dsUuid: UUID): String = {
+    def renderSticker(st: Content.Sticker): String = {
       val pathOption = st.pathOption orElse st.thumbnailPathOption
-      renderImage(pathOption, st.widthOption, st.heightOption, st.emojiOption, "Sticker", dao, dsUuid)
+      renderImage(pathOption, st.widthOption, st.heightOption, st.emojiOption, "Sticker")
     }
 
-    def renderPhoto(ct: Content.Photo, dao: ChatHistoryDao, dsUuid: UUID): String = {
-      renderImage(ct.pathOption, Some(ct.width), Some(ct.height), None, "Photo", dao, dsUuid)
+    def renderPhoto(ct: Content.Photo): String = {
+      renderImage(ct.pathOption, Some(ct.width), Some(ct.height), None, "Photo")
     }
 
     def renderLocation(ct: Content.Location): String = {
@@ -328,8 +321,8 @@ class MessagesService(htmlKit: HTMLEditorKit) {
       s"""<blockquote><i>Poll:</i> ${ct.question}</blockquote>"""
     }
 
-    def renderSharedContact(cc: ChatWithDao, ct: Content.SharedContact): String = {
-      val name  = renderTitleName(cc, None, Some(ct.prettyName))
+    def renderSharedContact(cwd: ChatWithDetails, ct: Content.SharedContact): String = {
+      val name  = renderTitleName(cwd, None, Some(ct.prettyName))
       val phone = ct.phoneNumberOption map (pn => s"(phone: $pn)") getOrElse "(no phone number)"
       s"""<blockquote><i>Shared contact:</i> $name $phone</blockquote>"""
     }

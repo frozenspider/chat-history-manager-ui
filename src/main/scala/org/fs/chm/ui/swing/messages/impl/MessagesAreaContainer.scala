@@ -4,8 +4,9 @@ import scala.swing._
 
 import javax.swing.text.DefaultCaret
 import javax.swing.text.html.HTMLEditorKit
+import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.ChatWithDetails
 import org.fs.chm.dao.Message
-import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesService._
@@ -58,7 +59,8 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   }
 
   override def render(
-      cwd: ChatWithDao,
+      dao: ChatHistoryDao,
+      cwd: ChatWithDetails,
       msgs: IndexedSeq[Message],
       beginReached: Boolean,
       showTop: Boolean
@@ -70,7 +72,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
       sb.append(msgService.nothingNewerHtml)
     }
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(cwd, m))
+      sb.append(msgService.renderMessageHtml(dao, cwd, m))
     }
     md.insert(sb.toString, MessageInsertPosition.Leading)
     document = md
@@ -104,7 +106,12 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     document
   }
 
-  override def prepend(cwd: ChatWithDao, msgs: IndexedSeq[Message], beginReached: Boolean): MessageDocument = {
+  override def prepend(
+      dao: ChatHistoryDao,
+      cwd: ChatWithDetails,
+      msgs: IndexedSeq[Message],
+      beginReached: Boolean
+  ): MessageDocument = {
     checkEdt()
     require(viewPosSizeOption.isEmpty || !appended, "Prepend and append can't happen in a single update!")
     prepended = true
@@ -115,21 +122,26 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
       sb.append(msgService.nothingNewerHtml)
     }
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(cwd, m))
+      sb.append(msgService.renderMessageHtml(dao, cwd, m))
     }
     document.removeLoading(true)
     document.insert(sb.toString, MessageInsertPosition.Leading)
     document
   }
 
-  override def append(cwd: ChatWithDao, msgs: IndexedSeq[Message], endReached: Boolean): MessageDocument = {
+  override def append(
+      dao: ChatHistoryDao,
+      cwd: ChatWithDetails,
+      msgs: IndexedSeq[Message],
+      endReached: Boolean
+  ): MessageDocument = {
     checkEdt()
     require(viewPosSizeOption.isEmpty || !prepended, "Prepend and append can't happen in a single update!")
     appended = true
     // TODO: Prevent flickering
     val sb = new StringBuilder
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(cwd, m))
+      sb.append(msgService.renderMessageHtml(dao, cwd, m))
     }
     //    if (endReached) {
     //      sb.append(msgService.nothingNewerHtml)

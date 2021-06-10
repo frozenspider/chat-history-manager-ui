@@ -19,9 +19,10 @@ import doobie.h2.implicits._
 import doobie.implicits._
 import org.fs.chm.utility.EntityUtils._
 import org.fs.chm.utility.IoUtils
+import org.fs.chm.utility.Logging
+import org.fs.chm.utility.PerfUtils._
 import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
-import org.slf4s.Logging
 
 class H2ChatHistoryDao(
     dataPathRoot: File,
@@ -91,18 +92,7 @@ class H2ChatHistoryDao(
     usersCache(dsUuid)._2.find(_.id == id)
   }
 
-  override def chats(dsUuid: UUID): Seq[Chat] = {
-    // FIXME: Double-call when loading a DB!
-    logPerformance {
-      queries.chats.selectAll(dsUuid).transact(txctr).unsafeRunSync()
-    }((res, ms) => s"${res.size} chats fetched in ${ms} ms")
-  }
-
-  override def chatOption(dsUuid: UUID, id: ChatId): Option[Chat] = {
-    queries.chats.select(dsUuid, id).transact(txctr).unsafeRunSync()
-  }
-
-  override def chatMembers(chat: Chat): Seq[User] = {
+  private def chatMembers(chat: Chat): Seq[User] = {
     val allUsers = users(chat.dsUuid)
     val me = myself(chat.dsUuid)
     me +: (chat.memberIds
@@ -112,6 +102,24 @@ class H2ChatHistoryDao(
       .sortBy(_.id))
   }
 
+  private def addChatsDetails(dsUuid: UUID, chatQuery: ConnectionIO[Seq[Chat]]):  ConnectionIO[Seq[ChatWithDetails]] = {
+    for {
+      chats <- chatQuery
+      lasts <- materializeMessagesQuery(dsUuid, queries.rawMessages.selectLastForChats(dsUuid, chats))
+    } yield chats map (c => ChatWithDetails(c, lasts.find(_._1 == c.id).map(_._2), chatMembers(c)))
+  }
+
+  override def chats(dsUuid: UUID): Seq[ChatWithDetails] = {
+    // FIXME: Double-call when loading a DB!
+    logPerformance {
+      addChatsDetails(dsUuid, queries.chats.selectAll(dsUuid)).transact(txctr).unsafeRunSync()
+    }((res, ms) => s"${res.size} chats fetched in ${ms} ms")
+  }
+
+  override def chatOption(dsUuid: UUID, id: ChatId): Option[ChatWithDetails] = {
+    addChatsDetails(dsUuid, queries.chats.select(dsUuid, id).map(_.toSeq)).transact(txctr).unsafeRunSync().headOption
+  }
+
   /**
    * Materialize a query from `IndexedSeq[RawMessage]` to `IndexedSeq[Message]`.
    * Tries to do so efficiently.
@@ -119,7 +127,7 @@ class H2ChatHistoryDao(
   private def materializeMessagesQuery(
       dsUuid: UUID,
       msgsQuery: ConnectionIO[IndexedSeq[RawMessage]]
-  ): ConnectionIO[IndexedSeq[Message]] = {
+  ): ConnectionIO[IndexedSeq[(ChatId, Message)]] = {
     for {
       rawMsgs <- msgsQuery
       rawMsgIds = rawMsgs.map(_.internalId)
@@ -133,7 +141,7 @@ class H2ChatHistoryDao(
       val contentMap = rawContents
         .map(rc => (rc.messageInternalId -> Raws.toContent(dsUuid, rc)))
         .toMap
-      rawMsgs map (rm => Raws.toMessage(rm, richTextsMap, contentMap))
+      rawMsgs map (rm => (rm.chatId, Raws.toMessage(rm, richTextsMap, contentMap)))
     }
   }
 
@@ -142,6 +150,7 @@ class H2ChatHistoryDao(
       materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectSlice(chat, offset, limit))
         .transact(txctr)
         .unsafeRunSync()
+        .map(_._2)
     }((res, ms) => s"${res.size} messages fetched in ${ms} ms [scrollMessages]")
   }
 
@@ -151,6 +160,7 @@ class H2ChatHistoryDao(
         .transact(txctr)
         .unsafeRunSync()
         .reverse
+        .map(_._2)
     }((res, ms) => s"${res.size} messages fetched in ${ms} ms [lastMessages]")
   }
 
@@ -160,6 +170,7 @@ class H2ChatHistoryDao(
         .transact(txctr)
         .unsafeRunSync()
         .reverse
+        .map(_._2)
     }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesBeforeImpl]")
   } ensuring (seq => seq.nonEmpty && seq.last =~= msg)
 
@@ -168,6 +179,7 @@ class H2ChatHistoryDao(
       materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectAfterInc(chat, msg, limit))
         .transact(txctr)
         .unsafeRunSync()
+        .map(_._2)
     }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesAfterImpl]")
   }
 
@@ -176,6 +188,7 @@ class H2ChatHistoryDao(
       materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectBetweenInc(chat, msg1, msg2))
         .transact(txctr)
         .unsafeRunSync()
+        .map(_._2)
     }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesBetweenImpl]")
   }
 
@@ -196,6 +209,7 @@ class H2ChatHistoryDao(
         .transact(txctr)
         .unsafeRunSync()
         .headOption
+        .map(_._2)
     }((res, ms) => s"Message fetched in ${ms} ms [messageOption]")
   }
 
@@ -205,6 +219,7 @@ class H2ChatHistoryDao(
         .transact(txctr)
         .unsafeRunSync()
         .headOption
+        .map(_._2)
     }((res, ms) => s"Message fetched in ${ms} ms [messageOptionByInternalId]")
 
   def copyAllFrom(dao: ChatHistoryDao): Unit = {
@@ -223,7 +238,7 @@ class H2ChatHistoryDao(
             query = query flatMap (_ => queries.users.insert(u, u == myself1))
           }
 
-          for (c <- dao.chats(ds.uuid)) {
+          for (c <- dao.chats(ds.uuid).map(_.chat)) {
             require(c.id > 0, "IDs should be positive!")
             query = query flatMap (_ => queries.chats.insert(dsRoot, c))
             for (memberId <- c.memberIds) {
@@ -272,8 +287,8 @@ class H2ChatHistoryDao(
           assert(
             dao.users(ds.uuid) == users(ds.uuid),
             s"Users differ:\nWas    ${dao.users(ds.uuid)}\nBecame ${users(ds.uuid)}")
-          val chats1 = dao.chats(ds.uuid)
-          val chats2 = chats(ds.uuid)
+          val chats1 = dao.chats(ds.uuid).map(_.chat)
+          val chats2 = chats(ds.uuid).map(_.chat)
           assert(chats1.size == chats2.size, s"Chat size differs:\nWas    ${chats1.size}\nBecame ${chats2.size}")
           for (((c1, c2), i) <- chats1.zip(chats2).zipWithIndex) {
             StopWatch.measureAndCall {
@@ -708,17 +723,12 @@ class H2ChatHistoryDao(
       private val orderAsc    = fr"ORDER BY m.time, m.source_id, m.internal_id"
       private val orderDesc   = fr"ORDER BY m.time DESC, m.source_id DESC, m.internal_id DESC"
 
-      private def whereDsAndChatFr(dsUuid: UUID, chatId: Long) =
+      private def whereDsAndChatFr(dsUuid: UUID, chatId: Long): Fragment =
         fr"WHERE m.ds_uuid = $dsUuid AND m.chat_id = $chatId"
 
-      private def selectAllByChatFr(dsUuid: UUID, chatId: Long) =
+      private def selectAllByChatFr(dsUuid: UUID, chatId: Long): Fragment =
         selectAllFr ++ whereDsAndChatFr(dsUuid, chatId)
 
-      def selectMaxId(chat: Chat): ConnectionIO[Int] =
-        (fr"SELECT MAX(m.id) FROM messages m" ++ whereDsAndChatFr(chat.dsUuid, chat.id))
-          .query[Int]
-          .option
-          .map(_ getOrElse 0)
 
       def selectOption(chat: Chat, id: Message.InternalId): ConnectionIO[Option[RawMessage]] =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND m.internal_id = ${id}").query[RawMessage].option
@@ -730,6 +740,13 @@ class H2ChatHistoryDao(
         (selectAllByChatFr(chat.dsUuid, chat.id)
           ++ orderAsc ++ withLimit(limit)
           ++ fr"OFFSET $offset").query[RawMessage].to[IndexedSeq]
+
+      def selectLastForChats(dsUuid: UUID, chats: Seq[Chat]): ConnectionIO[IndexedSeq[RawMessage]] =
+        (selectAllFr
+          ++ fr"WHERE m.ds_uuid = $dsUuid"
+          ++ fr"AND m.internal_id IN (SELECT MAX(m2.internal_id) FROM messages m2 WHERE m2.ds_uuid = $dsUuid AND m2.chat_id IN ("
+          ++ Fragment.const(chats.map(_.id).mkString(","))
+          ++ fr") GROUP BY m2.chat_id)").query[RawMessage].to[IndexedSeq]
 
       def selectLastInversed(chat: Chat, limit: Int): ConnectionIO[IndexedSeq[RawMessage]] =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ orderDesc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
@@ -1395,10 +1412,6 @@ class H2ChatHistoryDao(
       }
     }
   }
-
-  private def logPerformance[R](cb: => R)(msg: (R, Long) => String): R = {
-    StopWatch.measureAndCall(cb)((res, ms) => if (ms > 50) log.debug(msg(res, ms)))
-  }
 }
 
 object H2ChatHistoryDao {
@@ -1425,7 +1438,7 @@ object H2ChatHistoryDao {
   /** [[Message]] class with all the inlined fields, whose type is determined by `messageType` */
   case class RawMessage(
       dsUuid: UUID,
-      chatId: Long,
+      chatId: ChatId,
       /** Not assigned (set to -1) before insert! */
       internalId: Message.InternalId,
       sourceIdOption: Option[Message.SourceId],

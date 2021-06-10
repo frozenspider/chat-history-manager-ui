@@ -32,15 +32,9 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def userOption(dsUuid: UUID, id: Long): Option[User]
 
-  def chats(dsUuid: UUID): Seq[Chat]
+  def chats(dsUuid: UUID): Seq[ChatWithDetails]
 
-  def chatOption(dsUuid: UUID, id: Long): Option[Chat]
-
-  /**
-   * First returned element MUST be myself, the rest should be in some fixed order.
-   * This method should be fast.
-   */
-  def chatMembers(chat: Chat): Seq[User]
+  def chatOption(dsUuid: UUID, id: Long): Option[ChatWithDetails]
 
   /** Return N messages after skipping first M of them. Trivial pagination in a nutshell. */
   def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message]
@@ -213,6 +207,16 @@ case class Chat(
 
 trait Searchable {
   def plainSearchableString: String
+}
+
+case class ChatWithDetails(chat: Chat,
+                           lastMsgOption: Option[Message],
+                           /** First element MUST be myself, the rest should be in some fixed order. */
+                           members: Seq[User])
+    extends WithId {
+  val dsUuid = chat.dsUuid
+
+  override val id: Long = chat.id
 }
 
 //

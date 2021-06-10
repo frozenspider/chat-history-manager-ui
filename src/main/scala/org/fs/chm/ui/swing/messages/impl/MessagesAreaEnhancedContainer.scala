@@ -4,20 +4,20 @@ import java.util.Calendar
 import java.util.Locale
 
 import scala.annotation.tailrec
-import scala.swing._
 import scala.swing.BorderPanel.Position._
+import scala.swing._
 import scala.swing.event._
 
 import com.github.nscala_time.time.Imports._
 import javax.swing.text.Element
 import javax.swing.text.html.HTML
 import javax.swing.text.html.HTMLEditorKit
+import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.messages.MessageNavigationCallbacks
 import org.fs.utility.Imports._
 import org.jdatepicker._
 import org.jdatepicker.impl._
-import org.joda.time.format.DateTimeFormatter
 
 class MessagesAreaEnhancedContainer(
     htmlKit: HTMLEditorKit,

@@ -39,11 +39,11 @@ class EagerChatHistoryDao(
   override def datasetRoot(dsUuid: UUID): File = _dataRootFile.getAbsoluteFile
 
   override def datasetFiles(dsUuid: UUID): Set[File] = {
-    val cs           = chats(dsUuid)
-    val chatImgFiles = cs.map(_.imgPathOption).yieldDefined.toSet
+    val cwds         = chats(dsUuid)
+    val chatImgFiles = cwds.map(_.chat.imgPathOption).yieldDefined.toSet
     val msgFiles = for {
-      c <- cs
-      m <- firstMessages(c, Int.MaxValue)
+      cwd <- cwds
+      m   <- firstMessages(cwd.chat, Int.MaxValue)
     } yield m.files
     chatImgFiles ++ msgFiles.toSet.flatten
   }
@@ -56,11 +56,17 @@ class EagerChatHistoryDao(
 
   val chats1 = chatsWithMessages.keys.toSeq
 
-  override def chats(dsUuid: UUID) = chats1
+  override def chats(dsUuid: UUID) = {
+    chatsWithMessages.toSeq map {
+      case (c, msgs) => ChatWithDetails(c, msgs.lastOption, chatMembers(c))
+    }
+  }
 
-  override def chatOption(dsUuid: UUID, id: Long): Option[Chat] = chats1 find (_.id == id)
+  override def chatOption(dsUuid: UUID, id: Long): Option[ChatWithDetails] = chatsWithMessages find (_._1.id == id) map {
+    case (c, msgs) => ChatWithDetails(c, msgs.lastOption, chatMembers(c))
+  }
 
-  override def chatMembers(chat: Chat): Seq[User] =  chat.memberIds.toSeq.sorted.map(mId => users1.find(_.id == mId).get)
+  private def chatMembers(chat: Chat): Seq[User] =  chat.memberIds.toSeq.sorted.map(mId => users1.find(_.id == mId).get)
 
   override def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
     val messages = chatsWithMessages(chat)

@@ -26,10 +26,10 @@ class DatasetMerger(
    * Note that we can only detect conflicts if data source supports source IDs.
    */
   def analyzeChatHistoryMerge[T <: ChatMergeOption](merge: T): T = merge match {
-    case merge @ ChatMergeOption.Combine(mc, sc, _) =>
+    case merge @ ChatMergeOption.Combine(mcwd, scwd, _) =>
       var mismatches = ArrayBuffer.empty[MessagesMergeOption]
       iterate(
-        ((messagesStream(masterDao, mc, None), None), (messagesStream(slaveDao, sc, None), None)),
+        ((messagesStream(masterDao, mcwd.chat, None), None), (messagesStream(slaveDao, scwd.chat, None), None)),
         IterationState.NoState,
         (mm => mismatches += mm)
       )
@@ -135,6 +135,7 @@ class DatasetMerger(
           if mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption &&
             mm.fromId < 0x100000000L && sm.fromId > 0x100000000L &&
             mm.copy(fromId = sm.fromId) =~= sm =>
+        // FIXME: Why does compiler report this as unreachable?!
         // Special handling for a service message mismatch which is expected when merging Telegram after 2020-10
         // We register this one conflict and proceed in clean state.
         // This is dirty but relatively easy to do.
@@ -237,8 +238,8 @@ class DatasetMerger(
         for (cmo <- chatsToMerge) {
           val (dsRoot, chat) = {
             Seq(
-              cmo.slaveChatOption.map(c => (slaveDao.datasetRoot(c.dsUuid), c)),
-              cmo.masterChatOption.map(c => (masterDao.datasetRoot(c.dsUuid), c))
+              cmo.slaveCwdOption.map(cwd => (slaveDao.datasetRoot(cwd.dsUuid), cwd.chat)),
+              cmo.masterCwdOption.map(cwd => (masterDao.datasetRoot(cwd.dsUuid), cwd.chat))
             ).yieldDefined.head match {
               case (f, c) => (f, c.copy(dsUuid = newDs.uuid))
             }
@@ -247,11 +248,11 @@ class DatasetMerger(
 
           // Messages
           val messageBatches: Stream[(File, IndexedSeq[Message])] = cmo match {
-            case ChatMergeOption.Keep(mc) =>
-              messageBatchesStream[TaggedMessage.M](masterDao, mc, None)
+            case ChatMergeOption.Keep(mcwd) =>
+              messageBatchesStream[TaggedMessage.M](masterDao, mcwd.chat, None)
                 .map(mb => (masterDao.datasetRoot(masterDs.uuid), mb))
-            case ChatMergeOption.Add(sc) =>
-              messageBatchesStream[TaggedMessage.S](slaveDao, sc, None)
+            case ChatMergeOption.Add(scwd) =>
+              messageBatchesStream[TaggedMessage.S](slaveDao, scwd.chat, None)
                 .map(mb => (slaveDao.datasetRoot(slaveDs.uuid), mb))
             case ChatMergeOption.Combine(mc, sc, resolution) =>
               resolution.map {
@@ -259,11 +260,11 @@ class DatasetMerger(
                 case etc                                  => etc
               }.map {
                 case MessagesMergeOption.Keep(_, _, Some(firstSlaveMsg), Some(lastSlaveMsg)) =>
-                  batchLoadMsgsUntilInc(slaveDao, slaveDs, cmo.slaveChatOption.get, firstSlaveMsg, lastSlaveMsg)
+                  batchLoadMsgsUntilInc(slaveDao, slaveDs, cmo.slaveCwdOption.get.chat, firstSlaveMsg, lastSlaveMsg)
                 case MessagesMergeOption.Keep(firstMasterMsg, lastMasterMsg, _, _) =>
-                  batchLoadMsgsUntilInc(masterDao, masterDs, cmo.masterChatOption.get, firstMasterMsg, lastMasterMsg)
+                  batchLoadMsgsUntilInc(masterDao, masterDs, cmo.masterCwdOption.get.chat, firstMasterMsg, lastMasterMsg)
                 case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
-                  batchLoadMsgsUntilInc(slaveDao, slaveDs, cmo.slaveChatOption.get, firstSlaveMsg, lastSlaveMsg)
+                  batchLoadMsgsUntilInc(slaveDao, slaveDs, cmo.slaveCwdOption.get.chat, firstSlaveMsg, lastSlaveMsg)
                 case _ => throw new MatchError("Impossible!")
               }.toStream.flatten
           }
@@ -422,18 +423,18 @@ object DatasetMerger {
 
   /** Represents a single merge decision: a chat that should be added, retained, merged (or skipped otherwise) */
   sealed abstract class ChatMergeOption(
-     val masterChatOption: Option[Chat],
-     val slaveChatOption:  Option[Chat]
+     val masterCwdOption: Option[ChatWithDetails],
+     val slaveCwdOption:  Option[ChatWithDetails]
   )
   object ChatMergeOption {
-    case class Keep(masterChat: Chat) extends ChatMergeOption(Some(masterChat), None)
-    case class Add(slaveChat: Chat)   extends ChatMergeOption(None, Some(slaveChat))
+    case class Keep(masterCwd: ChatWithDetails) extends ChatMergeOption(Some(masterCwd), None)
+    case class Add(slaveCwd: ChatWithDetails)   extends ChatMergeOption(None, Some(slaveCwd))
     case class Combine(
-        val masterChat: Chat,
-        val slaveChat: Chat,
+        masterCwd: ChatWithDetails,
+        slaveCwd: ChatWithDetails,
         /** Serves as either mismatches (all options after analysis) or resolution (mismatches filtered by user) */
-        val messageMergeOptions: IndexedSeq[MessagesMergeOption]
-    ) extends ChatMergeOption(Some(masterChat), Some(slaveChat))
+        messageMergeOptions: IndexedSeq[MessagesMergeOption]
+    ) extends ChatMergeOption(Some(masterCwd), Some(slaveCwd))
   }
 
   // Message tagged types

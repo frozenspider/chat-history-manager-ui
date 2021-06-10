@@ -4,33 +4,35 @@ import scala.swing.GridBagPanel.Anchor
 import scala.swing.GridBagPanel.Fill
 import scala.swing._
 
+import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.ChatType
-import org.fs.chm.ui.swing.general.ChatWithDao
+import org.fs.chm.dao.ChatWithDetails
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.general.field.TextComponent
 import org.fs.chm.utility.EntityUtils
 
 class ChatDetailsPane(
-    cc: ChatWithDao
+    dao: ChatHistoryDao,
+    cwd: ChatWithDetails
 ) extends GridBagPanel {
   {
     val data: Seq[(String, String)] = Seq(
-      ("Name:", Some(EntityUtils.getOrUnnamed(cc.chat.nameOption))),
-      ("Type:", Some(cc.chat.tpe match {
+      ("Name:", Some(EntityUtils.getOrUnnamed(cwd.chat.nameOption))),
+      ("Type:", Some(cwd.chat.tpe match {
         case ChatType.Personal     => "Personal"
         case ChatType.PrivateGroup => "Private Group"
       })),
-      ("Members:", cc.chat.tpe match {
-        case ChatType.PrivateGroup => Some(cc.dao.chatMembers(cc.chat).map(_.prettyName).mkString("\n"))
+      ("Members:", cwd.chat.tpe match {
+        case ChatType.PrivateGroup => Some(cwd.members.map(_.prettyName).mkString("\n"))
         case ChatType.Personal     => None
       }),
-      ("Image:", Some(if (cc.chat.imgPathOption.isDefined) "(Yes)" else "(None)")),
-      ("Messages:", Some(cc.chat.msgCount.toString)),
+      ("Image:", Some(if (cwd.chat.imgPathOption.isDefined) "(Yes)" else "(None)")),
+      ("Messages:", Some(cwd.chat.msgCount.toString)),
       ("", Some("")),
-      ("ID:", Some(cc.chat.id.toString)),
-      ("Dataset ID:", Some(cc.chat.dsUuid.toString.toLowerCase)),
-      ("Dataset:", Some(cc.dao.datasets.find(_.uuid == cc.chat.dsUuid).get.alias)),
-      ("Database:", Some(cc.dao.name))
+      ("ID:", Some(cwd.chat.id.toString)),
+      ("Dataset ID:", Some(cwd.chat.dsUuid.toString.toLowerCase)),
+      ("Dataset:", Some(dao.datasets.find(_.uuid == cwd.chat.dsUuid).get.alias)),
+      ("Database:", Some(dao.name))
     ).collect {
       case ((x, Some(y))) => (x, y)
     }

@@ -4,8 +4,8 @@ import java.io.File
 import java.io.FileNotFoundException
 
 import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.utility.Logging
 import org.fs.utility.StopWatch
-import org.slf4s.Logging
 
 trait DataLoader[D <: ChatHistoryDao] extends Logging {
   def create(path: File): D = {

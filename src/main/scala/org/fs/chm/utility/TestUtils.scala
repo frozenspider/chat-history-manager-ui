@@ -97,12 +97,12 @@ object TestUtils {
     ) with EagerMutableDaoTrait
   }
 
-  def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, Seq[User], Chat, Seq[Message]) = {
+  def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, Seq[User], ChatWithDetails, Seq[Message]) = {
     val ds    = dao.datasets.head
     val users = dao.users(ds.uuid)
-    val chat  = dao.chats(ds.uuid).head
-    val msgs  = dao.firstMessages(chat, Int.MaxValue)
-    (ds, users, chat, msgs)
+    val cwd   = dao.chats(ds.uuid).head
+    val msgs  = dao.firstMessages(cwd.chat, Int.MaxValue)
+    (ds, users, cwd, msgs)
   }
 
   implicit class RichUserSeq(users: Seq[User]) {

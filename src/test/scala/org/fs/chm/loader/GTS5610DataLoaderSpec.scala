@@ -31,7 +31,7 @@ class GTS5610DataLoaderSpec //
     assert(users.size === 4)
     assert(dao.myself(ds.uuid).firstNameOption === Some("Me"))
 
-    val chats = dao.chats(ds.uuid)
+    val chats = dao.chats(ds.uuid).map(_.chat)
     assert(chats.size === 3)
 
     // Someguy

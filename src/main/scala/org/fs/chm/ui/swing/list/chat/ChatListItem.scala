@@ -11,31 +11,31 @@ import javax.swing.SwingUtilities
 import javax.swing.border.EmptyBorder
 import javax.swing.border.LineBorder
 import org.apache.commons.lang3.StringEscapeUtils
+import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.ChatType._
+import org.fs.chm.dao.ChatWithDetails
 import org.fs.chm.dao.Content
 import org.fs.chm.dao.Message
 import org.fs.chm.ui.swing.list.DaoItem
-import org.fs.chm.ui.swing.general.ChatWithDao
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.utility.EntityUtils
 
 class ChatListItem(
-    cc: ChatWithDao,
+    dao: ChatHistoryDao,
+    cwd: ChatWithDetails,
     selectionGroupOption: Option[ChatListItemSelectionGroup],
     callbacksOption: Option[ChatListSelectionCallbacks]
 ) extends BorderPanel { self =>
   private val labelPreferredWidth = DaoItem.PanelWidth - 100 // TODO: Remove
 
-  val chat = cc.chat
+  val chat = cwd.chat
 
   private val labelBorderWidth = 3
-
-  private val members = cc.dao.chatMembers(cc.chat)
 
   private val popupMenu = new PopupMenu {
     contents += menuItem("Details")(showDetailsPopup())
     contents += new Separator()
-    contents += menuItem("Delete", enabled = callbacksOption.nonEmpty && cc.dao.isMutable)(showDeletePopup())
+    contents += menuItem("Delete", enabled = callbacksOption.nonEmpty && dao.isMutable)(showDeletePopup())
   }
 
   private var _activeColor:   Color = Color.LIGHT_GRAY
@@ -46,7 +46,7 @@ class ChatListItem(
 
     layout(new BorderPanel {
       // Name
-      val nameString = EntityUtils.getOrUnnamed(cc.chat.nameOption)
+      val nameString = EntityUtils.getOrUnnamed(cwd.chat.nameOption)
       val nameLabel = new Label(
         s"""<html><p style="text-align: left; width: ${labelPreferredWidth}px;">"""
           + StringEscapeUtils.escapeHtml4(nameString)
@@ -55,9 +55,9 @@ class ChatListItem(
       layout(nameLabel) = North
 
       // Last message
-      val lastMsgString = cc.dao.lastMessages(cc.chat, 1) match {
-        case x if x.isEmpty => "<No messages>"
-        case msg +: _       => simpleRenderMsg(msg)
+      val lastMsgString = cwd.lastMsgOption match {
+        case None      => "<No messages>"
+        case Some(msg) => simpleRenderMsg(msg)
       }
       val msgLabel = new Label(lastMsgString)
       msgLabel.horizontalAlignment = Alignment.Left
@@ -70,9 +70,9 @@ class ChatListItem(
     }) = Center
 
     // Type
-    val tpeString = cc.chat.tpe match {
+    val tpeString = cwd.chat.tpe match {
       case Personal     => ""
-      case PrivateGroup => "(" + members.size + ")"
+      case PrivateGroup => "(" + cwd.members.size + ")"
     }
     val tpeLabel = new Label(tpeString)
     tpeLabel.preferredWidth    = 30
@@ -101,7 +101,7 @@ class ChatListItem(
   def select(): Unit = {
     markSelected()
     selectionGroupOption foreach (_.deselectOthers(this))
-    callbacksOption foreach (_.chatSelected(cc))
+    callbacksOption foreach (_.chatSelected(dao, cwd))
   }
 
   def markSelected(): Unit = {
@@ -117,7 +117,7 @@ class ChatListItem(
   private def showDetailsPopup(): Unit = {
     Dialog.showMessage(
       title       = "Chat Details",
-      message     = new ChatDetailsPane(cc).peer,
+      message     = new ChatDetailsPane(dao, cwd).peer,
       messageType = Dialog.Message.Plain
     )
   }
@@ -125,9 +125,9 @@ class ChatListItem(
   private def showDeletePopup(): Unit = {
     Dialog.showConfirmation(
       title   = "Deleting Chat",
-      message = s"Are you sure you want to delete a chat '${EntityUtils.getOrUnnamed(cc.chat.nameOption)}'?"
+      message = s"Are you sure you want to delete a chat '${EntityUtils.getOrUnnamed(cwd.chat.nameOption)}'?"
     ) match {
-      case Dialog.Result.Yes => callbacksOption.get.deleteChat(cc)
+      case Dialog.Result.Yes => callbacksOption.get.deleteChat(dao, cwd.chat)
       case _                 => // NOOP
     }
   }
@@ -146,12 +146,12 @@ class ChatListItem(
 
   private def simpleRenderMsg(msg: Message): String = {
     val prefix =
-      if (members.size == 2 && msg.fromId == members(1).id) ""
+      if (cwd.members.size == 2 && msg.fromId == cwd.members(1).id) ""
       else {
         // Avoid querying DB if possible
         val fromNameOption =
-          (members find (_.id == msg.fromId))
-            .orElse(cc.dao.userOption(cc.dsUuid, msg.fromId))
+          (cwd.members find (_.id == msg.fromId))
+            .orElse(dao.userOption(cwd.dsUuid, msg.fromId))
             .flatMap(_.prettyNameOption)
         (EntityUtils.getOrUnnamed(fromNameOption) + ": ")
       }
