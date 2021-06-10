@@ -57,9 +57,9 @@ class EagerChatHistoryDao(
   val chats1 = chatsWithMessages.keys.toSeq
 
   override def chats(dsUuid: UUID) = {
-    chatsWithMessages.toSeq map {
+    chatsWithMessages.toSeq.map {
       case (c, msgs) => ChatWithDetails(c, msgs.lastOption, chatMembers(c))
-    }
+    }.sortBy(_.lastMsgOption.map(_.time)).reverse
   }
 
   override def chatOption(dsUuid: UUID, id: Long): Option[ChatWithDetails] = chatsWithMessages find (_._1.id == id) map {

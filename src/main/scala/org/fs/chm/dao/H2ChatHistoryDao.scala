@@ -112,7 +112,7 @@ class H2ChatHistoryDao(
   override def chats(dsUuid: UUID): Seq[ChatWithDetails] = {
     // FIXME: Double-call when loading a DB!
     logPerformance {
-      addChatsDetails(dsUuid, queries.chats.selectAll(dsUuid)).transact(txctr).unsafeRunSync()
+      addChatsDetails(dsUuid, queries.chats.selectAll(dsUuid)).transact(txctr).unsafeRunSync().sortBy(_.lastMsgOption.map(_.time)).reverse
     }((res, ms) => s"${res.size} chats fetched in ${ms} ms")
   }
 

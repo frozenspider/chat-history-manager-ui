@@ -70,7 +70,6 @@ class MainFrameApp //
 
   /*
    * TODO:
-   *  - sort chats after merging datasets
    *  - merge only newer messages
    *  - reply-to (make clickable)
    *  - word-wrap and narrower width
