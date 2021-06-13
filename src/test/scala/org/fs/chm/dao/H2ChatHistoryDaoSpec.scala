@@ -215,7 +215,7 @@ class H2ChatHistoryDaoSpec //
 
     val localTgDao = TestUtils.createSimpleDao("TG", {
       (3 to 7) map (TestUtils.createRegularMessage(_, 1))
-    }, 1)
+    }, 2)
     val localDsUuid = localTgDao.datasets.head.uuid
     val chat        = localTgDao.chats(localDsUuid).head.chat
     val msgs        = localTgDao.firstMessages(chat, 999999)

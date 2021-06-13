@@ -223,6 +223,11 @@ class DatasetMerger(
         )
         masterDao.insertDataset(newDs)
 
+        for {
+          firstMasterChat <- chatsToMerge.find(_.masterCwdOption.isDefined)
+          masterCwd <- firstMasterChat.masterCwdOption
+        } require(masterDao.users(masterCwd.chat.dsUuid).size <= usersToMerge.size, "Not enough user merges!")
+
         // Users
         val masterSelf = masterDao.myself(masterDs.uuid)
         require(

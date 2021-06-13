@@ -1,8 +1,6 @@
 package org.fs.chm.dao.merge
 
 import java.io.File
-import java.nio.charset.Charset
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
 import scala.collection.immutable.ListMap
@@ -65,7 +63,7 @@ class DatasetMergerMergeSpec //
       ChatMergeOption.Keep(helper.d1cwd)
     )
     assert(helper.dao1.datasets.size === 1)
-    val newDs = helper.merger.merge(keepSignleUser(helper), chatMerges)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
     assert(helper.dao1.datasets.size === 2)
     val newChats = helper.dao1.chats(newDs.uuid)
     assert(helper.dao1.chats(newDs.uuid).size === 1)
@@ -120,7 +118,7 @@ class DatasetMergerMergeSpec //
     val chatMerges = Seq[ChatMergeOption](
       ChatMergeOption.Keep(helper.d1cwd)
     )
-    val newDs = helper.merger.merge(keepSignleUser(helper), chatMerges)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
     val newMessages = {
       val newChats = helper.dao1.chats(newDs.uuid)
       helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
@@ -142,7 +140,7 @@ class DatasetMergerMergeSpec //
       ChatMergeOption.Add(helper.d2cwd)
     )
 
-    val newDs = helper.merger.merge(keepSignleUser(helper), chatMerges)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
     val newMessages = {
       val newChats = helper.dao1.chats(newDs.uuid)
       helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
@@ -180,7 +178,7 @@ class DatasetMergerMergeSpec //
         )
       )
     )
-    val newDs = helper.merger.merge(keepSignleUser(helper), chatMerges)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
     val newMessages = {
       val newChats = helper.dao1.chats(newDs.uuid)
       helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
@@ -236,7 +234,7 @@ class DatasetMergerMergeSpec //
         )
       )
     )
-    val newDs = helper.merger.merge(keepSignleUser(helper), chatMerges)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
     val newMessages = {
       val newChats = helper.dao1.chats(newDs.uuid)
       helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
@@ -268,8 +266,8 @@ class DatasetMergerMergeSpec //
   // Helpers
   //
 
-  def keepSignleUser(helper: H2MergerHelper): Seq[UserMergeOption] = {
-    Seq(UserMergeOption.Keep(helper.d1users.head))
+  def keepBothUsers(helper: H2MergerHelper): Seq[UserMergeOption] = {
+    Seq(UserMergeOption.Keep(helper.d1users.head), UserMergeOption.Keep(helper.d1users(1)))
   }
 
   def msgsPaths(dao: ChatHistoryDao, ds: Dataset, msgs: Seq[Message]): Set[File] = {
@@ -332,16 +330,18 @@ class DatasetMergerMergeSpec //
   }
 
   object H2MergerHelper {
-    private val noChatMsgs1 = ListMap(createGroupChat(noUuid, 1, "One", Seq.empty, 0) -> Seq.empty[Message])
-    private val noChatMsgs2 = ListMap(createGroupChat(noUuid, 2, "Two", Seq.empty, 0) -> Seq.empty[Message])
-
     def fromUsers(users1: Seq[User], users2: Seq[User]): H2MergerHelper = {
-      new H2MergerHelper(users1, noChatMsgs1, users2, noChatMsgs2)
+      new H2MergerHelper(
+        users1,
+        ListMap(createGroupChat(noUuid, 1, "One", users1.map(_.id), 0) -> Seq.empty[Message]),
+        users2,
+        ListMap(createGroupChat(noUuid, 2, "Two", users2.map(_.id), 0) -> Seq.empty[Message])
+      )
     }
 
     def fromMessages(msgs1: Seq[Message], msgs2: Seq[Message]): H2MergerHelper = {
-      val users1 = (1 to msgs1.map(_.fromId).max.toInt).map(i => createUser(noUuid, i))
-      val users2 = (1 to msgs2.map(_.fromId).max.toInt).map(i => createUser(noUuid, i))
+      val users1 = (1 to math.max(msgs1.map(_.fromId).max.toInt, 2)).map(i => createUser(noUuid, i))
+      val users2 = (1 to math.max(msgs2.map(_.fromId).max.toInt, 2)).map(i => createUser(noUuid, i))
       val chatMsgs1 = ListMap(createGroupChat(noUuid, 1, "One", users1.map(_.id), msgs1.size) -> msgs1)
       val chatMsgs2 = ListMap(createGroupChat(noUuid, 2, "Two", users1.map(_.id), msgs2.size) -> msgs2)
       new H2MergerHelper(users1, chatMsgs1, users2, chatMsgs2)
