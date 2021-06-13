@@ -289,18 +289,24 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     }
 
     private def renderVideoMsg(ct: Content.VideoMsg): String = {
-      // TODO
-      "[Video messages not supported yet]"
+      renderPossiblyMissingContent(ct.pathOption, "Video message")(file => {
+        // TODO
+        "[Video messages not supported yet]"
+      })
     }
 
     private def renderAnimation(ct: Content.Animation): String = {
-      // TODO
-      "[Animations not supported yet]"
+      renderPossiblyMissingContent(ct.pathOption, "Animation")(file => {
+        // TODO
+        "[Animations not supported yet]"
+      })
     }
 
     private def renderFile(ct: Content.File): String = {
-      // TODO
-      "[Files not supported yet]"
+      renderPossiblyMissingContent(ct.pathOption, "File")(file => {
+        // TODO
+        "[Files not supported yet]"
+      })
     }
 
     def renderSticker(st: Content.Sticker): String = {
