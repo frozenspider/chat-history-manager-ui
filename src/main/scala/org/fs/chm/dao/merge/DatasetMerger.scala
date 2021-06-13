@@ -127,7 +127,7 @@ class DatasetMerger(
       // NoState
       //
 
-      case (Some(mm), Some(sm), NoState) if mm =~= sm =>
+      case (Some(mm), Some(sm), NoState) if matchesDisregardingContent(mm, sm) =>
         // Matching subsequence starts
         val state2 = MatchInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
         iterate(cxt.advanceBoth(), state2, onMismatch)
@@ -173,7 +173,7 @@ class DatasetMerger(
       // MatchInProgress
       //
 
-      case (Some(mm), Some(sm), state: MatchInProgress) if mm =~= sm =>
+      case (Some(mm), Some(sm), state: MatchInProgress) if matchesDisregardingContent(mm, sm) =>
         // Matching subsequence continues
         iterate(cxt.advanceBoth(), state, onMismatch)
       case (_, _, state: MatchInProgress) =>
@@ -248,13 +248,13 @@ class DatasetMerger(
               cmo.masterCwdOption.map(cwd => (masterDao.datasetRoot(cwd.dsUuid), cwd.chat))
             ).yieldDefined.head match {
               case (f, c) =>
-                val c2 = if (c.tpe == ChatType.Personal) {
-                  // For merged personal chats, name should match whatever user name was chosen
-                  val userId = c.memberIds.find(_ != masterSelf.id).get
-                  val user = masterUsers.find(_.id == userId).get
-                  c.copy(nameOption = user.prettyNameOption)
-                } else {
-                  c
+                val c2 = (c.tpe, c.memberIds.find(_ != masterSelf.id)) match {
+                  case (ChatType.Personal, Some(userId)) =>
+                    // For merged personal chats, name should match whatever user name was chosen
+                    val user = masterUsers.find(_.id == userId).get
+                    c.copy(nameOption = user.prettyNameOption)
+                  case _ =>
+                    c
                 }
                 (f, c2.copy(dsUuid = newDs.uuid))
             }
@@ -310,6 +310,26 @@ class DatasetMerger(
   //
   // Helpers
   //
+
+  /**
+   * Treats master and slave messages as equal if their content mismatches, unless slave message has content and master message doesn't.
+   * Needed for matching sequences.
+   * */
+  private def matchesDisregardingContent(mm: TaggedMessage.M, sm: TaggedMessage.S): Boolean = {
+    (mm, sm) match {
+      case (mm: Message.Regular, sm: Message.Regular) =>
+        (mm.contentOption, sm.contentOption) match {
+          case (Some(mc: Content.WithPath), Some(sc: Content.WithPath))
+              if mc.pathOption.isEmpty && sc.pathOption.isDefined =>
+            // New information available, treat this as a mismatch
+            false
+          case _ =>
+            mm.copy(contentOption = None) =~= sm.copy(contentOption = None)
+        }
+      case _ =>
+        mm =~= sm
+    }
+  }
 
   /** If message dates and plain strings are equal, we consider this enough */
   private val msgOrdering = new Ordering[Message] {

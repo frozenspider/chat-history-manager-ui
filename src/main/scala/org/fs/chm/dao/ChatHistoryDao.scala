@@ -621,13 +621,17 @@ sealed trait Content {
 }
 
 object Content {
+  sealed trait WithPath {
+    def pathOption: Option[JFile]
+  }
+
   case class Sticker(
       pathOption: Option[JFile],
       thumbnailPathOption: Option[JFile],
       emojiOption: Option[String],
       widthOption: Option[Int],
       heightOption: Option[Int]
-  ) extends Content {
+  ) extends Content with WithPath {
     override def =~=(that: Content) = that match {
       case that: Content.Sticker =>
         (
@@ -650,7 +654,7 @@ object Content {
       pathOption: Option[JFile],
       width: Int,
       height: Int
-  ) extends Content {
+  ) extends Content with WithPath {
     override def =~=(that: Content) = that match {
       case that: Content.Photo =>
         this.pathOption =~= that.pathOption && this.copy(pathOption = None) == that.copy(pathOption = None)
@@ -663,7 +667,7 @@ object Content {
       pathOption: Option[JFile],
       mimeTypeOption: Option[String],
       durationSecOption: Option[Int],
-  ) extends Content {
+  ) extends Content with WithPath {
     override def =~=(that: Content) = that match {
       case that: Content.VoiceMsg =>
         this.pathOption =~= that.pathOption && this.copy(pathOption = None) == that.copy(pathOption = None)
@@ -679,7 +683,7 @@ object Content {
       durationSecOption: Option[Int],
       width: Int,
       height: Int
-  ) extends Content {
+  ) extends Content with WithPath {
     override def =~=(that: Content) = that match {
       case that: Content.VideoMsg =>
         (
@@ -705,7 +709,7 @@ object Content {
       durationSecOption: Option[Int],
       width: Int,
       height: Int
-  ) extends Content {
+  ) extends Content with WithPath {
     override def =~=(that: Content) = that match {
       case that: Content.Animation =>
         (
@@ -733,7 +737,7 @@ object Content {
       durationSecOption: Option[Int],
       widthOption: Option[Int],
       heightOption: Option[Int]
-  ) extends Content {
+  ) extends Content with WithPath {
     override def =~=(that: Content) = that match {
       case that: Content.File =>
         (
