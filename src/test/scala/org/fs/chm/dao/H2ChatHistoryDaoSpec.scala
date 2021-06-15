@@ -29,7 +29,7 @@ class H2ChatHistoryDaoSpec //
 
   val manager     = new H2DataManager
   val loader      = new TelegramFullDataLoader
-  val telegramDir = new File(resourcesFolder, "telegram")
+  val telegramDir = new File(resourcesFolder, "telegram_2020-01")
 
   var tgDao:  ChatHistoryDao   = _
   var dsUuid: UUID             = _

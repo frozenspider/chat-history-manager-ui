@@ -66,7 +66,14 @@ class EagerChatHistoryDao(
     case (c, msgs) => ChatWithDetails(c, msgs.lastOption, chatMembers(c))
   }
 
-  private def chatMembers(chat: Chat): Seq[User] =  chat.memberIds.toSeq.sorted.map(mId => users1.find(_.id == mId).get)
+  private def chatMembers(chat: Chat): Seq[User] = {
+    val me = myself(chat.dsUuid)
+    me +: (chat.memberIds
+      .filter(_ != me.id)
+      .map(mId => users1.find(_.id == mId).get)
+      .toSeq
+      .sortBy(_.id))
+  }
 
   override def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
     val messages = chatsWithMessages(chat)

@@ -84,10 +84,12 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
   private def parseUser(jv: JValue, dsUuid: UUID): User = {
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("date") // Ignoring last seen time
+    // Before 2021-05, Telegram has "user_id" field that was largely rudimentary - it was always 0
+    val idOption = getFieldOpt[Long](jv, "user_id", false)
     tracker.ensuringUsage(jv) {
       normalize(User(
         dsUuid             = dsUuid,
-        id                 = getCheckedField[Long](jv, "user_id"),
+        id                 = idOption.getOrElse(0L),
         firstNameOption    = getStringOpt(jv, "first_name", true),
         lastNameOption     = getStringOpt(jv, "last_name", true),
         usernameOption     = None,

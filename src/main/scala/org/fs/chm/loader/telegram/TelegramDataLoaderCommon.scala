@@ -87,7 +87,7 @@ trait TelegramDataLoaderCommon {
         sourceIdOption         = Some(getCheckedField[Message.SourceId](jv, "id")),
         time                   = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
         editTimeOption         = stringOptToDateTimeOpt(getStringOpt(jv, "edited", false)),
-        fromId                 = getCheckedField[Long](jv, "from_id"),
+        fromId                 = getUserId(jv, "from_id"),
         forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
         replyToMessageIdOption = getFieldOpt[Message.SourceId](jv, "reply_to_message_id", false),
         textOption             = RichTextParser.parseRichTextOption(jv),
@@ -104,7 +104,7 @@ trait TelegramDataLoaderCommon {
             internalId          = Message.NoInternalId,
             sourceIdOption      = Some(getCheckedField[Message.SourceId](jv, "id")),
             time                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId              = getCheckedField[Long](jv, "actor_id"),
+            fromId              = getUserId(jv, "actor_id"),
             durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
             discardReasonOption = getStringOpt(jv, "discard_reason", false),
             textOption          = RichTextParser.parseRichTextOption(jv)
@@ -115,7 +115,7 @@ trait TelegramDataLoaderCommon {
             internalId          = Message.NoInternalId,
             sourceIdOption      = Some(getCheckedField[Message.SourceId](jv, "id")),
             time                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId              = getCheckedField[Long](jv, "actor_id"),
+            fromId              = getUserId(jv, "actor_id"),
             durationSecOption   = None,
             discardReasonOption = None,
             textOption          = RichTextParser.parseRichTextOption(jv)
@@ -125,7 +125,7 @@ trait TelegramDataLoaderCommon {
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
+            fromId         = getUserId(jv, "actor_id"),
             messageId      = getCheckedField[Message.SourceId](jv, "message_id"),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
@@ -134,7 +134,7 @@ trait TelegramDataLoaderCommon {
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
+            fromId         = getUserId(jv, "actor_id"),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
         case "create_group" =>
@@ -142,7 +142,7 @@ trait TelegramDataLoaderCommon {
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
+            fromId         = getUserId(jv, "actor_id"),
             title          = getCheckedField[String](jv, "title"),
             members        = getCheckedField[Seq[String]](jv, "members"),
             textOption     = RichTextParser.parseRichTextOption(jv)
@@ -152,7 +152,7 @@ trait TelegramDataLoaderCommon {
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
+            fromId         = getUserId(jv, "actor_id"),
             pathOption     = getFileOpt(jv, "photo", true, rootFile),
             widthOption    = getFieldOpt[Int](jv, "width", false),
             heightOption   = getFieldOpt[Int](jv, "height", false),
@@ -163,7 +163,7 @@ trait TelegramDataLoaderCommon {
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
+            fromId         = getUserId(jv, "actor_id"),
             title          = getCheckedField[String](jv, "title"),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
@@ -172,7 +172,7 @@ trait TelegramDataLoaderCommon {
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
+            fromId         = getUserId(jv, "actor_id"),
             members        = getCheckedField[Seq[String]](jv, "members"),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
@@ -181,7 +181,7 @@ trait TelegramDataLoaderCommon {
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
+            fromId         = getUserId(jv, "actor_id"),
             members        = getCheckedField[Seq[String]](jv, "members"),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
@@ -192,7 +192,7 @@ trait TelegramDataLoaderCommon {
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
+            fromId         = getUserId(jv, "actor_id"),
             members        = Seq(getCheckedField[String](jv, "actor")),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
@@ -201,7 +201,7 @@ trait TelegramDataLoaderCommon {
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
+            fromId         = getUserId(jv, "actor_id"),
             titleOption    = Some(getCheckedField[String](jv, "title")),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
@@ -210,7 +210,7 @@ trait TelegramDataLoaderCommon {
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
-            fromId         = getCheckedField[Long](jv, "actor_id"),
+            fromId         = getUserId(jv, "actor_id"),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
         case other =>
@@ -469,15 +469,9 @@ trait TelegramDataLoaderCommon {
     implicit val dummyTracker = new FieldUsageTracker
     normalize(getCheckedField[String](jv, "type") match {
       case "message" =>
-        ShortUser(
-          id             = getCheckedField[Long](jv, "from_id"),
-          fullNameOption = getStringOpt(jv, "from", true)
-        )
+        ShortUser(getUserId(jv, "from_id"), getStringOpt(jv, "from", true))
       case "service" =>
-        ShortUser(
-          id             = getCheckedField[Long](jv, "actor_id"),
-          fullNameOption = getStringOpt(jv, "actor", true)
-        )
+        ShortUser(getUserId(jv, "actor_id"), getStringOpt(jv, "actor", true))
       case other =>
         throw new IllegalArgumentException(
           s"Don't know how to parse message of type '$other' for ${jv.toString.take(500)}")
@@ -560,6 +554,18 @@ trait TelegramDataLoaderCommon {
     require(res != JNothing, s"Incompatible format! Path '$fn1 \\ $fn2' not found in $jv")
     tracker.markUsed(fn1)
     res.extract[A]
+  }
+
+  protected def getUserId(jv: JValue, fieldName: String)(implicit formats: Formats,
+                                                         tracker: FieldUsageTracker): Long = {
+    getRawField(jv, fieldName, true) match {
+      case id: JInt                                        => id.values.toLong
+      case id: JLong                                       => id.values
+      case id: JString if id.values.matches("user\\d+")    => id.values.substring(4).toLong
+      case id: JString if id.values.matches("channel\\d+") => id.values.substring(7).toLong
+      case other =>
+        throw new IllegalArgumentException(s"Don't know how to get user ID from '${other.toString.take(500)}'")
+    }
   }
 
   protected case class ShortUser(id: Long, fullNameOption: Option[String])

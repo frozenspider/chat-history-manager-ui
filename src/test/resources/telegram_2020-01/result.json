@@ -21,7 +21,7 @@
  "contacts": {
   "about": "If you allow access, your contacts are continuously synced with Telegram. Thanks to this, you can easily switch to Telegram and immediately connect with friends across all your devices. We use data about your contacts to let you know when they join Telegram, and to display them by the name you set for them in your phone.\n\nYou can disable contact syncing or delete your stored contacts in Settings > Privacy & Security on Telegram's mobile apps.",
   "list": [
-    {
+   {
     "user_id": 0,
     "first_name": "Eeeee",
     "last_name": "Eeeeeeeeee",
