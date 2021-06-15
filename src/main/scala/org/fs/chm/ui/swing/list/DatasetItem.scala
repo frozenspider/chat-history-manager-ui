@@ -22,8 +22,9 @@ class DatasetItem[I <: Panel](
   val headerPopupMenu = new PopupMenu {
     callbacksOption foreach { _ =>
       contents += menuItem("Rename", enabled = dao.isMutable)(rename())
-      contents += menuItem("Delete", enabled = dao.isMutable)(delete())
       contents += menuItem("Shift time", enabled = dao.isMutable)(shiftDatasetTime())
+      contents += new Separator()
+      contents += menuItem("Delete", enabled = dao.isMutable)(delete())
     }
   }
 
