@@ -1,17 +1,17 @@
 package org.fs.chm.ui.swing.general.field
 
-import scala.swing.TextField
+import scala.swing.TextArea
 
 import org.fs.chm.ui.swing.general.SwingUtils._
 
 class TextComponent(
     initialValue: String,
-    override val mutable: Boolean
+    override val mutable: Boolean,
 ) extends ValueComponent[String] {
 
   def this(mutable: Boolean) = this("", mutable)
 
-  private val tc = new TextField
+  private val tc = new TextArea
 
   {
     import scala.swing.BorderPanel.Position._
@@ -33,5 +33,5 @@ class TextComponent(
   override def value_=(v: String): Unit =
     tc.text = v
 
-  override def innerComponent: TextField = tc
+  override def innerComponent: TextArea = tc
 }
