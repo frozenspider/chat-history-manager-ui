@@ -320,7 +320,7 @@ class DatasetMerger(
       case (mm: Message.Regular, sm: Message.Regular) =>
         (mm.contentOption, sm.contentOption) match {
           case (Some(mc: Content.WithPath), Some(sc: Content.WithPath))
-              if mc.pathOption.isEmpty && sc.pathOption.isDefined =>
+              if mc.pathOption.isEmpty && sc.pathOption.isDefined && sc.pathOption.get.exists =>
             // New information available, treat this as a mismatch
             false
           case _ =>
