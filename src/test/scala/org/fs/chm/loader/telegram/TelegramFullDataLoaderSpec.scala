@@ -10,7 +10,7 @@ import org.scalatest.FunSuite
 import org.slf4s.Logging
 
 @RunWith(classOf[org.scalatest.junit.JUnitRunner])
-class H2ChatHistoryDaoSpec //
+class TelegramFullDataLoaderSpec //
     extends FunSuite
     with TestHelper
     with Logging {
@@ -66,7 +66,7 @@ class H2ChatHistoryDaoSpec //
 
     // Group chat
     {
-      val cwm = dao.chats(ds.uuid).find(_.id == 8123123123L).get
+      val cwm = dao.chats(ds.uuid).find(_.id == 8713057715L).get // Chat ID is shifted by 2^33
       assert(cwm.chat.nameOption === Some("My Group"))
       assert(cwm.chat.tpe === ChatType.PrivateGroup)
       // We only know of myself + two users (other's IDs aren't known), as well as service "member".

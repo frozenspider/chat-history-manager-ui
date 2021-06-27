@@ -37,6 +37,12 @@ trait TelegramDataLoaderCommon {
   /** Starting with Telegram 2020-10, user IDs are shifted by this value */
   private val UserIdShift: Long = 0x100000000L
 
+  /** Starting with Telegram 2021-05, personal chat IDs are un-shifted by this value */
+  private val PersonalChatIdShift: Long = 0x100000000L
+
+  /** Starting with Telegram 2021-05, personal chat IDs are un-shifted by this value */
+  private val GroupChatIdShift: Long = PersonalChatIdShift * 2
+
   protected def normalize(u: User): User = {
     if (u.id >= UserIdShift) {
       u.copy(id = u.id - UserIdShift)
@@ -240,7 +246,7 @@ trait TelegramDataLoaderCommon {
       jv match {
         case s: JString  => parsePlain(s)
         case jo: JObject => parseElementObject(jo)
-        case other       => throw new IllegalArgumentException(s"Don't know how to parse RichText element '$jv'")
+        case other       => throw new IllegalArgumentException(s"Don't know how to parse RichText element '$other'")
       }
     }
 
@@ -447,17 +453,26 @@ trait TelegramDataLoaderCommon {
   protected def parseChat(jv: JValue, dsUuid: UUID, memberIds: Set[Long], msgCount: Int): Chat = {
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("messages")
+    val tpe = getCheckedField[String](jv, "type") match {
+      case "personal_chat"      => ChatType.Personal
+      case "private_group"      => ChatType.PrivateGroup
+      case "private_supergroup" => ChatType.PrivateGroup
+      case s                    => throw new IllegalArgumentException(s"Illegal format, unknown chat type '$s'")
+    }
+
+    // Undo the shifts introduced by Telegram 2021-05
+    val id = (getCheckedField[Long](jv, "id"), tpe) match {
+      case (v, ChatType.Personal) if v < PersonalChatIdShift  => v + PersonalChatIdShift
+      case (v, ChatType.PrivateGroup) if v < GroupChatIdShift => v + GroupChatIdShift
+      case (v, _)                                             => v
+    }
+
     tracker.ensuringUsage(jv) {
       Chat(
-        dsUuid     = dsUuid,
-        id         = getCheckedField[Long](jv, "id"),
-        nameOption = getStringOpt(jv, "name", true),
-        tpe = getCheckedField[String](jv, "type") match {
-          case "personal_chat"      => ChatType.Personal
-          case "private_group"      => ChatType.PrivateGroup
-          case "private_supergroup" => ChatType.PrivateGroup
-          case s                    => throw new IllegalArgumentException(s"Illegal format, unknown chat type '$s'")
-        },
+        dsUuid        = dsUuid,
+        id            = id,
+        nameOption    = getStringOpt(jv, "name", true),
+        tpe           = tpe,
         imgPathOption = None,
         memberIds     = memberIds,
         msgCount      = msgCount

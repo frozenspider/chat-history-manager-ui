@@ -23,8 +23,10 @@ class ChatDetailsPane(
         case ChatType.PrivateGroup => "Private Group"
       })),
       ("Members:", cwd.chat.tpe match {
-        case ChatType.PrivateGroup => Some(cwd.members.map(_.prettyName).mkString("\n"))
-        case ChatType.Personal     => None
+        case ChatType.PrivateGroup =>
+          Some(cwd.members.filter(_.prettyName != cwd.chat.nameOption.get).map(_.prettyName).mkString("\n"))
+        case ChatType.Personal     =>
+          None
       }),
       ("Image:", Some(if (cwd.chat.imgPathOption.isDefined) "(Yes)" else "(None)")),
       ("Messages:", Some(cwd.chat.msgCount.toString)),
