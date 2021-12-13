@@ -23,7 +23,7 @@ class SelectMergeChatsDialog(
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset,
-) extends CustomDialog[Seq[ChatMergeOption]] {
+) extends CustomDialog[Seq[ChatMergeOption]](takeFullHeight = true) {
   private lazy val originalTitle = "Select chats to merge"
 
   {
@@ -146,22 +146,22 @@ object SelectMergeChatsDialog {
         alias = "Dataset",
         sourceType = "test source"
       )
-      val user         = createUser(ds.uuid, 1)
-      val chats        = chatsProducer(ds, Seq(user))
+      val users        = (1 to 2) map (createUser(ds.uuid, _))
+      val chats        = chatsProducer(ds, users)
       val dataPathRoot = Files.createTempDirectory(null).toFile
       dataPathRoot.deleteOnExit()
       new EagerChatHistoryDao(
         name = "Dao",
         _dataRootFile = dataPathRoot,
         dataset = ds,
-        myself1 = user,
-        users1 = Seq(user),
+        myself1 = users.head,
+        users1 = users,
         _chatsWithMessages = ListMap(chats.map(c => (c, IndexedSeq.empty)): _*)
       ) with EagerMutableDaoTrait
     }
 
     val mDao = createMultiChatDao(
-      (ds, us) => for (i <- 1 to 5 if i != 4) yield createGroupChat(ds.uuid, i, i.toString, us.map(_.id), 0))
+      (ds, us) => for (i <- 1 to 5 if i != 4) yield createGroupChat(ds.uuid, i, i.toString, us.map(_.id), 2))
     val (mDs, _, _, _) = getSimpleDaoEntities(mDao)
     val sDao = createMultiChatDao(
       (ds, us) => for (i <- 2 to 6 by 2) yield createGroupChat(ds.uuid, i, i.toString, us.map(_.id), 0))
@@ -170,7 +170,6 @@ object SelectMergeChatsDialog {
     Swing.onEDTWait {
       val dialog = new SelectMergeChatsDialog(mDao, mDs, sDao, sDs)
       dialog.visible = true
-      dialog.peer.setLocationRelativeTo(null)
       println(dialog.selection map (_.mkString("\n  ", "\n  ", "\n")))
     }
   }

@@ -31,7 +31,7 @@ class SelectMergeMessagesDialog(
     slaveCwd: ChatWithDetails,
     mismatches: IndexedSeq[MessagesMergeOption],
     htmlKit: HTMLEditorKit
-) extends CustomDialog[IndexedSeq[MessagesMergeOption]] {
+) extends CustomDialog[IndexedSeq[MessagesMergeOption]](takeFullHeight = true) {
   import SelectMergeMessagesDialog._
 
   private lazy val MaxMessageWidth = 500

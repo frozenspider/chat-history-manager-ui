@@ -9,7 +9,7 @@ import org.fs.chm.ui.swing.general.CustomDialog
 class UserDetailsDialog(
     dao: ChatHistoryDao,
     user: User
-) extends CustomDialog[User] {
+) extends CustomDialog[User](takeFullHeight = false) {
 
   {
     title = user.prettyName

@@ -23,7 +23,7 @@ class SelectMergeUsersDialog(
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset,
-) extends CustomDialog[Seq[UserMergeOption]] {
+) extends CustomDialog[Seq[UserMergeOption]](takeFullHeight = true) {
   private lazy val originalTitle = "Select users to merge"
 
   {

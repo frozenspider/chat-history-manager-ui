@@ -18,7 +18,7 @@ import org.fs.chm.ui.swing.general.SwingUtils._
 
 class SelectMergeDatasetDialog(
     daos: Seq[ChatHistoryDao]
-) extends CustomDialog[((MutableChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))] {
+) extends CustomDialog[((MutableChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))](takeFullHeight = false) {
 
   // All values are lazy to be accessible from parent's constructor
 

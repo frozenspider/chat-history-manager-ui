@@ -11,7 +11,7 @@ import org.fs.chm.ui.swing.general.SwingUtils._
 class SelectUserToMergeDialog(
     dao: ChatHistoryDao,
     baseUser: User
-) extends CustomDialog[User] {
+) extends CustomDialog[User](takeFullHeight = true) {
   {
     title = s"Select user to merge with ${baseUser.prettyName}"
   }

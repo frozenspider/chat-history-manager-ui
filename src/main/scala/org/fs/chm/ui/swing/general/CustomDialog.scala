@@ -1,9 +1,11 @@
 package org.fs.chm.ui.swing.general
 
+import java.awt.Toolkit
+
 import scala.swing._
 import scala.swing.event.ButtonClicked
-import org.fs.chm.ui.swing.general.SwingUtils._
 
+import org.fs.chm.ui.swing.general.SwingUtils._
 import javax.swing.WindowConstants
 
 /**
@@ -18,7 +20,7 @@ import javax.swing.WindowConstants
  * dialog.selection foreach (result => ???)
  * ```
  */
-abstract class CustomDialog[A] extends Dialog {
+abstract class CustomDialog[A](takeFullHeight: Boolean) extends Dialog {
 
   private var _selected: Option[A] = None
 
@@ -38,6 +40,19 @@ abstract class CustomDialog[A] extends Dialog {
     defaultButton = okBtn
 
     peer.setLocationRelativeTo(null)
+    peer.pack()
+
+    if (takeFullHeight) {
+      // Set max height and move to the top
+      val size = peer.getPreferredSize
+      size.height = Toolkit.getDefaultToolkit.getScreenSize.height
+      peer.setSize(size)
+
+      val loc = peer.getLocation
+      loc.y = 0
+      peer.setLocation(loc)
+    }
+
     peer.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE)
 
     listenTo(okBtn)

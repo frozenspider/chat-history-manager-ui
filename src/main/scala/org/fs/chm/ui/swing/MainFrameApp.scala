@@ -1,6 +1,7 @@
 package org.fs.chm.ui.swing
 
 import java.awt.Desktop
+import java.awt.Toolkit
 import java.awt.event.AdjustmentEvent
 import java.io.File
 import java.util.UUID
@@ -356,7 +357,7 @@ class MainFrameApp //
       }) = Center
     }
 
-    outerPanel.preferredHeight = 500
+    outerPanel.preferredHeight = Toolkit.getDefaultToolkit.getScreenSize.height - 100
 
     Dialog.showMessage(title = "Users", message = outerPanel.peer, messageType = Dialog.Message.Plain)
   }
