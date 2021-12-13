@@ -421,7 +421,7 @@ object Message {
   sealed trait Service extends Message
 
   object Service {
-    sealed trait MembershipChange extends Service {
+    sealed trait WithMembers extends Service {
       val members: Seq[String]
     }
 
@@ -480,7 +480,7 @@ object Message {
           textOption: Option[RichText],
           title: String,
           members: Seq[String]
-      ) extends MembershipChange {
+      ) extends WithMembers {
         override def withInternalId(internalId: Message.InternalId): Create = copy(internalId = internalId)
 
         override def withFromId(fromId: Long): Create = copy(fromId = fromId)
@@ -544,7 +544,7 @@ object Message {
           fromId: Long,
           textOption: Option[RichText],
           members: Seq[String]
-      ) extends MembershipChange {
+      ) extends WithMembers {
         override def withInternalId(internalId: Message.InternalId): InviteMembers = copy(internalId = internalId)
 
         override def withFromId(fromId: Long): InviteMembers = copy(fromId = fromId)
@@ -562,7 +562,7 @@ object Message {
           fromId: Long,
           textOption: Option[RichText],
           members: Seq[String]
-      ) extends MembershipChange {
+      ) extends WithMembers {
         override def withInternalId(internalId: Message.InternalId): RemoveMembers = copy(internalId = internalId)
 
         override def withFromId(fromId: Long): RemoveMembers = copy(fromId = fromId)
@@ -603,6 +603,25 @@ object Message {
         override def withFromId(fromId: Long): MigrateTo = copy(fromId = fromId)
 
         override def files: Set[JFile] = Set.empty
+      }
+
+      /** This is different to PhoneCall */
+      case class Call(
+          internalId: InternalId,
+          sourceIdOption: Option[SourceId],
+          time: DateTime,
+          fromId: Long,
+          textOption: Option[RichText],
+          members: Seq[String]
+      ) extends WithMembers {
+        override def withInternalId(internalId: Message.InternalId): Call = copy(internalId = internalId)
+
+        override def withFromId(fromId: Long): Call = copy(fromId = fromId)
+
+        override def files: Set[JFile] = Set.empty
+
+        override val plainSearchableString =
+          (plainSearchableMsgString +: members).mkString(" ").trim
       }
     }
   }

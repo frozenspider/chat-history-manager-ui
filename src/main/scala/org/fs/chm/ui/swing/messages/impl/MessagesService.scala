@@ -182,7 +182,7 @@ class MessagesService(htmlKit: HTMLEditorKit) {
       val content = sm match {
         case sm: Message.Service.PhoneCall         => renderPhoneCall(sm)
         case sm: Message.Service.PinMessage        => "Pinned message" + renderSourceMessage(dao, cwd, sm.messageId)
-        case sm: Message.Service.MembershipChange  => renderMembershipChangeMessage(cwd, sm)
+        case sm: Message.Service.WithMembers       => renderMessageWithMembers(cwd, sm)
         case sm: Message.Service.ClearHistory      => s"History cleared"
         case sm: Message.Service.Group.EditTitle   => renderEditTitleMessage(sm)
         case sm: Message.Service.Group.EditPhoto   => renderEditPhotoMessage(sm)
@@ -213,7 +213,7 @@ class MessagesService(htmlKit: HTMLEditorKit) {
       ("Migrated" + sm.titleOption.map(s => s" from $s").getOrElse("")).trim
     }
 
-    private def renderMembershipChangeMessage(cwd: ChatWithDetails, sm: Service.MembershipChange) = {
+    private def renderMessageWithMembers(cwd: ChatWithDetails, sm: Service.WithMembers) = {
       val members = sm.members
         .map(name => renderTitleName(cwd, None, Some(name)))
         .mkString("<ul><li>", "</li><li>", "</li></ul>")
@@ -221,6 +221,7 @@ class MessagesService(htmlKit: HTMLEditorKit) {
         case sm: Service.Group.Create        => s"Created group <b>${sm.title}</b>"
         case sm: Service.Group.InviteMembers => s"Invited"
         case sm: Service.Group.RemoveMembers => s"Removed"
+        case sm: Service.Group.Call          => s"Group call"
       }
       s"$content$members"
     }

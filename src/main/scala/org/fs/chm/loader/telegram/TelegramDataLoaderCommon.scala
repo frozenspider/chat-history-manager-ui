@@ -219,6 +219,15 @@ trait TelegramDataLoaderCommon {
             fromId         = getUserId(jv, "actor_id"),
             textOption     = RichTextParser.parseRichTextOption(jv)
           )
+        case "invite_to_group_call" =>
+          Message.Service.Group.Call(
+            internalId     = Message.NoInternalId,
+            sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
+            time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
+            fromId         = getUserId(jv, "actor_id"),
+            members        = getCheckedField[Seq[String]](jv, "members"),
+            textOption     = RichTextParser.parseRichTextOption(jv)
+          )
         case other =>
           throw new IllegalArgumentException(
             s"Don't know how to parse service message for action '$other' for ${jv.toString.take(500)}")

@@ -272,6 +272,7 @@ class MainFrameApp //
       } catch {
         case th: Throwable =>
           Swing.onEDT { unfreezeTheWorld() }
+          log.error("Exception while opening a database:", th)
           showError(th.getMessage)
       }
     }

@@ -180,6 +180,7 @@ class ChatListItem(
       case _: Message.Service.Group.RemoveMembers => "(removed members)"
       case _: Message.Service.Group.MigrateFrom   => "(migrated from group)"
       case _: Message.Service.Group.MigrateTo     => "(migrated to group)"
+      case _: Message.Service.Group.Call          => "(group call)"
     }
     prefix + text.take(50)
   }
