@@ -154,6 +154,45 @@ class TelegramFullDataLoaderSpec //
     }
   }
 
+  test("loading @ 2021-12 (named locations)") {
+    val dao = loader.loadData(new File(resourcesFolder, "telegram_2021-12"))
+    assert(dao.datasets.size === 1)
+    val ds = dao.datasets.head
+    val self = dao.myself(ds.uuid)
+    assert(self === expectedSelf(ds.uuid))
+    assert(dao.chats(ds.uuid).size === 1)
+
+    // Group chat
+    {
+      val cwm = dao.chats(ds.uuid).find(_.id == 8713057715L).get // Chat ID is shifted by 2^33
+      assert(cwm.chat.nameOption === Some("My Group"))
+      assert(cwm.chat.tpe === ChatType.PrivateGroup)
+      // We only know of myself + one users (ID of one more isn't known).
+      assert(cwm.members.size === 2)
+      val member = User(
+        dsUuid = ds.uuid,
+        id = 44444444L,
+        firstNameOption = Some("Bbbbbbbb Bbbbbbb"),
+        lastNameOption = None, // No contact, could not distinguish first name from last.
+        usernameOption = None,
+        phoneNumberOption = None
+      )
+      assert(cwm.members.head === self)
+      assert(cwm.members(1) === member)
+      val msgs = dao.lastMessages(cwm.chat, 100500)
+      assert(msgs.size === 1)
+      assert(msgs.head.getClass === classOf[Message.Regular])
+      val typedMsg = msgs.head.asInstanceOf[Message.Regular]
+      assert(typedMsg.contentOption === Some(Content.Location(
+        titleOption       = Some("Çıralı Plajı"),
+        addressOption     = Some("Olympos"),
+        lat               = BigDecimal("36.417978"),
+        lon               = BigDecimal("30.482614"),
+        durationSecOption = None
+      )))
+    }
+  }
+
   //
   // Helpers
   //

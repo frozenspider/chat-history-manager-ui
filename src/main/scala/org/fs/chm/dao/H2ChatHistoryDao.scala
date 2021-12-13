@@ -1138,6 +1138,8 @@ class H2ChatHistoryDao(
           )
         case "location" =>
           Content.Location(
+            titleOption       = rc.titleOption,
+            addressOption     = rc.addressOption,
             lat               = rc.latOption.get,
             lon               = rc.lonOption.get,
             durationSecOption = rc.durationSecOption
@@ -1311,6 +1313,7 @@ class H2ChatHistoryDao(
         mimeTypeOption      = None,
         titleOption         = None,
         performerOption     = None,
+        addressOption       = None,
         latOption           = None,
         lonOption           = None,
         durationSecOption   = None,
@@ -1379,6 +1382,8 @@ class H2ChatHistoryDao(
         case c: Content.Location =>
           template.copy(
             elementType       = "location",
+            titleOption       = c.titleOption,
+            addressOption     = c.addressOption,
             latOption         = Some(c.lat),
             lonOption         = Some(c.lon),
             durationSecOption = c.durationSecOption
@@ -1486,6 +1491,7 @@ object H2ChatHistoryDao {
       languageOption: Option[String]
   )
 
+  /** Could hold any kind of content, distinguished by elementType. */
   case class RawContent(
       messageInternalId: Message.InternalId,
       elementType: String,
@@ -1497,6 +1503,7 @@ object H2ChatHistoryDao {
       mimeTypeOption: Option[String],
       titleOption: Option[String],
       performerOption: Option[String],
+      addressOption: Option[String],
       latOption: Option[BigDecimal],
       lonOption: Option[BigDecimal],
       durationSecOption: Option[Int],
