@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.annotation.tailrec
 import scala.collection.immutable.ListMap
+import scala.concurrent.CancellationException
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.swing._
@@ -38,6 +39,7 @@ import org.fs.chm.ui.swing.user.UserDetailsPane
 import org.fs.chm.ui.swing.webp.Webp
 import org.fs.chm.utility.CliUtils
 import org.fs.chm.utility.EntityUtils
+import org.fs.chm.utility.InterruptableFuture._
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.SimpleConfigAware
 import org.slf4s.Logging
@@ -224,6 +226,20 @@ class MainFrameApp //
     changeChatsClickable(true)
   }
 
+  def worldFreezingIFuture[T](statusMsg: String)(body: => T): InterruptableFuture[T] = {
+    val ifuture = Future.interruptibly {
+      Swing.onEDT(freezeTheWorld(statusMsg))
+      body
+    }
+    ifuture.future onComplete { res =>
+      res.failed.foreach(handleException)
+      Swing.onEDT {
+        unfreezeTheWorld()
+      }
+    }
+    ifuture
+  }
+
   def changeChatsClickable(enabled: Boolean): Unit = {
     checkEdt()
     chatsOuterPanel.enabled = enabled
@@ -378,10 +394,15 @@ class MainFrameApp //
           val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
           selectChatsDialog.visible = true
           selectChatsDialog.selection foreach { chatsToMerge =>
+            val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
+            val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge)
             val selectUsersDialog = new SelectMergeUsersDialog(masterDao, masterDs, slaveDao, slaveDs)
             selectUsersDialog.visible = true
-            selectUsersDialog.selection foreach { usersToMerge =>
-              mergeDatasets(masterDao, masterDs, slaveDao, slaveDs, usersToMerge, chatsToMerge)
+            selectUsersDialog.selection match {
+              case Some(usersToMerge) =>
+                analyzeChatsF.future.foreach(analyzed => mergeDatasets(merger, analyzed, usersToMerge))
+              case None =>
+                analyzeChatsF.cancel()
             }
           }
       }
@@ -391,26 +412,28 @@ class MainFrameApp //
   //
   // Other stuff
   //
-
-  def mergeDatasets(
-      masterDao: MutableChatHistoryDao,
-      masterDs: Dataset,
-      slaveDao: ChatHistoryDao,
-      slaveDs: Dataset,
-      usersToMerge: Seq[UserMergeOption],
+  def analyzeChatsFuture(
+      merger: DatasetMerger,
       chatsToMerge: Seq[ChatMergeOption]
-  ): Unit = {
-    checkEdt()
-    freezeTheWorld("Analyzing chat messages...")
-    val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
-    Future {
-      // TODO: Make async, with other chats merging working in the background while users makes the choice
-      // Analyze
-      val analyzed = chatsToMerge.map { cmo =>
+  ): InterruptableFuture[Seq[ChatMergeOption]] =
+    worldFreezingIFuture("Analyzing chat messages...") {
+      chatsToMerge.map { cmo =>
+        if (Thread.interrupted()) {
+          throw new InterruptedException()
+        }
         val chat = (cmo.slaveCwdOption orElse cmo.masterCwdOption).get.chat
         setStatus(s"Analyzing '${EntityUtils.getOrUnnamed(chat.nameOption)}' (${chat.msgCount} messages)...")
         merger.analyzeChatHistoryMerge(cmo)
       }
+    }
+
+  def mergeDatasets(
+      merger: DatasetMerger,
+      analyzed: Seq[ChatMergeOption],
+      usersToMerge: Seq[UserMergeOption]
+  ): Unit = {
+    // TODO: Make async, with other chats merging working in the background while users makes the choice
+    worldFreezingIFuture("Combining chats...") {
       val (resolved, cancelled) = analyzed.foldLeft((Seq.empty[ChatMergeOption], false)) {
         case ((res, stop), _) if stop =>
           (res, true)
@@ -422,7 +445,7 @@ class MainFrameApp //
             (res :+ cmo, false)
           } else {
             val dialog = onEdtReturning {
-              new SelectMergeMessagesDialog(masterDao, mcwd, slaveDao, scwd, mismatches, htmlKit)
+              new SelectMergeMessagesDialog(merger.masterDao, mcwd, merger.slaveDao, scwd, mismatches, htmlKit)
             }
             dialog.visible = true
             dialog.selection
@@ -433,23 +456,19 @@ class MainFrameApp //
           (res :+ cmo, false)
       }
       if (cancelled) None else Some(resolved)
-    } map { chatsMergeResolutionsOption: Option[Seq[ChatMergeOption]] =>
-      // Merge
-      setStatus("Merging...")
+    }.future map { chatsMergeResolutionsOption: Option[Seq[ChatMergeOption]] =>
       chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
-        MutationLock.synchronized {
-          merger.merge(usersToMerge, chatsMergeResolutions)
-          Swing.onEDTWait {
-            chatList.replaceWith(loadedDaos.keys.toSeq)
-            chatsOuterPanel.revalidate()
-            chatsOuterPanel.repaint()
+        // Merge
+        worldFreezingIFuture("Merging...") {
+          MutationLock.synchronized {
+            merger.merge(usersToMerge, chatsMergeResolutions)
+            Swing.onEDTWait {
+              chatList.replaceWith(loadedDaos.keys.toSeq)
+              chatsOuterPanel.revalidate()
+              chatsOuterPanel.repaint()
+            }
           }
         }
-      }
-    } onComplete { res =>
-      res.failed.foreach(handleException)
-      Swing.onEDT {
-        unfreezeTheWorld()
       }
     }
   }
@@ -876,6 +895,8 @@ class MainFrameApp //
       handleException(ex.getCause)
     } else {
       ex match {
+        case ex: CancellationException =>
+          log.warn("Execution cancelled")
         case ex: IllegalArgumentException =>
           log.warn("Caught an exception:", ex)
           SwingUtils.showWarning(ex.getMessage)

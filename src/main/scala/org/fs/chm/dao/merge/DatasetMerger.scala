@@ -13,10 +13,10 @@ import org.fs.utility.StopWatch
 import org.slf4s.Logging
 
 class DatasetMerger(
-    masterDao: MutableChatHistoryDao,
-    masterDs: Dataset,
-    slaveDao: ChatHistoryDao,
-    slaveDs: Dataset
+    val masterDao: MutableChatHistoryDao,
+    val masterDs: Dataset,
+    val slaveDao: ChatHistoryDao,
+    val slaveDs: Dataset
 ) extends Logging {
   import DatasetMerger._
 
@@ -110,6 +110,10 @@ class DatasetMerger(
       onMismatch: MessagesMergeOption => Unit
   ): Unit = {
     import IterationState._
+
+    if (Thread.interrupted()) {
+      throw new InterruptedException()
+    }
 
     (cxt.mmStream.headOption, cxt.smStream.headOption, state) match {
 
