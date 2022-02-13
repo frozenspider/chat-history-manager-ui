@@ -203,7 +203,9 @@ case class Chat(
     imgPathOption: Option[JFile],
     memberIds: Set[Long],
     msgCount: Int
-) extends WithId
+) extends WithId {
+  override def toString: String = s"Chat(${nameOption.getOrElse("[unnamed]")}, ${tpe.name}})"
+}
 
 trait Searchable {
   def plainSearchableString: String

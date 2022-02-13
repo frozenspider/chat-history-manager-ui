@@ -66,7 +66,7 @@ object InterruptableFuture {
     def interruptibly[T](block: =>T): T =
       if (enter()) {
         try block catch {
-          case ie: InterruptedException => throw new CancellationException()
+          case _: InterruptedException => throw new CancellationException()
         } finally {
           if(!exit() && Thread.interrupted())
             () // If we were interrupted and flag was not cleared

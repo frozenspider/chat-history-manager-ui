@@ -412,6 +412,7 @@ class MainFrameApp //
   //
   // Other stuff
   //
+
   def analyzeChatsFuture(
       merger: DatasetMerger,
       chatsToMerge: Seq[ChatMergeOption]
