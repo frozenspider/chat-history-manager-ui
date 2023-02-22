@@ -226,7 +226,7 @@ object SelectMergesTable extends Logging {
       val uiItems = for {
         r  <- 0 until tableModel.getRowCount
         c  <- 0 until tableModel.getColumnCount
-        cr = tableModel.getValueAt(r, c) if cr.isInstanceOf[ListItemRenderable[V]]
+        cr = tableModel.getValueAt(r, c) if cr.isInstanceOf[ListItemRenderable[_]]
       } yield {
         renderer.getTableCellRendererComponent(null, cr, false, false, r, c)
       }

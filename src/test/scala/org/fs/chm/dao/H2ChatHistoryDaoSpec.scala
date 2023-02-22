@@ -15,12 +15,12 @@ import org.fs.chm.utility.TestUtils
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 import org.slf4s.Logging
 
-@RunWith(classOf[org.scalatest.junit.JUnitRunner])
+@RunWith(classOf[org.scalatestplus.junit.JUnitRunner])
 class H2ChatHistoryDaoSpec //
-    extends FunSuite
+    extends AnyFunSuite
     with TestHelper
     with WithH2Dao
     with Logging

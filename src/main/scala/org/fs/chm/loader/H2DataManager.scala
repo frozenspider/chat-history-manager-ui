@@ -6,7 +6,6 @@ import java.io.FileNotFoundException
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 
-import cats.effect.Blocker
 import cats.effect.IO
 import doobie.Transactor
 import org.flywaydb.core.Flyway
@@ -16,9 +15,6 @@ import org.h2.jdbcx.JdbcConnectionPool
 
 class H2DataManager extends DataLoader[H2ChatHistoryDao] {
   import org.fs.chm.loader.H2DataManager._
-
-  private implicit val cs = IO.contextShift(ExecutionContext.global)
-
   private val dataFileName = "data." + DefaultExt
 
   private val options = Seq(
@@ -82,8 +78,7 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
     Class.forName("org.h2.Driver")
     val connPool = JdbcConnectionPool.create(url, "sa", "")
     val execCxt: ExecutionContext = ExecutionContext.global
-    val blocker: Blocker          = Blocker.liftExecutionContext(execCxt)
-    val txctr = Transactor.fromDataSource[IO](connPool, execCxt, blocker)
+    val txctr = Transactor.fromDataSource[IO](connPool, execCxt)
     new H2ChatHistoryDao(dataPathRoot = path.getParentFile, txctr = txctr, () => txctr.kernel.dispose())
   }
 }

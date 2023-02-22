@@ -29,6 +29,8 @@ class ExtendedHtmlEditorKit(desktopOption: Option[Desktop]) extends HTMLEditorKi
         m.setAccessible(true)
         m
       }
+      // TODO: Doesn't work well with JDK9+!
+      // Have to specify --add-opens=java.desktop/javax.swing.text.html.parser=ALL-UNNAMED
       val dtd = getDefaultDtdMethod.invoke(null).asInstanceOf[DTD]
       defineCustomTags(dtd)
       defaultParser = new ExtendedParserDelegator
@@ -129,6 +131,8 @@ class ExtendedViewFactory(desktopOption: Option[Desktop]) extends HTMLEditorKit.
 class ExtendedParserDelegator extends ParserDelegator {
 
   private val registerTagMethod = {
+    // TODO: Doesn't work well with JDK9+!
+    // Have to specify --add-opens=java.desktop/javax.swing.text.html=ALL-UNNAMED
     val m = classOf[HTMLDocument#HTMLReader].getDeclaredMethod(
       "registerTag",
       classOf[HTML.Tag],

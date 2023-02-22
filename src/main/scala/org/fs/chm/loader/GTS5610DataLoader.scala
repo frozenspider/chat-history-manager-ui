@@ -45,51 +45,52 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
       phoneNumberOption  = None
     )
 
-    val userToChatWithMsgsMap = vmsgs
-      .groupBy(_.name)
-      .mapValues(_.sortBy(_.dateTime))
-      .map {
-        case (_, vmsgs) =>
-          val head   = vmsgs.head
-          val userId = (head.name + head.phoneOption.getOrElse("")).hashCode.abs
+    val userToChatWithMsgsMap: Map[User, (Chat, IndexedSeq[Message])] =
+      vmsgs
+        .groupBy(_.name)
+        .view.mapValues(_.sortBy(_.dateTime)).toMap
+        .map {
+          case (_, vmsgs) =>
+            val head = vmsgs.head
+            val userId = (head.name + head.phoneOption.getOrElse("")).hashCode.abs
 
-          // TODO: Special treatment for myself
-          val user = User(
-            dsUuid             = dataset.uuid,
-            id                 = userId,
-            firstNameOption    = Some(head.name),
-            lastNameOption     = None,
-            usernameOption     = None,
-            phoneNumberOption  = head.phoneOption
-          )
-
-          val msgs = vmsgs.toIndexedSeq map { vmsg =>
-            Message.Regular(
-              internalId             = Message.NoInternalId,
-              sourceIdOption         = None,
-              time                   = vmsg.dateTime,
-              editTimeOption         = None,
-              fromId                 = userId,
-              forwardFromNameOption  = None,
-              replyToMessageIdOption = None,
-              textOption             = Some(RichText(Seq(RichText.Plain(vmsg.text)))),
-              contentOption          = None
+            // TODO: Special treatment for myself
+            val user = User(
+              dsUuid            = dataset.uuid,
+              id                = userId,
+              firstNameOption   = Some(head.name),
+              lastNameOption    = None,
+              usernameOption    = None,
+              phoneNumberOption = head.phoneOption
             )
-          }
-          val chat = Chat(
-            dsUuid        = dataset.uuid,
-            id            = userId,
-            nameOption    = user.firstNameOption,
-            tpe           = ChatType.Personal,
-            imgPathOption = None,
-            memberIds     = Set(myself, user).map(_.id),
-            msgCount      = msgs.size
-          )
-          user -> (chat, msgs)
-      }
+
+            val msgs: IndexedSeq[Message] = vmsgs.toIndexedSeq map { vmsg =>
+              Message.Regular(
+                internalId             = Message.NoInternalId,
+                sourceIdOption         = None,
+                time                   = vmsg.dateTime,
+                editTimeOption         = None,
+                fromId                 = userId,
+                forwardFromNameOption  = None,
+                replyToMessageIdOption = None,
+                textOption             = Some(RichText(Seq(RichText.Plain(vmsg.text)))),
+                contentOption          = None
+              )
+            }
+            val chat = Chat(
+              dsUuid        = dataset.uuid,
+              id            = userId,
+              nameOption    = user.firstNameOption,
+              tpe           = ChatType.Personal,
+              imgPathOption = None,
+              memberIds     = Set(myself, user).map(_.id),
+              msgCount      = msgs.size
+            )
+            user -> (chat, msgs)
+        }
 
     // Ordering by descending last message
-    val chatsWithMessages = ListMap(userToChatWithMsgsMap.values.toSeq.sortBy(_._2.last.time).reverse: _*)
+    val chatsWithMessages = ListMap(userToChatWithMsgsMap.values.toSeq.sortBy(_._2.last.time).reverse.toSeq: _*)
 
     val users = (userToChatWithMsgsMap.keys.toSet + myself).toSeq sortBy (u => (u.id, u.prettyName))
 
@@ -134,7 +135,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
       .map(splitOn2(_, "="))
       .toMap
       .map { case (k, v) => (k.toUpperCase, v.toUpperCase) }
-      .filterKeys(_.nonEmpty)
+      .view.filterKeys(_.nonEmpty).toMap
     VTag(tag.toUpperCase, meta, value)
   }
 

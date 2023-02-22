@@ -7,8 +7,10 @@ import java.sql.Timestamp
 import java.util.UUID
 
 import scala.annotation.tailrec
+import scala.collection.parallel.CollectionConverters._
 
 import cats.effect._
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.github.nscala_time.time.Imports._
 import doobie.ConnectionIO
@@ -137,7 +139,7 @@ class H2ChatHistoryDao(
     } yield {
       val richTextsMap = rawTextElements
         .groupBy(_.messageInternalId)
-        .mapValues(els => RichText(components = els map Raws.toRichTextElement))
+        .view.mapValues(els => RichText(components = els map Raws.toRichTextElement)).toMap
       val contentMap = rawContents
         .map(rc => (rc.messageInternalId -> Raws.toContent(dsUuid, rc)))
         .toMap

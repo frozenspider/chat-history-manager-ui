@@ -7,12 +7,12 @@ import org.fs.chm.dao._
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 import org.slf4s.Logging
 
-@RunWith(classOf[org.scalatest.junit.JUnitRunner])
+@RunWith(classOf[org.scalatestplus.junit.JUnitRunner])
 class GTS5610DataLoaderSpec //
-    extends FunSuite
+    extends AnyFunSuite
     with TestHelper
     with Logging
     with BeforeAndAfter

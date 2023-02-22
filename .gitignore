@@ -9,6 +9,7 @@
 .idea/
 
 # sbt
+.bsp
 .cache
 .cache-*
 target/

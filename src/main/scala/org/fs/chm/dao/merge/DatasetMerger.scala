@@ -33,8 +33,7 @@ class DatasetMerger(
         IterationState.NoState,
         (mm => mismatches += mm)
       )
-      mismatches.toVector
-      merge.copy(messageMergeOptions = mismatches).asInstanceOf[T]
+      merge.copy(messageMergeOptions = mismatches.toVector).asInstanceOf[T]
     case _ => merge
   }
 

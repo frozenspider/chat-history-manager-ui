@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 
 import scala.annotation.tailrec
+import scala.collection.parallel.CollectionConverters._
 
 import org.slf4s.Logging
 

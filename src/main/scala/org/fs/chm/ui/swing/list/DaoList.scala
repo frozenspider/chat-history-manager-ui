@@ -35,10 +35,10 @@ class DaoList[I <: Panel](createItem: ChatHistoryDao => DaoItem[I]) {
   }
 
   def innerItems: Seq[I] = {
-    for {
-      daoItem   <- panel.contents if daoItem.isInstanceOf[DaoItem[I]]
-      dsItem    <- daoItem.asInstanceOf[DaoItem[I]].items
+    (for {
+      daoItem   <- panel.contents if daoItem.isInstanceOf[DaoItem[_]]
+      dsItem    <- daoItem.asInstanceOf[DaoItem[_]].items
       innerItem <- dsItem.items
-    } yield innerItem
+    } yield innerItem.asInstanceOf[I]).toSeq
   }
 }

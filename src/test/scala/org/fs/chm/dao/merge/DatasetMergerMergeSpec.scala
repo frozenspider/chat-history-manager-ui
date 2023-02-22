@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 
 import scala.collection.immutable.ListMap
+import scala.collection.parallel.CollectionConverters._
 
 import org.fs.chm.TestHelper
 import org.fs.chm.WithH2Dao
@@ -14,12 +15,12 @@ import org.fs.chm.utility.TestUtils._
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 import org.slf4s.Logging
 
-@RunWith(classOf[org.scalatest.junit.JUnitRunner])
+@RunWith(classOf[org.scalatestplus.junit.JUnitRunner])
 class DatasetMergerMergeSpec //
-    extends FunSuite
+    extends AnyFunSuite
     with TestHelper
     with WithH2Dao
     with Logging
