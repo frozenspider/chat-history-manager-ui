@@ -214,4 +214,80 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
 
 object MessagesAreaContainer {
   type MessageDocument = MessagesService.MessageDocument
+
+  def main(args: Array[String]): Unit = {
+    import java.awt.Desktop
+    import java.nio.file.Files
+    import java.util.UUID
+
+    import scala.collection.immutable.ListMap
+
+    import org.fs.chm.dao._
+    import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
+    import org.fs.chm.utility.TestUtils._
+
+    val dao = {
+      val ds = Dataset(
+        uuid       = UUID.randomUUID(),
+        alias      = "Dataset",
+        sourceType = "test source"
+      )
+      val users = (1 to 2) map (createUser(ds.uuid, _))
+      val msgs = IndexedSeq(
+        Message.Service.Group.Call(
+          internalId             = Message.NoInternalId,
+          sourceIdOption         = Some(1L.asInstanceOf[Message.SourceId]),
+          time                   = baseDate.plusMinutes(1),
+          fromId                 = users.head.id,
+          textOption             = Some(RichText(Seq(RichText.Plain(s"Join the call!")))),
+          members                = users map (_.prettyName)
+        ),
+        Message.Regular(
+          internalId             = Message.NoInternalId,
+          sourceIdOption         = Some(2L.asInstanceOf[Message.SourceId]),
+          time                   = baseDate.plusMinutes(2),
+          editTimeOption         = Some(baseDate.plusMinutes(2).plusSeconds(5)),
+          fromId                 = users.last.id,
+          forwardFromNameOption  = Some("u" + users.head.id),
+          replyToMessageIdOption = Some(1L.asInstanceOf[Message.SourceId]),
+          textOption             = Some(RichText(Seq(RichText.Plain(s"Sharing my location")))),
+          contentOption = Some(
+            Content.Location(
+              titleOption       = Some("My Brand New Place"),
+              addressOption     = Some("1 Caesar Ave"),
+              lat               = BigDecimal("11.11111"),
+              lon               = BigDecimal("22.22222"),
+              durationSecOption = Some(5)
+            ))
+        )
+      )
+
+      val chat = createPersonalChat(ds.uuid, 1, users.head, users.map(_.id), msgs.size)
+      val dataPathRoot = Files.createTempDirectory(null).toFile
+      dataPathRoot.deleteOnExit()
+      new EagerChatHistoryDao(
+        name               = "Dao",
+        _dataRootFile      = dataPathRoot,
+        dataset            = ds,
+        myself1            = users.head,
+        users1             = users,
+        _chatsWithMessages = ListMap(chat -> msgs)
+      ) with EagerMutableDaoTrait
+    }
+
+    val (_, _, cwd, msgs) = getSimpleDaoEntities(dao)
+
+    Swing.onEDTWait {
+      val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
+      val htmlKit = new ExtendedHtmlEditorKit(desktopOption)
+      val container = new MessagesAreaContainer(htmlKit)
+      container.render(dao, cwd, msgs.toIndexedSeq, false, false)
+      container.component
+      Dialog.showMessage(
+        title       = classOf[MessagesAreaContainer].getSimpleName,
+        message     = container.component.peer,
+        messageType = Dialog.Message.Plain
+      )
+    }
+  }
 }

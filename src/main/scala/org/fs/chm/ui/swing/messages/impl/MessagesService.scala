@@ -320,8 +320,12 @@ class MessagesService(htmlKit: HTMLEditorKit) {
     }
 
     def renderLocation(ct: Content.Location): String = {
-      val liveString = ct.durationSecOption map (s => s"(live for $s s)") getOrElse ""
-      s"""<blockquote><i>Location:</i> <b>${ct.lat}, ${ct.lon}</b> $liveString<br></blockquote>"""
+      Seq(
+        ct.titleOption map (s => s"<b>${s}</b>"),
+        ct.addressOption,
+        Some(s"<i>Location:</i> <b>${ct.lat}, ${ct.lon}</b>"),
+        ct.durationSecOption map (s => s"(live for $s s)")
+      ).yieldDefined.mkString("<blockquote>", "<br>", "</blockquote>")
     }
 
     def renderPoll(ct: Content.Poll): String = {

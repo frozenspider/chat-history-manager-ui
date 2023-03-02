@@ -3,6 +3,7 @@ package org.fs.chm.ui.swing.general
 import java.awt.Desktop
 import java.io.Reader
 
+import javax.swing.text.Document
 import javax.swing.text.Element
 import javax.swing.text.StyleConstants
 import javax.swing.text.View
@@ -10,6 +11,7 @@ import javax.swing.text.ViewFactory
 import javax.swing.text.html.HTML
 import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
+import javax.swing.text.html.StyleSheet
 import javax.swing.text.html.parser.AttributeList
 import javax.swing.text.html.parser.ContentModel
 import javax.swing.text.html.parser.DTD
@@ -19,27 +21,8 @@ import org.fs.chm.ui.swing.audio.AudioView
 
 class ExtendedHtmlEditorKit(desktopOption: Option[Desktop]) extends HTMLEditorKit {
 
-  private var defaultParser: HTMLEditorKit.Parser = _
-
-  /** Overriding HTMLEditorKit parser by our own which allows tag overrides */
-  override protected def getParser: HTMLEditorKit.Parser = {
-    if (defaultParser == null) {
-      val getDefaultDtdMethod = {
-        val m = classOf[ParserDelegator].getDeclaredMethod("getDefaultDTD")
-        m.setAccessible(true)
-        m
-      }
-      // TODO: Doesn't work well with JDK9+!
-      // Have to specify --add-opens=java.desktop/javax.swing.text.html.parser=ALL-UNNAMED
-      val dtd = getDefaultDtdMethod.invoke(null).asInstanceOf[DTD]
-      defineCustomTags(dtd)
-      defaultParser = new ExtendedParserDelegator
-    }
-    defaultParser
-  }
-
   protected def defineCustomTags(dtd: DTD): Unit = {
-    // I'm haven't actually read SGML/DTD specs to know exact meaning of each constants.
+    // I haven't actually read SGML/DTD specs to know exact meaning of each constants.
     // Instead, tags are modelled using values in existing elements resembling target ones.
 
     // <source> tag
@@ -63,6 +46,20 @@ class ExtendedHtmlEditorKit(desktopOption: Option[Desktop]) extends HTMLEditorKi
 
   override lazy val getViewFactory: ViewFactory =
     new ExtendedViewFactory(desktopOption)
+
+  /** Doing the same as `super.createDefaultDocument()` but returning ExtendedHtmlDocument. */
+  override def createDefaultDocument(): ExtendedHtmlDocument = {
+    val styles = getStyleSheet
+    val ss = new StyleSheet()
+
+    ss.addStyleSheet(styles);
+
+    val doc = new ExtendedHtmlDocument(ss);
+    doc.setParser(getParser)
+    doc.setAsynchronousLoadPriority(4)
+    doc.setTokenThreshold(100)
+    doc
+  }
 }
 
 class ExtendedViewFactory(desktopOption: Option[Desktop]) extends HTMLEditorKit.HTMLFactory {
@@ -120,35 +117,5 @@ class ExtendedViewFactory(desktopOption: Option[Desktop]) extends HTMLEditorKit.
   /** Syntactic sugar for pattern matching */
   protected object HtmlTag {
     def unapply(arg: HTML.Tag): Option[String] = Some(arg.toString)
-  }
-}
-
-/**
- * ParserDelegator extended to support custom tags.
- * <p>
- * We use A LOT of reflection here, but oh well.
- */
-class ExtendedParserDelegator extends ParserDelegator {
-
-  private val registerTagMethod = {
-    // TODO: Doesn't work well with JDK9+!
-    // Have to specify --add-opens=java.desktop/javax.swing.text.html=ALL-UNNAMED
-    val m = classOf[HTMLDocument#HTMLReader].getDeclaredMethod(
-      "registerTag",
-      classOf[HTML.Tag],
-      classOf[HTMLDocument#HTMLReader#TagAction]
-    )
-    m.setAccessible(true)
-    m
-  }
-
-  override def parse(r: Reader, cb: HTMLEditorKit.ParserCallback, ignoreCharSet: Boolean): Unit = {
-    cb match {
-      case cb: HTMLDocument#HTMLReader =>
-        registerTagMethod.invoke(cb, new HTML.UnknownTag("audio"), new cb.BlockAction)
-        registerTagMethod.invoke(cb, new HTML.UnknownTag("source"), new cb.BlockAction)
-      case _ => // NOOP
-    }
-    super.parse(r, cb, ignoreCharSet)
   }
 }

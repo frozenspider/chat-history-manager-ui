@@ -435,6 +435,8 @@ trait TelegramDataLoaderCommon {
 
     private def parseLocation(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Location = {
       Content.Location(
+        titleOption       = getStringOpt(jv, "place_name", false),
+        addressOption     = getStringOpt(jv, "address", false),
         lat               = getCheckedField[BigDecimal](jv, "location_information", "latitude"),
         lon               = getCheckedField[BigDecimal](jv, "location_information", "longitude"),
         durationSecOption = getFieldOpt[Int](jv, "live_location_period_seconds", false)

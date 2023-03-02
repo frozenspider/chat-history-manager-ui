@@ -844,7 +844,7 @@ class H2ChatHistoryDao(
     object rawContent {
       private val colsNoIdentityFr =
         Fragment.const(
-          s"""|message_internal_id, element_type, path, thumbnail_path, emoji, width, height, mime_type, title, performer,
+          s"""|message_internal_id, element_type, path, thumbnail_path, emoji, width, height, mime_type, title, performer, address,
               |lat, lon, duration_sec, poll_question, first_name, last_name, phone_number, vcard_path""".stripMargin)
 
       def selectMultiple(dsUuid: UUID, msgIds: Seq[Message.InternalId]): ConnectionIO[Seq[RawContent]] =
@@ -859,9 +859,9 @@ class H2ChatHistoryDao(
       def insert(rc: RawContent, dsUuid: UUID): ConnectionIO[Long] =
         (fr"INSERT INTO messages_content(ds_uuid, " ++ colsNoIdentityFr ++ fr") VALUES ("
           ++ fr"${dsUuid}, ${rc.messageInternalId},"
-          ++ fr"${rc.elementType}, ${rc.pathOption}, ${rc.thumbnailPathOption}, ${rc.emojiOption}, ${rc.widthOption},"
-          ++ fr"${rc.heightOption}, ${rc.mimeTypeOption}, ${rc.titleOption}, ${rc.performerOption}, ${rc.latOption},"
-          ++ fr"${rc.lonOption}, ${rc.durationSecOption}, ${rc.pollQuestionOption}, ${rc.firstNameOption},"
+          ++ fr"${rc.elementType}, ${rc.pathOption}, ${rc.thumbnailPathOption}, ${rc.emojiOption}, ${rc.widthOption}, "
+          ++ fr"${rc.heightOption}, ${rc.mimeTypeOption}, ${rc.titleOption}, ${rc.performerOption}, ${rc.addressOption}, "
+          ++ fr"${rc.latOption}, ${rc.lonOption}, ${rc.durationSecOption}, ${rc.pollQuestionOption}, ${rc.firstNameOption}, "
           ++ fr" ${rc.lastNameOption}, ${rc.phoneNumberOption}, ${rc.vcardPathOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
 
@@ -1138,6 +1138,8 @@ class H2ChatHistoryDao(
           )
         case "location" =>
           Content.Location(
+            titleOption       = rc.titleOption,
+            addressOption     = rc.addressOption,
             lat               = rc.latOption.get,
             lon               = rc.lonOption.get,
             durationSecOption = rc.durationSecOption
@@ -1311,6 +1313,7 @@ class H2ChatHistoryDao(
         mimeTypeOption      = None,
         titleOption         = None,
         performerOption     = None,
+        addressOption       = None,
         latOption           = None,
         lonOption           = None,
         durationSecOption   = None,
@@ -1379,6 +1382,8 @@ class H2ChatHistoryDao(
         case c: Content.Location =>
           template.copy(
             elementType       = "location",
+            titleOption       = c.titleOption,
+            addressOption     = c.addressOption,
             latOption         = Some(c.lat),
             lonOption         = Some(c.lon),
             durationSecOption = c.durationSecOption
@@ -1486,6 +1491,7 @@ object H2ChatHistoryDao {
       languageOption: Option[String]
   )
 
+  /** Could hold any kind of content, distinguished by elementType. */
   case class RawContent(
       messageInternalId: Message.InternalId,
       elementType: String,
@@ -1497,6 +1503,7 @@ object H2ChatHistoryDao {
       mimeTypeOption: Option[String],
       titleOption: Option[String],
       performerOption: Option[String],
+      addressOption: Option[String],
       latOption: Option[BigDecimal],
       lonOption: Option[BigDecimal],
       durationSecOption: Option[Int],

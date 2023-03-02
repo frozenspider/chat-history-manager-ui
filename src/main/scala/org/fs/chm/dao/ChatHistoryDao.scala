@@ -778,6 +778,8 @@ object Content {
   }
 
   case class Location(
+      titleOption: Option[String],
+      addressOption: Option[String],
       lat: BigDecimal,
       lon: BigDecimal,
       durationSecOption: Option[Int],
