@@ -21,22 +21,48 @@ import org.fs.chm.ui.swing.audio.AudioView
 
 class ExtendedHtmlEditorKit(desktopOption: Option[Desktop]) extends HTMLEditorKit {
 
+  /** Overriding HTMLEditorKit parser by our own which allows tag overrides */
+  override protected lazy val getParser: HTMLEditorKit.Parser = {
+    val getDefaultDtdMethod = {
+      val m = classOf[ParserDelegator].getDeclaredMethod("getDefaultDTD")
+      m.setAccessible(true)
+      m
+    }
+    // TODO: Doesn't work well with JDK9+!
+    // Have to specify --add-opens=java.desktop/javax.swing.text.html.parser=ALL-UNNAMED
+    val dtd = getDefaultDtdMethod.invoke(null).asInstanceOf[DTD]
+    defineCustomTags(dtd)
+    new ExtendedParserDelegator
+  }
+
   protected def defineCustomTags(dtd: DTD): Unit = {
     // I haven't actually read SGML/DTD specs to know exact meaning of each constants.
     // Instead, tags are modelled using values in existing elements resembling target ones.
 
     // <source> tag
     val sourceAttrs: AttributeList =
-      new AttributeList("src", DTDConstants.CDATA, DTDConstants.REQUIRED, null, null, {
-        new AttributeList("type", DTDConstants.CDATA, 0, "", null, null)
-      })
+      new AttributeList(
+        "src",
+        DTDConstants.CDATA,
+        DTDConstants.REQUIRED,
+        null,
+        null, {
+          new AttributeList("type", DTDConstants.CDATA, 0, "", null, null)
+        }
+      )
     val sourceTag = dtd.defineElement("source", DTDConstants.EMPTY, false, true, null, null, null, sourceAttrs)
 
     // <audio> tag
-    val audioAttrs: AttributeList =
-      new AttributeList("duration", DTDConstants.NUMBER, 0, "-1", null, {
-        new AttributeList("controls", DTDConstants.EMPTY, 0, null, null, null)
-      })
+    val audioAttrs:        AttributeList =
+      new AttributeList(
+        "duration",
+        DTDConstants.NUMBER,
+        0,
+        "-1",
+        null, {
+          new AttributeList("controls", DTDConstants.EMPTY, 0, null, null, null)
+        }
+      )
     val audioContentModel: ContentModel = {
       // Modelled after <div>
       new ContentModel('*', new ContentModel(sourceTag), null)
@@ -46,20 +72,6 @@ class ExtendedHtmlEditorKit(desktopOption: Option[Desktop]) extends HTMLEditorKi
 
   override lazy val getViewFactory: ViewFactory =
     new ExtendedViewFactory(desktopOption)
-
-  /** Doing the same as `super.createDefaultDocument()` but returning ExtendedHtmlDocument. */
-  override def createDefaultDocument(): ExtendedHtmlDocument = {
-    val styles = getStyleSheet
-    val ss = new StyleSheet()
-
-    ss.addStyleSheet(styles);
-
-    val doc = new ExtendedHtmlDocument(ss);
-    doc.setParser(getParser)
-    doc.setAsynchronousLoadPriority(4)
-    doc.setTokenThreshold(100)
-    doc
-  }
 }
 
 class ExtendedViewFactory(desktopOption: Option[Desktop]) extends HTMLEditorKit.HTMLFactory {
@@ -117,5 +129,37 @@ class ExtendedViewFactory(desktopOption: Option[Desktop]) extends HTMLEditorKit.
   /** Syntactic sugar for pattern matching */
   protected object HtmlTag {
     def unapply(arg: HTML.Tag): Option[String] = Some(arg.toString)
+  }
+}
+
+/**
+ * ParserDelegator extended to support custom tags.
+ * <p>
+ * We cannot use a custom HTMLReader instead because it's created with `new` in HTMLDocument, good job Oracle/Sun.
+ * <p>
+ * We use A LOT of reflection here, but oh well.
+ */
+class ExtendedParserDelegator extends ParserDelegator {
+
+  private val registerTagMethod = {
+    // TODO: Doesn't work well with JDK9+!
+    // Have to specify --add-opens=java.desktop/javax.swing.text.html=ALL-UNNAMED
+    val m = classOf[HTMLDocument#HTMLReader].getDeclaredMethod(
+      "registerTag",
+      classOf[HTML.Tag],
+      classOf[HTMLDocument#HTMLReader#TagAction]
+    )
+    m.setAccessible(true)
+    m
+  }
+
+  override def parse(r: Reader, cb: HTMLEditorKit.ParserCallback, ignoreCharSet: Boolean): Unit = {
+    cb match {
+      case cb: HTMLDocument#HTMLReader =>
+        registerTagMethod.invoke(cb, new HTML.UnknownTag("audio"), new cb.BlockAction)
+        registerTagMethod.invoke(cb, new HTML.UnknownTag("source"), new cb.BlockAction)
+      case _ => // NOOP
+    }
+    super.parse(r, cb, ignoreCharSet)
   }
 }

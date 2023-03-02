@@ -8,13 +8,14 @@ import scala.swing._
 import scala.swing.event.ButtonClicked
 
 import javax.swing.border.EmptyBorder
+import org.fs.chm.utility.Logging
 
 /** Panel-based component that renders audio messages */
 class AudioMessageComponent(
     filesWithMimeTypes: Seq[(File, Option[String])],
     providedDurationOption: Option[Int],
     desktopOption: Option[Desktop]
-) extends Panel {
+) extends Panel with Logging {
   private val width  = 200
   private val height = 50
 
@@ -25,6 +26,10 @@ class AudioMessageComponent(
 
   private val playerOption: Option[AudioPlayer] =
     chosenFileTypeOption map (ft => new AudioPlayer(ft._1, ft._2, providedDurationOption))
+
+  if (playerOption.isEmpty) {
+    log.debug(s"Voice message not found: ${filesWithMimeTypes.map(_._1).map(_.getAbsolutePath)}")
+  }
 
   private val durationOption = for {
     p <- playerOption
