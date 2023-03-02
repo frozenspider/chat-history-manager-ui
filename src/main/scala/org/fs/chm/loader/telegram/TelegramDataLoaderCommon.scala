@@ -74,7 +74,7 @@ trait TelegramDataLoaderCommon {
       tracker.ensuringUsage(jv) {
         (getCheckedField[String](jv, "type") match {
           case "message"     => Some(parseRegular(jv, rootFile))
-          case "service"     => Some(parseService(jv, rootFile))
+          case "service"     => parseService(jv, rootFile)
           case "unsupported" =>
             // Not enough data is provided even for a placeholder
             tracker.markUsed("id")
@@ -101,12 +101,12 @@ trait TelegramDataLoaderCommon {
       )
     }
 
-    private def parseService(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Message.Service = {
+    private def parseService(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Option[Message.Service] = {
       tracker.markUsed("edited") // Service messages can't be edited
       tracker.markUsed("actor")  // Sending user name has been parsed during a separate pass
       getCheckedField[String](jv, "action") match {
         case "phone_call" =>
-          Message.Service.PhoneCall(
+          Some(Message.Service.PhoneCall(
             internalId          = Message.NoInternalId,
             sourceIdOption      = Some(getCheckedField[Message.SourceId](jv, "id")),
             time                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
@@ -114,10 +114,10 @@ trait TelegramDataLoaderCommon {
             durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
             discardReasonOption = getStringOpt(jv, "discard_reason", false),
             textOption          = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "group_call" =>
           // Treated the same as phone_call
-          Message.Service.PhoneCall(
+          Some(Message.Service.PhoneCall(
             internalId          = Message.NoInternalId,
             sourceIdOption      = Some(getCheckedField[Message.SourceId](jv, "id")),
             time                = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
@@ -125,26 +125,26 @@ trait TelegramDataLoaderCommon {
             durationSecOption   = None,
             discardReasonOption = None,
             textOption          = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "pin_message" =>
-          Message.Service.PinMessage(
+          Some(Message.Service.PinMessage(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getUserId(jv, "actor_id"),
             messageId      = getCheckedField[Message.SourceId](jv, "message_id"),
             textOption     = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "clear_history" =>
-          Message.Service.ClearHistory(
+          Some(Message.Service.ClearHistory(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getUserId(jv, "actor_id"),
             textOption     = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "create_group" =>
-          Message.Service.Group.Create(
+          Some(Message.Service.Group.Create(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
@@ -152,9 +152,9 @@ trait TelegramDataLoaderCommon {
             title          = getCheckedField[String](jv, "title"),
             members        = getCheckedField[Seq[String]](jv, "members"),
             textOption     = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "edit_group_photo" =>
-          Message.Service.Group.EditPhoto(
+          Some(Message.Service.Group.EditPhoto(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
@@ -163,71 +163,75 @@ trait TelegramDataLoaderCommon {
             widthOption    = getFieldOpt[Int](jv, "width", false),
             heightOption   = getFieldOpt[Int](jv, "height", false),
             textOption     = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "edit_group_title" =>
-          Message.Service.Group.EditTitle(
+          Some(Message.Service.Group.EditTitle(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getUserId(jv, "actor_id"),
             title          = getCheckedField[String](jv, "title"),
             textOption     = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "invite_members" =>
-          Message.Service.Group.InviteMembers(
+          Some(Message.Service.Group.InviteMembers(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getUserId(jv, "actor_id"),
             members        = getCheckedField[Seq[String]](jv, "members"),
             textOption     = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "remove_members" =>
-          Message.Service.Group.RemoveMembers(
+          Some(Message.Service.Group.RemoveMembers(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getUserId(jv, "actor_id"),
             members        = getCheckedField[Seq[String]](jv, "members"),
             textOption     = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "join_group_by_link" =>
           // Maps into usual InviteMembers
           tracker.markUsed("inviter")
-          Message.Service.Group.InviteMembers(
+          Some(Message.Service.Group.InviteMembers(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getUserId(jv, "actor_id"),
             members        = Seq(getCheckedField[String](jv, "actor")),
             textOption     = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "migrate_from_group" =>
-          Message.Service.Group.MigrateFrom(
+          Some(Message.Service.Group.MigrateFrom(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getUserId(jv, "actor_id"),
             titleOption    = Some(getCheckedField[String](jv, "title")),
             textOption     = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "migrate_to_supergroup" =>
-          Message.Service.Group.MigrateTo(
+          Some(Message.Service.Group.MigrateTo(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getUserId(jv, "actor_id"),
             textOption     = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
         case "invite_to_group_call" =>
-          Message.Service.Group.Call(
+          Some(Message.Service.Group.Call(
             internalId     = Message.NoInternalId,
             sourceIdOption = Some(getCheckedField[Message.SourceId](jv, "id")),
             time           = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get,
             fromId         = getUserId(jv, "actor_id"),
             members        = getCheckedField[Seq[String]](jv, "members"),
             textOption     = RichTextParser.parseRichTextOption(jv)
-          )
+          ))
+        case "edit_chat_theme" =>
+          // Not really interesting to track.
+          Seq("id", "date", "actor_id", "emoticon", "text").foreach(tracker.markUsed)
+          None
         case other =>
           throw new IllegalArgumentException(
             s"Don't know how to parse service message for action '$other' for ${jv.toString.take(500)}")
