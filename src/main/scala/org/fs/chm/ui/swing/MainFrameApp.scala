@@ -43,7 +43,7 @@ import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.SimpleConfigAware
 import org.slf4s.Logging
 
-class MainFrameApp //
+class MainFrameApp(grpcDataLoader: TelegramGrpcDataLoader) //
     extends SimpleSwingApplication
     with SimpleConfigAware
     with Logging
@@ -963,18 +963,17 @@ class MainFrameApp //
       if (h2ff.accept(file)) {
         h2.loadData(f)
       } else if (tgFf.accept(file)) {
-        val tgFullError = tgFull.doesLookRight(f)
-        if (tgFullError.isEmpty) {
-          tgFull.loadData(file.getParentFile)
-        } else {
-          val tgSingleError = tgSingle.doesLookRight(f)
-          if (tgSingleError.isEmpty) {
-            tgSingle.loadData(file.getParentFile)
-          } else {
+        val loadersWithErrors =
+          Seq(grpcDataLoader, tgFull, tgSingle).map(l => (l, l.doesLookRight(f)))
+        loadersWithErrors.find(_._2.isEmpty) match {
+          case Some((loader, _)) => loader.loadData(f)
+          case None => {
+            val errors = loadersWithErrors.map(_._1).toIndexedSeq
             throw new IllegalStateException(
               "Not a telegram format: Errors:\n"
-                + s"(as a full history) ${tgFullError.get}\n"
-                + s"(as a single chat) ${tgSingleError.get}")
+                + s"(from gRPC loader) ${errors(0)}\n"
+                + s"(as a full history) ${errors(1)}\n"
+                + s"(as a single chat) ${errors(2)}")
           }
         }
       } else if (gts5610Ff.accept(file)) {

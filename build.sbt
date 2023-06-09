@@ -13,6 +13,10 @@ Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
 Compile / sourceManaged  := baseDirectory.value / "src_managed" / "main" / "scala"
 Test / sourceManaged     := baseDirectory.value / "src_managed" / "test" / "scala"
 
+Compile / PB.targets := Seq(
+  scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
+)
+
 lazy val root = (project in file("."))
   .enablePlugins(BuildInfoPlugin)
   .settings(
@@ -30,6 +34,9 @@ lazy val root = (project in file("."))
   )
 
 resolvers += "jitpack" at "https://jitpack.io"
+
+val scalapbVer = scalapb.compiler.Version.scalapbVersion
+val grpcJavaVer = scalapb.compiler.Version.grpcJavaVersion
 
 // Regular dependencies
 libraryDependencies ++= Seq(
@@ -63,6 +70,10 @@ libraryDependencies ++= Seq(
   "org.json4s"                    %% "json4s-ext"                 % "4.1.0-M2",
   "com.typesafe"                  %  "config"                     % "1.4.2",
   "org.scala-lang.modules"        %% "scala-parser-combinators"   % "2.2.0",
+  // Protobuf
+  "com.thesamet.scalapb"          %% "scalapb-runtime"            % scalapbVer % "protobuf",
+  "com.thesamet.scalapb"          %% "scalapb-runtime-grpc"       % scalapbVer,
+  "io.grpc"                       %  "grpc-netty"                 % grpcJavaVer,
   // Test
   "junit"                         %  "junit"                      % "4.12"     % "test",
   "org.scalactic"                 %% "scalactic"                  % "3.2.15"   % "test",

@@ -1,10 +1,7 @@
 package org.fs.chm.loader.telegram
 
 import java.io.File
-import java.io.FileNotFoundException
 import java.util.UUID
-
-import scala.collection.immutable.ListMap
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao._
@@ -14,25 +11,6 @@ import org.json4s.jackson.JsonMethods
 
 trait TelegramDataLoaderCommon {
   implicit protected val formats: Formats = DefaultFormats.withLong.withBigDecimal
-
-  protected def checkFormatLooksRight(rootFile: File, expectedFields: Seq[String]): Option[String] ={
-    val resultJsonFile: File = new File(rootFile, "result.json").getAbsoluteFile
-    if (!resultJsonFile.exists()) {
-      Some("result.json not found in " + rootFile.getAbsolutePath)
-    } else {
-      val parsed = JsonMethods.parse(resultJsonFile)
-      expectedFields.foldLeft(Option.empty[String]) {
-        case (s: Some[String], _) => s
-        case (None, fieldName) =>
-          val res = parsed \ fieldName
-          if (res == JNothing) {
-            Some(s"Incompatible format! Field '$fieldName' not found")
-          } else {
-            None
-          }
-      }
-    }
-  }
 
   /** Starting with Telegram 2020-10, user IDs are shifted by this value */
   private val UserIdShift: Long = 0x100000000L
