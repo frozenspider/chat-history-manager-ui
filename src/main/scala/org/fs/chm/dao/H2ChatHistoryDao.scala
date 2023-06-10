@@ -19,12 +19,23 @@ import doobie.free.connection
 import doobie.free.connection.ConnectionOp
 import doobie.h2.implicits._
 import doobie.implicits._
+import org.fs.chm.protobuf.Content
+import org.fs.chm.protobuf.ContentAnimation
+import org.fs.chm.protobuf.ContentFile
+import org.fs.chm.protobuf.ContentLocation
+import org.fs.chm.protobuf.ContentPhoto
+import org.fs.chm.protobuf.ContentPoll
+import org.fs.chm.protobuf.ContentSharedContact
+import org.fs.chm.protobuf.ContentSticker
+import org.fs.chm.protobuf.ContentVideoMsg
+import org.fs.chm.protobuf.ContentVoiceMsg
 import org.fs.chm.utility.EntityUtils._
 import org.fs.chm.utility.IoUtils
 import org.fs.chm.utility.Logging
 import org.fs.chm.utility.PerfUtils._
 import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
+import Helpers._
 
 class H2ChatHistoryDao(
     dataPathRoot: File,
@@ -1086,76 +1097,76 @@ class H2ChatHistoryDao(
     }
 
     def toContent(dsUuid: UUID, rc: RawContent): Content = {
-      rc.elementType match {
+      Content(rc.elementType match {
         case "sticker" =>
-          Content.Sticker(
-            pathOption          = rc.pathOption map (_.toFile(dsUuid)),
-            thumbnailPathOption = rc.thumbnailPathOption map (_.toFile(dsUuid)),
-            emojiOption         = rc.emojiOption,
-            widthOption         = rc.widthOption,
-            heightOption        = rc.heightOption
-          )
+          Content.Val.Sticker(ContentSticker(
+            path          = rc.pathOption map (_.toAbsolutePath(dsUuid)),
+            thumbnailPath = rc.thumbnailPathOption map (_.toAbsolutePath(dsUuid)),
+            emoji         = rc.emojiOption,
+            width         = rc.widthOption.get,
+            height        = rc.heightOption.get
+          ))
         case "photo" =>
-          Content.Photo(
-            pathOption = rc.pathOption map (_.toFile(dsUuid)),
-            width      = rc.widthOption.get,
-            height     = rc.heightOption.get,
-          )
+          Content.Val.Photo(ContentPhoto(
+            path   = rc.pathOption map (_.toAbsolutePath(dsUuid)),
+            width  = rc.widthOption.get,
+            height = rc.heightOption.get,
+          ))
         case "voice_message" =>
-          Content.VoiceMsg(
-            pathOption        = rc.pathOption map (_.toFile(dsUuid)),
-            mimeTypeOption    = rc.mimeTypeOption,
-            durationSecOption = rc.durationSecOption
-          )
+          Content.Val.VoiceMsg(ContentVoiceMsg(
+            path        = rc.pathOption map (_.toAbsolutePath(dsUuid)),
+            mimeType    = rc.mimeTypeOption.get,
+            durationSec = rc.durationSecOption
+          ))
         case "video_message" =>
-          Content.VideoMsg(
-            pathOption          = rc.pathOption map (_.toFile(dsUuid)),
-            thumbnailPathOption = rc.thumbnailPathOption map (_.toFile(dsUuid)),
-            mimeTypeOption      = rc.mimeTypeOption,
-            durationSecOption   = rc.durationSecOption,
-            width               = rc.widthOption.get,
-            height              = rc.heightOption.get
-          )
+          Content.Val.VideoMsg(ContentVideoMsg(
+            path          = rc.pathOption map (_.toAbsolutePath(dsUuid)),
+            thumbnailPath = rc.thumbnailPathOption map (_.toAbsolutePath(dsUuid)),
+            mimeType      = rc.mimeTypeOption.get,
+            durationSec   = rc.durationSecOption,
+            width         = rc.widthOption.get,
+            height        = rc.heightOption.get
+          ))
         case "animation" =>
-          Content.Animation(
-            pathOption          = rc.pathOption map (_.toFile(dsUuid)),
-            thumbnailPathOption = rc.thumbnailPathOption map (_.toFile(dsUuid)),
-            mimeTypeOption      = rc.mimeTypeOption,
-            durationSecOption   = rc.durationSecOption,
-            width               = rc.widthOption.get,
-            height              = rc.heightOption.get
-          )
+          Content.Val.Animation(ContentAnimation(
+            path          = rc.pathOption map (_.toAbsolutePath(dsUuid)),
+            thumbnailPath = rc.thumbnailPathOption map (_.toAbsolutePath(dsUuid)),
+            mimeType      = rc.mimeTypeOption.get,
+            durationSec   = rc.durationSecOption,
+            width         = rc.widthOption.get,
+            height        = rc.heightOption.get
+          ))
         case "file" =>
-          Content.File(
-            pathOption          = rc.pathOption map (_.toFile(dsUuid)),
-            thumbnailPathOption = rc.thumbnailPathOption map (_.toFile(dsUuid)),
-            mimeTypeOption      = rc.mimeTypeOption,
-            titleOption         = rc.titleOption,
-            performerOption     = rc.performerOption,
-            durationSecOption   = rc.durationSecOption,
-            widthOption         = rc.widthOption,
-            heightOption        = rc.heightOption
-          )
+          Content.Val.File(ContentFile(
+            path          = rc.pathOption map (_.toAbsolutePath(dsUuid)),
+            thumbnailPath = rc.thumbnailPathOption map (_.toAbsolutePath(dsUuid)),
+            mimeType      = rc.mimeTypeOption,
+            title         = rc.titleOption.getOrElse("<File>"),
+            performer     = rc.performerOption,
+            durationSec   = rc.durationSecOption,
+            width         = rc.widthOption,
+            height        = rc.heightOption
+          ))
         case "location" =>
-          Content.Location(
-            titleOption       = rc.titleOption,
-            addressOption     = rc.addressOption,
-            lat               = rc.latOption.get,
-            lon               = rc.lonOption.get,
-            durationSecOption = rc.durationSecOption
-          )
+          Content.Val.Location(ContentLocation(
+            title       = rc.titleOption,
+            address     = rc.addressOption,
+            latStr      = rc.latOption.get.toString,
+            lonStr      = rc.lonOption.get.toString,
+            durationSec = rc.durationSecOption
+          ))
         case "poll" =>
-          Content.Poll(
+          Content.Val.Poll(ContentPoll(
             question = rc.pollQuestionOption.get
-          )
+          ))
         case "shared_contact" =>
-          Content.SharedContact(
-            firstNameOption   = rc.firstNameOption,
-            lastNameOption    = rc.lastNameOption,
-            phoneNumberOption = rc.phoneNumberOption,
-            vcardPathOption   = rc.vcardPathOption map (_.toFile(dsUuid))
-          )
-      }
+          Content.Val.SharedContact(ContentSharedContact(
+            firstName   = rc.firstNameOption.get,
+            lastName    = rc.lastNameOption,
+            phoneNumber = rc.phoneNumberOption,
+            vcardPath   = rc.vcardPathOption map (_.toAbsolutePath(dsUuid)),
+          ))
+      })
     }
 
     def fromChat(dsRoot: File, c: Chat): RawChat = {
@@ -1323,84 +1334,86 @@ class H2ChatHistoryDao(
         phoneNumberOption   = None,
         vcardPathOption     = None
       )
-      c match {
-        case c: Content.Sticker =>
+      c.`val` match {
+        case Content.Val.Sticker(c) =>
           template.copy(
             elementType         = "sticker",
-            pathOption          = c.pathOption map (_.toRelativePath(dsRoot)),
-            thumbnailPathOption = c.thumbnailPathOption map (_.toRelativePath(dsRoot)),
-            emojiOption         = c.emojiOption,
-            widthOption         = c.widthOption,
-            heightOption        = c.heightOption
+            pathOption          = c.path map (_.toRelativePath(dsRoot)),
+            thumbnailPathOption = c.thumbnailPath map (_.toRelativePath(dsRoot)),
+            emojiOption         = c.emoji,
+            widthOption         = Some(c.width),
+            heightOption        = Some(c.height)
           )
-        case c: Content.Photo =>
+        case Content.Val.Photo(c) =>
           template.copy(
             elementType  = "photo",
-            pathOption   = c.pathOption map (_.toRelativePath(dsRoot)),
+            pathOption   = c.path map (_.toRelativePath(dsRoot)),
             widthOption  = Some(c.width),
             heightOption = Some(c.height)
           )
-        case c: Content.VoiceMsg =>
+        case Content.Val.VoiceMsg(c) =>
           template.copy(
             elementType       = "voice_message",
-            pathOption        = c.pathOption map (_.toRelativePath(dsRoot)),
-            mimeTypeOption    = c.mimeTypeOption,
-            durationSecOption = c.durationSecOption
+            pathOption        = c.path map (_.toRelativePath(dsRoot)),
+            mimeTypeOption    = Some(c.mimeType),
+            durationSecOption = c.durationSec
           )
-        case c: Content.VideoMsg =>
+        case Content.Val.VideoMsg(c) =>
           template.copy(
             elementType         = "video_message",
-            pathOption          = c.pathOption map (_.toRelativePath(dsRoot)),
-            thumbnailPathOption = c.thumbnailPathOption map (_.toRelativePath(dsRoot)),
-            mimeTypeOption      = c.mimeTypeOption,
-            durationSecOption   = c.durationSecOption,
+            pathOption          = c.path map (_.toRelativePath(dsRoot)),
+            thumbnailPathOption = c.thumbnailPath map (_.toRelativePath(dsRoot)),
+            mimeTypeOption      = Some(c.mimeType),
+            durationSecOption   = c.durationSec,
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
-        case c: Content.Animation =>
+        case Content.Val.Animation(c) =>
           template.copy(
             elementType         = "animation",
-            pathOption          = c.pathOption map (_.toRelativePath(dsRoot)),
-            thumbnailPathOption = c.thumbnailPathOption map (_.toRelativePath(dsRoot)),
-            mimeTypeOption      = c.mimeTypeOption,
-            durationSecOption   = c.durationSecOption,
+            pathOption          = c.path map (_.toRelativePath(dsRoot)),
+            thumbnailPathOption = c.thumbnailPath map (_.toRelativePath(dsRoot)),
+            mimeTypeOption      = Some(c.mimeType),
+            durationSecOption   = c.durationSec,
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
-        case c: Content.File =>
+        case Content.Val.File(c) =>
           template.copy(
             elementType         = "file",
-            pathOption          = c.pathOption map (_.toRelativePath(dsRoot)),
-            thumbnailPathOption = c.thumbnailPathOption map (_.toRelativePath(dsRoot)),
-            mimeTypeOption      = c.mimeTypeOption,
-            titleOption         = c.titleOption,
-            performerOption     = c.performerOption,
-            durationSecOption   = c.durationSecOption,
-            widthOption         = c.widthOption,
-            heightOption        = c.heightOption
+            pathOption          = c.path map (_.toRelativePath(dsRoot)),
+            thumbnailPathOption = c.thumbnailPath map (_.toRelativePath(dsRoot)),
+            mimeTypeOption      = c.mimeType,
+            titleOption         = Some(c.title),
+            performerOption     = c.performer,
+            durationSecOption   = c.durationSec,
+            widthOption         = c.width,
+            heightOption        = c.height
           )
-        case c: Content.Location =>
+        case Content.Val.Location(c) =>
           template.copy(
             elementType       = "location",
-            titleOption       = c.titleOption,
-            addressOption     = c.addressOption,
+            titleOption       = c.title,
+            addressOption     = c.address,
             latOption         = Some(c.lat),
             lonOption         = Some(c.lon),
-            durationSecOption = c.durationSecOption
+            durationSecOption = c.durationSec
           )
-        case c: Content.Poll =>
+        case Content.Val.Poll(c) =>
           template.copy(
             elementType        = "poll",
             pollQuestionOption = Some(c.question)
           )
-        case c: Content.SharedContact =>
+        case Content.Val.SharedContact(c) =>
           template.copy(
             elementType       = "shared_contact",
-            firstNameOption   = c.firstNameOption,
-            lastNameOption    = c.lastNameOption,
-            phoneNumberOption = c.phoneNumberOption,
-            vcardPathOption   = c.vcardPathOption map (_.toRelativePath(dsRoot))
+            firstNameOption   = Some(c.firstName),
+            lastNameOption    = c.lastName,
+            phoneNumberOption = c.phoneNumber,
+            vcardPathOption   = c.vcardPath map (_.toRelativePath(dsRoot))
           )
+        case Content.Val.Empty =>
+          throw new IllegalArgumentException("Empty content!")
       }
     }
   }
@@ -1413,7 +1426,15 @@ class H2ChatHistoryDao(
   override def hashCode: Int = this.name.hashCode + 17 * this.dataPathRoot.hashCode
 
   private implicit class RichString(s: String) {
-    def toFile(dsUuid: UUID): File = new File(datasetRoot(dsUuid), s.replace('\\','/')).getAbsoluteFile
+    def toFile(dsUuid: UUID): File =
+      new File(datasetRoot(dsUuid), s.replace('\\', '/')).getAbsoluteFile
+
+    def toAbsolutePath(dsUuid: UUID): String =
+      toFile(dsUuid).getAbsolutePath
+
+    def toRelativePath(rootFile: File): String = {
+      new File(s).toRelativePath(rootFile)
+    }
   }
 
   private implicit class RichFile(f: File) {

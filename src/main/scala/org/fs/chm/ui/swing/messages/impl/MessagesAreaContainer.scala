@@ -1,12 +1,14 @@
 package org.fs.chm.ui.swing.messages.impl
 
 import scala.swing._
-
 import javax.swing.text.DefaultCaret
 import javax.swing.text.html.HTMLEditorKit
+
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.ChatWithDetails
 import org.fs.chm.dao.Message
+import org.fs.chm.protobuf.Content
+import org.fs.chm.protobuf.ContentLocation
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesService._
@@ -252,13 +254,13 @@ object MessagesAreaContainer {
           replyToMessageIdOption = Some(1L.asInstanceOf[Message.SourceId]),
           textOption             = Some(RichText(Seq(RichText.Plain(s"Sharing my location")))),
           contentOption = Some(
-            Content.Location(
-              titleOption       = Some("My Brand New Place"),
-              addressOption     = Some("1 Caesar Ave"),
-              lat               = BigDecimal("11.11111"),
-              lon               = BigDecimal("22.22222"),
-              durationSecOption = Some(5)
-            ))
+            Content(Content.Val.Location(ContentLocation(
+              title       = Some("My Brand New Place"),
+              address     = Some("1 Caesar Ave"),
+              latStr      = "11.11111",
+              lonStr      = "22.22222",
+              durationSec = Some(5)
+            ))))
         )
       )
 

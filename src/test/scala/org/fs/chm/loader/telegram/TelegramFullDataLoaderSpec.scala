@@ -5,6 +5,8 @@ import java.util.UUID
 
 import org.fs.chm.TestHelper
 import org.fs.chm.dao._
+import org.fs.chm.protobuf.Content
+import org.fs.chm.protobuf.ContentLocation
 import org.junit.runner.RunWith
 import org.scalatest.funsuite.AnyFunSuite
 import org.slf4s.Logging
@@ -183,13 +185,13 @@ class TelegramFullDataLoaderSpec //
       assert(msgs.size === 1)
       assert(msgs.head.getClass === classOf[Message.Regular])
       val typedMsg = msgs.head.asInstanceOf[Message.Regular]
-      assert(typedMsg.contentOption === Some(Content.Location(
-        titleOption       = Some("Çıralı Plajı"),
-        addressOption     = Some("Olympos"),
-        lat               = BigDecimal("36.417978"),
-        lon               = BigDecimal("30.482614"),
-        durationSecOption = None
-      )))
+      assert(typedMsg.contentOption === Some(Content(Content.Val.Location(ContentLocation(
+        title       = Some("Çıralı Plajı"),
+        address     = Some("Olympos"),
+        latStr      = "36.417978",
+        lonStr      = "30.482614",
+        durationSec = None
+      )))))
     }
   }
 

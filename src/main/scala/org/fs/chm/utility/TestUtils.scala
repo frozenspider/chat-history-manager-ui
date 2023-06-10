@@ -4,13 +4,14 @@ import java.io.File
 import java.nio.file.Files
 import java.util.UUID
 
-import scala.collection.Iterable
 import scala.collection.immutable.ListMap
 import scala.util.Random
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger.TaggedMessage
+import org.fs.chm.protobuf.Content
+import org.fs.chm.protobuf.ContentPoll
 
 /**
  * Utility stuff used for testing, both automatically and manually
@@ -71,7 +72,7 @@ object TestUtils {
       forwardFromNameOption  = Some("u" + userId),
       replyToMessageIdOption = replyToMessageIdOption,
       textOption             = Some(RichText(Seq(RichText.Plain(s"Hello there, ${idx}!")))),
-      contentOption          = Some(Content.Poll(s"Hey, ${idx}!"))
+      contentOption          = Some(Content(Content.Val.Poll(ContentPoll(question = s"Hey, ${idx}!"))))
     )
   }
 

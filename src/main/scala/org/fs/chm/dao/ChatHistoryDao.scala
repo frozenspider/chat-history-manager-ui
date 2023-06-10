@@ -1,9 +1,11 @@
 package org.fs.chm.dao
 
-import java.io.{ File => JFile }
+import java.io.{File => JFile}
 import java.util.UUID
 
 import com.github.nscala_time.time.Imports._
+import org.fs.chm.dao.Helpers._
+import org.fs.chm.protobuf._
 import org.fs.chm.utility.IoUtils._
 import org.fs.utility.Imports._
 
@@ -214,9 +216,8 @@ trait Searchable {
 case class ChatWithDetails(chat: Chat,
                            lastMsgOption: Option[Message],
                            /** First element MUST be myself, the rest should be in some fixed order. */
-                           members: Seq[User])
-    extends WithId {
-  val dsUuid = chat.dsUuid
+                           members: Seq[User]) extends WithId {
+  val dsUuid: UUID = chat.dsUuid
 
   override val id: Long = chat.id
 }
@@ -384,17 +385,21 @@ object Message {
 
     override def files: Set[JFile] = {
       (contentOption match {
-        case Some(content: Content.Sticker)       => Set(content.pathOption, content.thumbnailPathOption)
-        case Some(content: Content.Photo)         => Set(content.pathOption)
-        case Some(content: Content.VoiceMsg)      => Set(content.pathOption)
-        case Some(content: Content.VideoMsg)      => Set(content.pathOption, content.thumbnailPathOption)
-        case Some(content: Content.Animation)     => Set(content.pathOption, content.thumbnailPathOption)
-        case Some(content: Content.File)          => Set(content.pathOption, content.thumbnailPathOption)
-        case Some(content: Content.Location)      => Set.empty[Option[JFile]]
-        case Some(content: Content.Poll)          => Set.empty[Option[JFile]]
-        case Some(content: Content.SharedContact) => Set(content.vcardPathOption)
-        case None                                 => Set.empty[Option[JFile]]
-      }).yieldDefined
+        case None => Set.empty[JFile]
+        case Some(content) =>
+          (content.`val` match {
+            case Content.Val.Sticker(v)       => Set(v.path, v.thumbnailPath)
+            case Content.Val.Photo(v)         => Set(v.path)
+            case Content.Val.VoiceMsg(v)      => Set(v.path)
+            case Content.Val.VideoMsg(v)      => Set(v.path, v.thumbnailPath)
+            case Content.Val.Animation(v)     => Set(v.path, v.thumbnailPath)
+            case Content.Val.File(v)          => Set(v.path, v.thumbnailPath)
+            case Content.Val.Location(v)      => Set.empty[Option[String]]
+            case Content.Val.Poll(v)          => Set.empty[Option[String]]
+            case Content.Val.SharedContact(v) => Set(v.vcardPath)
+            case Content.Val.Empty            => throw new IllegalArgumentException("Empty content!")
+          }).yieldDefined.map(s => new JFile(s))
+      })
     }
 
     override def =~=(that: Message) = that match {
@@ -633,176 +638,121 @@ object Message {
 // Content
 //
 
-sealed trait Content {
-  def =~=(that: Content): Boolean =
-    this == that
+object Helpers {
+  implicit class ScalaRichContent(c: Content) {
+    def pathFileOption: Option[JFile] = {
+      require(hasPath, "No path available!")
+      c.`val`.value match {
+        case c: ContentSticker    => c.pathFileOption
+        case c: ContentPhoto      => c.pathFileOption
+        case c: ContentVoiceMsg   => c.pathFileOption
+        case c: ContentVideoMsg   => c.pathFileOption
+        case c: ContentAnimation  => c.pathFileOption
+        case c: ContentFile       => c.pathFileOption
+        case c                    => None
+      }
+    }
 
-  def !=~=(that: Content): Boolean =
-    !(this =~= that)
-}
+    def hasPath: Boolean =
+      c.`val`.value match {
+        case c: ContentSticker   => true
+        case c: ContentPhoto     => true
+        case c: ContentVoiceMsg  => true
+        case c: ContentVideoMsg  => true
+        case c: ContentAnimation => true
+        case c: ContentFile      => true
+        case c                   => false
+      }
 
-object Content {
-  sealed trait WithPath {
-    def pathOption: Option[JFile]
+    def =~=(that: Content): Boolean = {
+      (c.`val`, that.`val`) match {
+        case (Content.Val.Empty, Content.Val.Empty) => true
+        case (Content.Val.Sticker(c1), Content.Val.Sticker(c2)) =>
+          c1.pathFileOption =~= c2.pathFileOption &&
+            c1.thumbnailPathFileOption =~= c2.thumbnailPathFileOption &&
+            c1.copy(path = None, thumbnailPath = None) == c2.copy(path = None, thumbnailPath = None)
+        case (Content.Val.Photo(c1), Content.Val.Photo(c2)) =>
+          c1.pathFileOption =~= c2.pathFileOption &&
+            c1.copy(path = None) == c2.copy(path = None)
+        case (Content.Val.VoiceMsg(c1), Content.Val.VoiceMsg(c2)) =>
+          c1.pathFileOption =~= c2.pathFileOption &&
+            c1.copy(path = None) == c2.copy(path = None)
+        case (Content.Val.VideoMsg(c1), Content.Val.VideoMsg(c2)) =>
+          c1.pathFileOption =~= c2.pathFileOption &&
+            c1.thumbnailPathFileOption =~= c2.thumbnailPathFileOption &&
+            c1.copy(path = None, thumbnailPath = None) == c2.copy(path = None, thumbnailPath = None)
+        case (Content.Val.Animation(c1), Content.Val.Animation(c2)) =>
+          c1.pathFileOption =~= c2.pathFileOption &&
+            c1.thumbnailPathFileOption =~= c2.thumbnailPathFileOption &&
+            c1.copy(path = None, thumbnailPath = None) == c2.copy(path = None, thumbnailPath = None)
+        case (Content.Val.File(c1), Content.Val.File(c2)) =>
+          c1.pathFileOption =~= c2.pathFileOption &&
+            c1.thumbnailPathFileOption =~= c2.thumbnailPathFileOption &&
+            c1.copy(path = None, thumbnailPath = None) == c2.copy(path = None, thumbnailPath = None)
+        case (Content.Val.Location(c1), Content.Val.Location(c2)) =>
+          c1 == c2
+        case (Content.Val.Poll(c1), Content.Val.Poll(c2)) =>
+          // We don't really care about poll result
+          c1 == c2
+        case (Content.Val.SharedContact(c1), Content.Val.SharedContact(c2)) =>
+          c1.vcardFileOption =~= c2.vcardFileOption &&
+            c1.copy(vcardPath = None) == c2.copy(vcardPath = None)
+        case _ => false
+      }
+    }
+
+    def !=~=(that: Content): Boolean =
+      !(this =~= that)
   }
 
-  case class Sticker(
-      pathOption: Option[JFile],
-      thumbnailPathOption: Option[JFile],
-      emojiOption: Option[String],
-      widthOption: Option[Int],
-      heightOption: Option[Int]
-  ) extends Content with WithPath {
-    override def =~=(that: Content) = that match {
-      case that: Content.Sticker =>
-        (
-          this.pathOption =~= that.pathOption
-            && this.thumbnailPathOption =~= that.thumbnailPathOption
-            && this.copy(
-              pathOption = None,
-              thumbnailPathOption = None
-            ) == that.copy(
-              pathOption = None,
-              thumbnailPathOption = None
-            )
-        )
-      case _ =>
-        super.=~=(that)
-    }
+  implicit class ScalaRichSticker(c: ContentSticker) {
+    def pathFileOption: Option[JFile] = c.path.map(s => new JFile(s))
+
+    def thumbnailPathFileOption: Option[JFile] = c.thumbnailPath.map(s => new JFile(s))
   }
 
-  case class Photo(
-      pathOption: Option[JFile],
-      width: Int,
-      height: Int
-  ) extends Content with WithPath {
-    override def =~=(that: Content) = that match {
-      case that: Content.Photo =>
-        this.pathOption =~= that.pathOption && this.copy(pathOption = None) == that.copy(pathOption = None)
-      case _ =>
-        super.=~=(that)
-    }
+  implicit class ScalaRichPhoto(c: ContentPhoto) {
+    def pathFileOption: Option[JFile] = c.path.map(s => new JFile(s))
   }
 
-  case class VoiceMsg(
-      pathOption: Option[JFile],
-      mimeTypeOption: Option[String],
-      durationSecOption: Option[Int],
-  ) extends Content with WithPath {
-    override def =~=(that: Content) = that match {
-      case that: Content.VoiceMsg =>
-        this.pathOption =~= that.pathOption && this.copy(pathOption = None) == that.copy(pathOption = None)
-      case _ =>
-        super.=~=(that)
-    }
+  implicit class ScalaRichVoiceMsg(c: ContentVoiceMsg) {
+    def pathFileOption: Option[JFile] = c.path.map(s => new JFile(s))
   }
 
-  case class VideoMsg(
-      pathOption: Option[JFile],
-      thumbnailPathOption: Option[JFile],
-      mimeTypeOption: Option[String],
-      durationSecOption: Option[Int],
-      width: Int,
-      height: Int
-  ) extends Content with WithPath {
-    override def =~=(that: Content) = that match {
-      case that: Content.VideoMsg =>
-        (
-          this.pathOption =~= that.pathOption
-            && this.thumbnailPathOption =~= that.thumbnailPathOption
-            && this.copy(
-              pathOption = None,
-              thumbnailPathOption = None
-            ) == that.copy(
-              pathOption = None,
-              thumbnailPathOption = None
-            )
-        )
-      case _ =>
-        super.=~=(that)
-    }
+  implicit class ScalaRichVideoMsg(c: ContentVideoMsg) {
+    def pathFileOption: Option[JFile] = c.path.map(s => new JFile(s))
+
+    def thumbnailPathFileOption: Option[JFile] = c.thumbnailPath.map(s => new JFile(s))
   }
 
-  case class Animation(
-      pathOption: Option[JFile],
-      thumbnailPathOption: Option[JFile],
-      mimeTypeOption: Option[String],
-      durationSecOption: Option[Int],
-      width: Int,
-      height: Int
-  ) extends Content with WithPath {
-    override def =~=(that: Content) = that match {
-      case that: Content.Animation =>
-        (
-          this.pathOption =~= that.pathOption
-            && this.thumbnailPathOption =~= that.thumbnailPathOption
-            && this.copy(
-              pathOption = None,
-              thumbnailPathOption = None
-            ) == that.copy(
-              pathOption = None,
-              thumbnailPathOption = None
-            )
-        )
-      case _ =>
-        super.=~=(that)
-    }
+  implicit class ScalaRichAnimation(c: ContentAnimation) {
+    def pathFileOption: Option[JFile] = c.path.map(s => new JFile(s))
+
+    def thumbnailPathFileOption: Option[JFile] = c.thumbnailPath.map(s => new JFile(s))
   }
 
-  case class File(
-      pathOption: Option[JFile],
-      thumbnailPathOption: Option[JFile],
-      mimeTypeOption: Option[String],
-      titleOption: Option[String],
-      performerOption: Option[String],
-      durationSecOption: Option[Int],
-      widthOption: Option[Int],
-      heightOption: Option[Int]
-  ) extends Content with WithPath {
-    override def =~=(that: Content) = that match {
-      case that: Content.File =>
-        (
-          this.pathOption =~= that.pathOption
-            && this.thumbnailPathOption =~= that.thumbnailPathOption
-            && this.copy(
-              pathOption = None,
-              thumbnailPathOption = None
-            ) == that.copy(
-              pathOption = None,
-              thumbnailPathOption = None
-            )
-        )
-      case _ =>
-        super.=~=(that)
-    }
+  implicit class ScalaRichFile(c: ContentFile) {
+    def pathFileOption: Option[JFile] = c.path.map(s => new JFile(s))
+
+    def thumbnailPathFileOption: Option[JFile] = c.thumbnailPath.map(s => new JFile(s))
   }
 
-  case class Location(
-      titleOption: Option[String],
-      addressOption: Option[String],
-      lat: BigDecimal,
-      lon: BigDecimal,
-      durationSecOption: Option[Int],
-  ) extends Content
+  implicit class ScalaRichLocation(c: ContentLocation) {
+    def lat: BigDecimal = BigDecimal(c.latStr)
 
-  /** We don't really care about poll result */
-  case class Poll(
-      question: String,
-  ) extends Content
+    def lon: BigDecimal = BigDecimal(c.lonStr)
+  }
 
-  case class SharedContact(
-      firstNameOption: Option[String],
-      lastNameOption: Option[String],
-      phoneNumberOption: Option[String],
-      vcardPathOption: Option[JFile]
-  ) extends Content
-      with PersonInfo {
-    override def =~=(that: Content) = that match {
-      case that: Content.SharedContact =>
-        (this.vcardPathOption =~= that.vcardPathOption
-          && this.copy(vcardPathOption = None) == that.copy(vcardPathOption = None))
-      case _ =>
-        super.=~=(that)
+  implicit class ScalaRichSharedContact(c: ContentSharedContact) {
+    def vcardFileOption: Option[JFile] = c.vcardPath.map(s => new JFile(s))
+
+    // TODO: Merge with PersonInfo!
+    lazy val prettyNameOption: Option[String] = {
+      val parts = Seq(Some(c.firstName), c.lastName).yieldDefined
+      if (parts.isEmpty) None else Some(parts.mkString(" ").trim)
     }
+
+    lazy val prettyName: String =
+      prettyNameOption getOrElse ChatHistoryDao.Unnamed
   }
 }

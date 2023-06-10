@@ -7,8 +7,20 @@ import javax.swing.text.Element
 import javax.swing.text.html.HTML
 import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
+
 import org.fs.chm.dao.Message.Service
 import org.fs.chm.dao._
+import org.fs.chm.dao.Helpers._
+import org.fs.chm.protobuf.Content
+import org.fs.chm.protobuf.ContentAnimation
+import org.fs.chm.protobuf.ContentFile
+import org.fs.chm.protobuf.ContentLocation
+import org.fs.chm.protobuf.ContentPhoto
+import org.fs.chm.protobuf.ContentPoll
+import org.fs.chm.protobuf.ContentSharedContact
+import org.fs.chm.protobuf.ContentSticker
+import org.fs.chm.protobuf.ContentVideoMsg
+import org.fs.chm.protobuf.ContentVoiceMsg
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.utility.EntityUtils
 import org.fs.utility.Imports._
@@ -266,76 +278,76 @@ class MessagesService(htmlKit: HTMLEditorKit) {
 
   object ContentHtmlRenderer {
     def render(cwd: ChatWithDetails, ct: Content): String = {
-      ct match {
-        case ct: Content.Sticker       => renderSticker(ct)
-        case ct: Content.Photo         => renderPhoto(ct)
-        case ct: Content.VoiceMsg      => renderVoiceMsg(ct)
-        case ct: Content.VideoMsg      => renderVideoMsg(ct)
-        case ct: Content.Animation     => renderAnimation(ct)
-        case ct: Content.File          => renderFile(ct)
-        case ct: Content.Location      => renderLocation(ct)
-        case ct: Content.Poll          => renderPoll(ct)
-        case ct: Content.SharedContact => renderSharedContact(cwd, ct)
+      ct.`val`.value match {
+        case ct: ContentSticker       => renderSticker(ct)
+        case ct: ContentPhoto         => renderPhoto(ct)
+        case ct: ContentVoiceMsg      => renderVoiceMsg(ct)
+        case ct: ContentVideoMsg      => renderVideoMsg(ct)
+        case ct: ContentAnimation     => renderAnimation(ct)
+        case ct: ContentFile          => renderFile(ct)
+        case ct: ContentLocation      => renderLocation(ct)
+        case ct: ContentPoll          => renderPoll(ct)
+        case ct: ContentSharedContact => renderSharedContact(cwd, ct)
       }
     }
 
-    private def renderVoiceMsg(ct: Content.VoiceMsg) = {
-      renderPossiblyMissingContent(ct.pathOption, "Voice message")(file => {
-        val mimeTypeOption = ct.mimeTypeOption map (mt => s"""type="$mt"""")
-        val durationOption = ct.durationSecOption map (d => s"""duration="$d"""")
+    private def renderVoiceMsg(ct: ContentVoiceMsg) = {
+      renderPossiblyMissingContent(ct.pathFileOption, "Voice message")(file => {
+        val mimeType = s"""type="${ct.mimeType}""""
+        val durationOption = ct.durationSec map (d => s"""duration="$d"""")
         // <audio> tag is not impemented by default AWT toolkit, we're plugging custom view
         s"""<audio ${durationOption getOrElse ""} controls>
-           |  <source src=${fileToLocalUriString(file)}" ${mimeTypeOption getOrElse ""}>
+           |  <source src=${fileToLocalUriString(file)}" ${mimeType}>
            |</audio>""".stripMargin
       })
     }
 
-    private def renderVideoMsg(ct: Content.VideoMsg): String = {
-      renderPossiblyMissingContent(ct.pathOption, "Video message")(file => {
+    private def renderVideoMsg(ct: ContentVideoMsg): String = {
+      renderPossiblyMissingContent(ct.pathFileOption, "Video message")(file => {
         // TODO
         "[Video messages not supported yet]"
       })
     }
 
-    private def renderAnimation(ct: Content.Animation): String = {
-      renderPossiblyMissingContent(ct.pathOption, "Animation")(file => {
+    private def renderAnimation(ct: ContentAnimation): String = {
+      renderPossiblyMissingContent(ct.pathFileOption, "Animation")(file => {
         // TODO
         "[Animations not supported yet]"
       })
     }
 
-    private def renderFile(ct: Content.File): String = {
-      renderPossiblyMissingContent(ct.pathOption, "File")(file => {
+    private def renderFile(ct: ContentFile): String = {
+      renderPossiblyMissingContent(ct.pathFileOption, "File")(file => {
         // TODO
         "[Files not supported yet]"
       })
     }
 
-    def renderSticker(st: Content.Sticker): String = {
-      val pathOption = st.pathOption orElse st.thumbnailPathOption
-      renderImage(pathOption, st.widthOption, st.heightOption, st.emojiOption, "Sticker")
+    def renderSticker(st: ContentSticker): String = {
+      val pathOption = st.pathFileOption orElse st.thumbnailPathFileOption
+      renderImage(pathOption, Some(st.width), Some(st.height), st.emoji, "Sticker")
     }
 
-    def renderPhoto(ct: Content.Photo): String = {
-      renderImage(ct.pathOption, Some(ct.width), Some(ct.height), None, "Photo")
+    def renderPhoto(ct: ContentPhoto): String = {
+      renderImage(ct.pathFileOption, Some(ct.width), Some(ct.height), None, "Photo")
     }
 
-    def renderLocation(ct: Content.Location): String = {
+    def renderLocation(ct: ContentLocation): String = {
       Seq(
-        ct.titleOption map (s => s"<b>${s}</b>"),
-        ct.addressOption,
+        Some(s"<b>${ct.title}</b>"),
+        ct.address,
         Some(s"<i>Location:</i> <b>${ct.lat}, ${ct.lon}</b>"),
-        ct.durationSecOption map (s => s"(live for $s s)")
+        ct.durationSec map (s => s"(live for $s s)")
       ).yieldDefined.mkString("<blockquote>", "<br>", "</blockquote>")
     }
 
-    def renderPoll(ct: Content.Poll): String = {
+    def renderPoll(ct: ContentPoll): String = {
       s"""<blockquote><i>Poll:</i> ${ct.question}</blockquote>"""
     }
 
-    def renderSharedContact(cwd: ChatWithDetails, ct: Content.SharedContact): String = {
+    def renderSharedContact(cwd: ChatWithDetails, ct: ContentSharedContact): String = {
       val name  = renderTitleName(cwd, None, Some(ct.prettyName))
-      val phone = ct.phoneNumberOption map (pn => s"(phone: $pn)") getOrElse "(no phone number)"
+      val phone = ct.phoneNumber map (pn => s"(phone: $pn)") getOrElse "(no phone number)"
       s"""<blockquote><i>Shared contact:</i> $name $phone</blockquote>"""
     }
   }

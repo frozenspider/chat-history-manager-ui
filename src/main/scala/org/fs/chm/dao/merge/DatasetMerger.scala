@@ -7,6 +7,8 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.fs.chm.dao._
+import org.fs.chm.dao.Helpers._
+import org.fs.chm.protobuf.Content
 import org.fs.chm.utility.IoUtils
 import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
@@ -322,8 +324,8 @@ class DatasetMerger(
     (mm, sm) match {
       case (mm: Message.Regular, sm: Message.Regular) =>
         (mm.contentOption, sm.contentOption) match {
-          case (Some(mc: Content.WithPath), Some(sc: Content.WithPath))
-              if mc.pathOption.isEmpty && sc.pathOption.isDefined && sc.pathOption.get.exists =>
+          case (Some(mc), Some(sc)) if mc.hasPath && sc.hasPath &&
+              mc.pathFileOption.isEmpty && sc.pathFileOption.isDefined && sc.pathFileOption.get.exists =>
             // New information available, treat this as a mismatch
             false
           case _ =>

@@ -1,21 +1,21 @@
 package org.fs.chm.ui.swing.list.chat
 
 import java.awt.Color
-import java.awt.{ Container => AwtContainer }
+import java.awt.{Container => AwtContainer}
 
 import scala.swing.BorderPanel.Position._
 import scala.swing._
 import scala.swing.event._
-
 import javax.swing.SwingUtilities
 import javax.swing.border.EmptyBorder
 import javax.swing.border.LineBorder
+
 import org.apache.commons.lang3.StringEscapeUtils
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.ChatType._
 import org.fs.chm.dao.ChatWithDetails
-import org.fs.chm.dao.Content
 import org.fs.chm.dao.Message
+import org.fs.chm.protobuf.Content
 import org.fs.chm.ui.swing.list.DaoItem
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.utility.EntityUtils
@@ -157,18 +157,18 @@ class ChatListItem(
       }
     val text = msg match {
       case msg: Message.Regular =>
-        (msg.textOption, msg.contentOption) match {
-          case (None, Some(s: Content.Sticker))       => s.emojiOption.map(_ + " ").getOrElse("") + "(sticker)"
-          case (None, Some(_: Content.Photo))         => "(photo)"
-          case (None, Some(_: Content.VoiceMsg))      => "(voice)"
-          case (None, Some(_: Content.VideoMsg))      => "(video)"
-          case (None, Some(_: Content.Animation))     => "(animation)"
-          case (None, Some(_: Content.File))          => "(file)"
-          case (None, Some(_: Content.Location))      => "(location)"
-          case (None, Some(_: Content.Poll))          => "(poll)"
-          case (None, Some(_: Content.SharedContact)) => "(contact)"
-          case (Some(_), _)                           => msg.plainSearchableString
-          case (None, None)                           => "(???)" // We don't really expect this
+        (msg.textOption, msg.contentOption map (_.`val`)) match {
+          case (None, Some(s: Content.Val.Sticker))       => s.value.emoji.map(_ + " ").getOrElse("") + "(sticker)"
+          case (None, Some(_: Content.Val.Photo))         => "(photo)"
+          case (None, Some(_: Content.Val.VoiceMsg))      => "(voice)"
+          case (None, Some(_: Content.Val.VideoMsg))      => "(video)"
+          case (None, Some(_: Content.Val.Animation))     => "(animation)"
+          case (None, Some(_: Content.Val.File))          => "(file)"
+          case (None, Some(_: Content.Val.Location))      => "(location)"
+          case (None, Some(_: Content.Val.Poll))          => "(poll)"
+          case (None, Some(_: Content.Val.SharedContact)) => "(contact)"
+          case (Some(_), _)                               => msg.plainSearchableString
+          case (None, None)                               => "(???)" // We don't really expect this
         }
       case _: Message.Service.PhoneCall           => "(phone call)"
       case _: Message.Service.PinMessage          => "(message pinned)"

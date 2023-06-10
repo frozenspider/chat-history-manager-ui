@@ -5,6 +5,16 @@ import java.util.UUID
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao._
+import org.fs.chm.protobuf.Content
+import org.fs.chm.protobuf.ContentAnimation
+import org.fs.chm.protobuf.ContentFile
+import org.fs.chm.protobuf.ContentLocation
+import org.fs.chm.protobuf.ContentPhoto
+import org.fs.chm.protobuf.ContentPoll
+import org.fs.chm.protobuf.ContentSharedContact
+import org.fs.chm.protobuf.ContentSticker
+import org.fs.chm.protobuf.ContentVideoMsg
+import org.fs.chm.protobuf.ContentVoiceMsg
 import org.fs.utility.Imports._
 import org.json4s._
 import org.json4s.jackson.JsonMethods
@@ -336,7 +346,7 @@ trait TelegramDataLoaderCommon {
       val locPresent = (jv \ "location_information") != JNothing
       val pollQuestionPresent = (jv \ "poll" \ "question") != JNothing
       val contactInfoPresent = (jv \ "contact_information") != JNothing
-      (mediaTypeOption, photoOption, fileOption, locPresent, pollQuestionPresent, contactInfoPresent) match {
+      val ct = (mediaTypeOption, photoOption, fileOption, locPresent, pollQuestionPresent, contactInfoPresent) match {
         case (None, None, None, false, false, false)                     => None
         case (Some("sticker"), None, Some(_), false, false, false)       => Some(parseSticker(jv, rootFile))
         case (Some("animation"), None, Some(_), false, false, false)     => Some(parseAnimation(jv, rootFile))
@@ -352,94 +362,98 @@ trait TelegramDataLoaderCommon {
         case _ =>
           throw new IllegalArgumentException(s"Couldn't determine content type for '$jv'")
       }
+      ct.map(c => Content.apply(c))
     }
 
-    private def parseSticker(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Sticker = {
-      Content.Sticker(
-        pathOption          = getFileOpt(jv, "file", true, rootFile),
-        thumbnailPathOption = getFileOpt(jv, "thumbnail", true, rootFile),
-        emojiOption         = getStringOpt(jv, "sticker_emoji", false),
-        widthOption         = getFieldOpt[Int](jv, "width", false),
-        heightOption        = getFieldOpt[Int](jv, "height", false)
-      )
+    private def parseSticker(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Val.Sticker = {
+      Content.Val.Sticker(ContentSticker(
+        path          = getAbsolutePathOpt(jv, "file", true, rootFile),
+        thumbnailPath = getAbsolutePathOpt(jv, "thumbnail", true, rootFile),
+        emoji         = getStringOpt(jv, "sticker_emoji", false),
+        width         = getCheckedField[Int](jv, "width"),
+        height        = getCheckedField[Int](jv, "height")
+      ))
     }
 
-    private def parsePhoto(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Photo = {
-      Content.Photo(
-        pathOption = getFileOpt(jv, "photo", true, rootFile),
-        width      = getCheckedField[Int](jv, "width"),
-        height     = getCheckedField[Int](jv, "height"),
-      )
+    private def parsePhoto(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Val.Photo = {
+      Content.Val.Photo(ContentPhoto(
+        path   = getAbsolutePathOpt(jv, "photo", true, rootFile),
+        width  = getCheckedField[Int](jv, "width"),
+        height = getCheckedField[Int](jv, "height"),
+      ))
     }
 
-    private def parseAnimation(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Animation = {
-      Content.Animation(
-        pathOption          = getFileOpt(jv, "file", true, rootFile),
-        thumbnailPathOption = getFileOpt(jv, "thumbnail", false, rootFile),
-        mimeTypeOption      = Some(getCheckedField[String](jv, "mime_type")),
-        durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
-        width               = getCheckedField[Int](jv, "width"),
-        height              = getCheckedField[Int](jv, "height"),
-      )
+    private def parseAnimation(jv: JValue, rootFile: File)(
+        implicit tracker: FieldUsageTracker): Content.Val.Animation = {
+      Content.Val.Animation(ContentAnimation(
+        path          = getAbsolutePathOpt(jv, "file", true, rootFile),
+        thumbnailPath = getAbsolutePathOpt(jv, "thumbnail", false, rootFile),
+        mimeType      = getCheckedField[String](jv, "mime_type"),
+        durationSec   = getFieldOpt[Int](jv, "duration_seconds", false),
+        width         = getCheckedField[Int](jv, "width"),
+        height        = getCheckedField[Int](jv, "height"),
+      ))
     }
 
-    private def parseVoiceMsg(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.VoiceMsg = {
-      Content.VoiceMsg(
-        pathOption        = getFileOpt(jv, "file", true, rootFile),
-        mimeTypeOption    = Some(getCheckedField[String](jv, "mime_type")),
-        durationSecOption = getFieldOpt[Int](jv, "duration_seconds", false),
-      )
+    private def parseVoiceMsg(jv: JValue, rootFile: File)(
+        implicit tracker: FieldUsageTracker): Content.Val.VoiceMsg = {
+      Content.Val.VoiceMsg(ContentVoiceMsg(
+        path        = getAbsolutePathOpt(jv, "file", true, rootFile),
+        mimeType    = getCheckedField[String](jv, "mime_type"),
+        durationSec = getFieldOpt[Int](jv, "duration_seconds", false),
+      ))
     }
 
-    private def parseVideoMsg(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.VideoMsg = {
-      Content.VideoMsg(
-        pathOption          = getFileOpt(jv, "file", true, rootFile),
-        thumbnailPathOption = getFileOpt(jv, "thumbnail", true, rootFile),
-        mimeTypeOption      = Some(getCheckedField[String](jv, "mime_type")),
-        durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
-        width               = getCheckedField[Int](jv, "width"),
-        height              = getCheckedField[Int](jv, "height"),
-      )
+    private def parseVideoMsg(jv: JValue, rootFile: File)(
+        implicit tracker: FieldUsageTracker): Content.Val.VideoMsg = {
+      Content.Val.VideoMsg(ContentVideoMsg(
+        path          = getAbsolutePathOpt(jv, "file", true, rootFile),
+        thumbnailPath = getAbsolutePathOpt(jv, "thumbnail", true, rootFile),
+        mimeType      = getCheckedField[String](jv, "mime_type"),
+        durationSec   = getFieldOpt[Int](jv, "duration_seconds", false),
+        width         = getCheckedField[Int](jv, "width"),
+        height        = getCheckedField[Int](jv, "height"),
+      ))
     }
 
-    private def parseFile(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.File = {
-      Content.File(
-        pathOption          = getFileOpt(jv, "file", true, rootFile),
-        thumbnailPathOption = getFileOpt(jv, "thumbnail", false, rootFile),
-        mimeTypeOption      = getStringOpt(jv, "mime_type", true),
-        titleOption         = getStringOpt(jv, "title", false),
-        performerOption     = getStringOpt(jv, "performer", false),
-        durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
-        widthOption         = getFieldOpt[Int](jv, "width", false),
-        heightOption        = getFieldOpt[Int](jv, "height", false)
-      )
+    private def parseFile(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Val.File = {
+      Content.Val.File(ContentFile(
+        path          = getAbsolutePathOpt(jv, "file", true, rootFile),
+        thumbnailPath = getAbsolutePathOpt(jv, "thumbnail", false, rootFile),
+        mimeType      = getStringOpt(jv, "mime_type", true),
+        title         = getStringOpt(jv, "title", false) getOrElse "<File>",
+        performer     = getStringOpt(jv, "performer", false),
+        durationSec   = getFieldOpt[Int](jv, "duration_seconds", false),
+        width         = getFieldOpt[Int](jv, "width", false),
+        height        = getFieldOpt[Int](jv, "height", false)
+      ))
     }
 
-    private def parseLocation(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Location = {
-      Content.Location(
-        titleOption       = getStringOpt(jv, "place_name", false),
-        addressOption     = getStringOpt(jv, "address", false),
-        lat               = getCheckedField[BigDecimal](jv, "location_information", "latitude"),
-        lon               = getCheckedField[BigDecimal](jv, "location_information", "longitude"),
-        durationSecOption = getFieldOpt[Int](jv, "live_location_period_seconds", false)
-      )
+    private def parseLocation(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Val.Location = {
+      Content.Val.Location(ContentLocation(
+        title       = getStringOpt(jv, "place_name", false),
+        address     = getStringOpt(jv, "address", false),
+        latStr      = getCheckedField[String](jv, "location_information", "latitude"),
+        lonStr      = getCheckedField[String](jv, "location_information", "longitude"),
+        durationSec = getFieldOpt[Int](jv, "live_location_period_seconds", false)
+      ))
     }
 
-    private def parsePoll(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Poll = {
-      Content.Poll(
+    private def parsePoll(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Val.Poll = {
+      Content.Val.Poll(ContentPoll(
         question = getCheckedField[String](jv, "poll", "question")
-      )
+      ))
     }
 
     private def parseSharedContact(jv: JValue, rootFile: File)(
-        implicit tracker: FieldUsageTracker): Content.SharedContact = {
+        implicit tracker: FieldUsageTracker): Content.Val.SharedContact = {
       val ci = getRawField(jv, "contact_information", true)
-      Content.SharedContact(
-        firstNameOption   = getStringOpt(ci, "first_name", true),
-        lastNameOption    = getStringOpt(ci, "last_name", true),
-        phoneNumberOption = getStringOpt(ci, "phone_number", true),
-        vcardPathOption   = getFileOpt(jv, "contact_vcard", false, rootFile)
-      )
+      Content.Val.SharedContact(ContentSharedContact(
+        firstName   = getCheckedField[String](ci, "first_name"),
+        lastName    = getStringOpt(ci, "last_name", true),
+        phoneNumber = getStringOpt(ci, "phone_number", true),
+        vcardPath   = getAbsolutePathOpt(jv, "contact_vcard", false, rootFile)
+      ))
     }
   }
 
@@ -547,6 +561,12 @@ trait TelegramDataLoaderCommon {
       implicit formats: Formats,
       tracker: FieldUsageTracker): Option[File] = {
     getStringOpt(jv, fieldName, mustPresent) map (p => new File(rootFile, p).getAbsoluteFile)
+  }
+
+  protected def getAbsolutePathOpt(jv: JValue, fieldName: String, mustPresent: Boolean, rootFile: File)(
+    implicit formats: Formats,
+    tracker: FieldUsageTracker): Option[String] = {
+    getStringOpt(jv, fieldName, mustPresent) map (p => new File(rootFile, p).getAbsolutePath)
   }
 
   protected def getCheckedField[A](jv: JValue, fieldName: String)(implicit formats: Formats,

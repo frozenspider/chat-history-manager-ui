@@ -10,6 +10,8 @@ import org.fs.chm.TestHelper
 import org.fs.chm.WithH2Dao
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger._
+import org.fs.chm.protobuf.Content
+import org.fs.chm.protobuf.ContentFile
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.TestUtils._
 import org.junit.runner.RunWith
@@ -314,16 +316,16 @@ class DatasetMergerMergeSpec //
         val file2 = new File(path, rnd.alphanumeric.take(31).mkString("", "", ".bin"))
         Files.write(file1.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
         Files.write(file2.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
-        val content = Content.File(
-          pathOption          = Some(file1),
-          thumbnailPathOption = Some(file2),
-          mimeTypeOption      = Some("mt"),
-          titleOption         = Some("t"),
-          performerOption     = Some("p"),
-          durationSecOption   = Some(1),
-          widthOption         = Some(2),
-          heightOption        = Some(3),
-        )
+        val content = Content(Content.Val.File(ContentFile(
+          path          = Some(file1.getAbsolutePath),
+          thumbnailPath = Some(file2.getAbsolutePath),
+          mimeType      = Some("mt"),
+          title         = "t",
+          performer     = Some("p"),
+          durationSec   = Some(1),
+          width         = Some(2),
+          height        = Some(3),
+        )))
         msg.copy(contentOption = Some(content))
       case _ =>
         throw new MatchError("Unexpected message type for " + msg)

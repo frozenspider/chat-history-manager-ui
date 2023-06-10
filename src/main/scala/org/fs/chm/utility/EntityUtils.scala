@@ -1,7 +1,10 @@
 package org.fs.chm.utility
 
+import java.io.{ File => JFile }
+
 import org.fs.chm.dao._
 import com.github.nscala_time.time.Imports._
+import org.fs.chm.protobuf.UUID
 
 object EntityUtils {
   private val startOfTime = new DateTime(0L)
@@ -15,5 +18,9 @@ object EntityUtils {
 
   def latest(timeOptions: Option[DateTime]*): Option[DateTime] = {
     timeOptions.maxBy(_ getOrElse startOfTime)
+  }
+
+  private implicit class RichString(s: String) {
+    def toFile(datasetRoot: JFile): JFile = new JFile(datasetRoot, s.replace('\\', '/')).getAbsoluteFile
   }
 }
