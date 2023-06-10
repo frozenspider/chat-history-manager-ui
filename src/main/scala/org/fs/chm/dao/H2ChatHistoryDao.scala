@@ -1413,7 +1413,7 @@ class H2ChatHistoryDao(
   override def hashCode: Int = this.name.hashCode + 17 * this.dataPathRoot.hashCode
 
   private implicit class RichString(s: String) {
-    def toFile(dsUuid: UUID): File = new File(datasetRoot(dsUuid), s).getAbsoluteFile
+    def toFile(dsUuid: UUID): File = new File(datasetRoot(dsUuid), s.replace('\\','/')).getAbsoluteFile
   }
 
   private implicit class RichFile(f: File) {

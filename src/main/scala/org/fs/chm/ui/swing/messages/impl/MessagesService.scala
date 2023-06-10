@@ -173,7 +173,8 @@ class MessagesService(htmlKit: HTMLEditorKit) {
   }
 
   private def fileToLocalUriString(file: File): String = {
-    "file:///" + file.getCanonicalPath.replace("\\", "/")
+    val path = file.getCanonicalPath.replace("\\", "/")
+    "file://" + (if (path startsWith "/") "" else "/") + path
   }
 
   object ServiceMessageHtmlRenderer {
