@@ -36,7 +36,6 @@ import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
 import org.fs.chm.ui.swing.user.UserDetailsMenuCallbacks
 import org.fs.chm.ui.swing.user.UserDetailsPane
-import org.fs.chm.ui.swing.webp.Webp
 import org.fs.chm.utility.CliUtils
 import org.fs.chm.utility.EntityUtils
 import org.fs.chm.utility.InterruptableFuture._
@@ -89,7 +88,6 @@ class MainFrameApp //
   val preloadResult: Future[_] = {
     val futureSeq = Seq(
       DataLoaders.preload(),
-      Seq(Webp.preload())
     ).flatten
     futureSeq.reduce((a, b) => a.flatMap(_ => b))
   }

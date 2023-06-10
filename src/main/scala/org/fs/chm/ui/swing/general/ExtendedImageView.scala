@@ -1,12 +1,15 @@
 package org.fs.chm.ui.swing.general
 
 import java.awt.Image
+import java.awt.image.BufferedImage
 import java.io.File
 import java.net.URL
 import java.nio.file.Files
 
+import javax.imageio.ImageIO
 import javax.swing.text.Element
-import org.fs.chm.ui.swing.webp.Webp
+
+import com.twelvemonkeys.imageio.stream.ByteArrayImageInputStream
 
 /**
  * ImageView extended to support WebP format.
@@ -19,12 +22,26 @@ class ExtendedImageView(el: Element) extends BaseImageView(el) {
     require(file.exists(), s"File ${file.getAbsolutePath} doesn't exist!")
     val bytes = Files.readAllBytes(file.toPath)
 
-    // Special treatment for WebP format as it's not supported by AWT toolkit
-    if (Webp.isWebp(bytes)) {
-      Webp.decode(bytes)
-    } else {
-      toolkit.createImage(bytes)
-    }
+    // Reading through ImageIO first for the formats not supported by AWT
+    // (just WebP for the moment)
+    ExtendedImageView.imageioTryReadBytes(bytes).getOrElse(toolkit.createImage(bytes))
+  }
+}
+
+object ExtendedImageView {
+  protected def imageioTryReadBytes(bytes: Array[Byte]): Option[BufferedImage] = {
+    Option(ImageIO.read(new ByteArrayImageInputStream(bytes)))
   }
 
+  def main(args: Array[String]): Unit = {
+    import javax.swing.ImageIcon
+    import javax.swing.JLabel
+    import javax.swing.JOptionPane
+
+    val path = "_data/webp/test_sticker.webp"
+    val imageBytes = Files.readAllBytes(new File(path).toPath)
+    val image = imageioTryReadBytes(imageBytes).get
+    val imageWrapper = new JLabel(new ImageIcon(image))
+    JOptionPane.showMessageDialog(null, imageWrapper, "Image preview", JOptionPane.PLAIN_MESSAGE, null);
+  }
 }
