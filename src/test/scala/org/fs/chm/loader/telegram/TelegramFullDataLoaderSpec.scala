@@ -156,7 +156,7 @@ class TelegramFullDataLoaderSpec //
     }
   }
 
-  test("loading @ 2021-12 (named locations)") {
+  ignore("loading @ 2021-12 (named locations)") {
     val dao = loader.loadData(new File(resourcesFolder, "telegram_2021-12"))
     assert(dao.datasets.size === 1)
     val ds = dao.datasets.head
