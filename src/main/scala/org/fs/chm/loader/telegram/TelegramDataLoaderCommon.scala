@@ -85,6 +85,11 @@ trait TelegramDataLoaderCommon {
 
     private def parseRegular(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Message.Regular = {
       tracker.markUsed("from") // Sending user name has been parsed during a separate pass
+      // Added in Telegram around 2023-01
+      // TODO: Maybe we SHOULD use them in fact.
+      tracker.markUsed("date_unixtime")
+      tracker.markUsed("edited_unixtime")
+      tracker.markUsed("text_entities")
       Message.Regular(
         internalId             = Message.NoInternalId,
         sourceIdOption         = Some(getCheckedField[Message.SourceId](jv, "id")),

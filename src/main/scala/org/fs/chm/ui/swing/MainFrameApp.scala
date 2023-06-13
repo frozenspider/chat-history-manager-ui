@@ -964,7 +964,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
         h2.loadData(f)
       } else if (tgFf.accept(file)) {
         val loadersWithErrors =
-          Seq(grpcDataLoader, tgFull, tgSingle).map(l => (l, l.doesLookRight(f)))
+          Seq(/*grpcDataLoader, */tgFull, tgSingle).map(l => (l, l.doesLookRight(f)))
         loadersWithErrors.find(_._2.isEmpty) match {
           case Some((loader, _)) => loader.loadData(f)
           case None => {
