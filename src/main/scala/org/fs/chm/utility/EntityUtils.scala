@@ -4,7 +4,6 @@ import java.io.{ File => JFile }
 
 import org.fs.chm.dao._
 import com.github.nscala_time.time.Imports._
-import org.fs.chm.protobuf.UUID
 
 object EntityUtils {
   private val startOfTime = new DateTime(0L)

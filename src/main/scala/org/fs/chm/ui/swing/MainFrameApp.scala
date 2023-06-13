@@ -43,7 +43,7 @@ import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.SimpleConfigAware
 import org.slf4s.Logging
 
-class MainFrameApp(grpcDataLoader: TelegramGrpcDataLoader) //
+class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     extends SimpleSwingApplication
     with SimpleConfigAware
     with Logging

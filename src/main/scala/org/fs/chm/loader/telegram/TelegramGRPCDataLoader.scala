@@ -7,7 +7,7 @@ import org.fs.utility.StopWatch
 
 import java.io.File
 
-class TelegramGrpcDataLoader(rpcPort: Int) extends TelegramDataLoader {
+class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
   private val channel: ManagedChannel = ManagedChannelBuilder
     .forAddress("127.0.0.1", rpcPort)
     .maxInboundMessageSize(Integer.MAX_VALUE)
@@ -24,7 +24,7 @@ class TelegramGrpcDataLoader(rpcPort: Int) extends TelegramDataLoader {
     StopWatch.measureAndCall {
       val blockingStub = JsonLoaderGrpc.blockingStub(channel)
       val response: ParseJsonFileResponse = blockingStub.parseJsonFile(request)
+      ???
     }((_, t) => log.info(s"Request processed in $t ms"))
-    ???
   }
 }
