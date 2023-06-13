@@ -3,8 +3,8 @@ package org.fs.chm.loader
 import java.io.File
 
 import org.fs.chm.TestHelper
-import org.fs.chm.dao._
-import org.fs.chm.dao.Helpers._
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.Message
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
 import org.scalatest.BeforeAndAfterAll
@@ -69,16 +69,16 @@ class GTS5610DataLoaderSpec //
     }
   }
 
-  def assertMsg(m: Message)(id: Long, dtStr: String, text: String) = {
+  private def assertMsg(m: Message)(id: Long, dtStr: String, text: String) = {
     assert(m.fromId === id)
     assert(m.time === dt(dtStr))
     assert(txt(m) === text)
+    assert(m.searchableString === Some(text.replace('\n', ' ')))
   }
 
-  def txt(m: Message): String =
-    m.textOption.map { t =>
-      assert(t.components.size === 1)
-      assert(t.components.head.`val`.isPlain)
-      t.components.head.textOrEmptyString
-    } getOrElse fail(s"No text for message $m!")
+  private def txt(m: Message): String = {
+    assert(m.text.size === 1)
+    assert(m.text.head.`val`.isPlain)
+    m.text.head.textOrEmptyString
+  }
 }

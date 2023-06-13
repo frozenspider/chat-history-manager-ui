@@ -11,7 +11,7 @@ import javax.swing.table.AbstractTableModel
 import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.TableModel
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.Dataset
+import org.fs.chm.dao.Entities.Dataset
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._

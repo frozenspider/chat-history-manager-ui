@@ -6,6 +6,8 @@ import java.util.UUID
 import scala.collection.immutable.ListMap
 
 import com.github.nscala_time.time.Imports._
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.Message
 import org.fs.utility.Imports._
 
 /**
@@ -29,14 +31,14 @@ class EagerChatHistoryDao(
       case (c, ms) =>
         (c, ms map { (m: Message) =>
           internalId += 1
-          m.withInternalId(internalId.asInstanceOf[Message.InternalId])
+          m.withInternalId(internalId)
         })
     }
   }
 
   override def datasets: Seq[Dataset] = Seq(dataset)
 
-  override def datasetRoot(dsUuid: UUID): File = _dataRootFile.getAbsoluteFile
+  override def datasetRoot(dsUuid: UUID): DatasetRoot = _dataRootFile.getAbsoluteFile.asInstanceOf[DatasetRoot]
 
   override def datasetFiles(dsUuid: UUID): Set[File] = {
     val cwds         = chats(dsUuid)
@@ -44,7 +46,7 @@ class EagerChatHistoryDao(
     val msgFiles = for {
       cwd <- cwds
       m   <- firstMessages(cwd.chat, Int.MaxValue)
-    } yield m.files
+    } yield m.files(datasetRoot(dsUuid))
     chatImgFiles ++ msgFiles.toSet.flatten
   }
 
@@ -54,12 +56,12 @@ class EagerChatHistoryDao(
 
   override def userOption(dsUuid: UUID, id: Long): Option[User] = users1.find(_.id == id)
 
-  val chats1 = chatsWithMessages.keys.toSeq
+  private val chats1: Seq[Chat] = chatsWithMessages.keys.toSeq
 
-  override def chats(dsUuid: UUID) = {
+  override def chats(dsUuid: UUID): Seq[ChatWithDetails] = {
     chatsWithMessages.toSeq.map {
       case (c, msgs) => ChatWithDetails(c, msgs.lastOption, chatMembers(c))
-    }.sortBy(_.lastMsgOption.map(_.time)).reverse
+    }.sortBy(_.lastMsgOption.map(_.timestamp)).reverse
   }
 
   override def chatOption(dsUuid: UUID, id: Long): Option[ChatWithDetails] = chatsWithMessages find (_._1.id == id) map {
@@ -116,8 +118,9 @@ class EagerChatHistoryDao(
   }
 
   def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
+    val dateTs    = date.getMillis
     val messages  = chatsWithMessages(chat)
-    val idx       = messages.indexWhere(m => (m.time isAfter date) || (m.time isEqual date))
+    val idx       = messages.indexWhere(m => m.timestamp >= dateTs)
     if (idx == -1) {
       // Not found
       (lastMessages(chat, limit), IndexedSeq.empty)
@@ -136,10 +139,10 @@ class EagerChatHistoryDao(
     chatsWithMessages.get(chat) map (_.takeRight(limit)) getOrElse IndexedSeq.empty
   }
 
-  override def messageOption(chat: Chat, id: Message.SourceId): Option[Message] =
-    chatsWithMessages.get(chat) flatMap (_ find (_.sourceIdOption contains id))
+  override def messageOption(chat: Chat, id: MessageSourceId): Option[Message] =
+    chatsWithMessages.get(chat) flatMap (_ find (_.sourceId contains id))
 
-  override def messageOptionByInternalId(chat: Chat, id: Message.InternalId): Option[Message] =
+  override def messageOptionByInternalId(chat: Chat, id: MessageInternalId): Option[Message] =
     chatsWithMessages.get(chat) flatMap (_ find (_.internalId == id))
 
   override def toString: String = {

@@ -9,7 +9,7 @@ import scala.concurrent.ExecutionContext
 import cats.effect.IO
 import doobie.Transactor
 import org.flywaydb.core.Flyway
-import org.fs.chm.dao._
+import org.fs.chm.dao.H2ChatHistoryDao
 import org.fs.utility.StopWatch
 import org.h2.jdbcx.JdbcConnectionPool
 

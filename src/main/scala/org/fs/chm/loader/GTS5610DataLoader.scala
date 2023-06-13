@@ -8,7 +8,10 @@ import scala.collection.immutable.ListMap
 
 import com.github.nscala_time.time.Imports._
 import org.apache.commons.codec.net.QuotedPrintableCodec
-import org.fs.chm.dao._
+import org.fs.chm.dao.EagerChatHistoryDao
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.MessageRegular
 
 /** Loads messages exported from Samsung GT-S5610 */
 class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
@@ -65,16 +68,19 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
             )
 
             val msgs: IndexedSeq[Message] = vmsgs.toIndexedSeq map { vmsg =>
-              Message.Regular(
-                internalId             = Message.NoInternalId,
-                sourceIdOption         = None,
-                time                   = vmsg.dateTime,
-                editTimeOption         = None,
-                fromId                 = userId,
-                forwardFromNameOption  = None,
-                replyToMessageIdOption = None,
-                textOption             = Some(RichText.fromPlainString(vmsg.text)),
-                contentOption          = None
+              Message(
+                internalId       = NoInternalId,
+                sourceId         = None,
+                timestamp        = vmsg.dateTime.getMillis,
+                fromId           = userId,
+                text             = Seq(RichText.makePlain(vmsg.text)),
+                searchableString = Some(normalizeSeachableString(vmsg.text)),
+                typed            = Message.Typed.Regular(MessageRegular(
+                  editTimestamp    = None,
+                  forwardFromName  = None,
+                  replyToMessageId = None,
+                  content          = None
+                ))
               )
             }
             val chat = Chat(
@@ -90,7 +96,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
         }
 
     // Ordering by descending last message
-    val chatsWithMessages = ListMap(userToChatWithMsgsMap.values.toSeq.sortBy(_._2.last.time).reverse.toSeq: _*)
+    val chatsWithMessages = ListMap(userToChatWithMsgsMap.values.toSeq.sortBy(_._2.last.timestamp).reverse.toSeq: _*)
 
     val users = (userToChatWithMsgsMap.keys.toSet + myself).toSeq sortBy (u => (u.id, u.prettyName))
 

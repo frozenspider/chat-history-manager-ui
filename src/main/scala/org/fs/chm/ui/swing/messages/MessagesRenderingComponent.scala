@@ -2,7 +2,9 @@ package org.fs.chm.ui.swing.messages
 
 import scala.swing.Component
 
-import org.fs.chm.dao._
+import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.Entities.ChatWithDetails
+import org.fs.chm.protobuf.Message
 
 trait MessagesRenderingComponent[MD] {
 

@@ -9,9 +9,12 @@ import scala.util.Random
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao._
+import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger.TaggedMessage
 import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.ContentPoll
+import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.MessageRegular
 
 /**
  * Utility stuff used for testing, both automatically and manually
@@ -61,18 +64,23 @@ object TestUtils {
   def createRegularMessage(idx: Int, userId: Int): Message = {
     // Any previous message
     val replyToMessageIdOption =
-      if (idx > 0) Some(rnd.nextInt(idx).toLong.asInstanceOf[Message.SourceId]) else None
+      if (idx > 0) Some(rnd.nextInt(idx).toLong.asInstanceOf[MessageSourceId]) else None
 
-    Message.Regular(
-      internalId             = Message.NoInternalId,
-      sourceIdOption         = Some(idx.toLong.asInstanceOf[Message.SourceId]),
-      time                   = baseDate.plusMinutes(idx),
-      editTimeOption         = Some(baseDate.plusMinutes(idx).plusSeconds(5)),
-      fromId                 = userId,
-      forwardFromNameOption  = Some("u" + userId),
-      replyToMessageIdOption = replyToMessageIdOption,
-      textOption             = Some(RichText.fromPlainString((s"Hello there, ${idx}!"))),
-      contentOption          = Some(Content(Content.Val.Poll(ContentPoll(question = s"Hey, ${idx}!"))))
+    val typed = Message.Typed.Regular(MessageRegular(
+      editTimestamp    = Some(baseDate.plusMinutes(idx).plusSeconds(5).getMillis),
+      replyToMessageId = replyToMessageIdOption,
+      forwardFromName  = Some("u" + userId),
+      content          = Some(Content(Content.Val.Poll(ContentPoll(question = s"Hey, ${idx}!"))))
+    ))
+    val text = Seq(RichText.makePlain(s"Hello there, ${idx}!"))
+    Message(
+      internalId       = NoInternalId,
+      sourceId         = Some(idx.toLong.asInstanceOf[MessageSourceId]),
+      timestamp        = baseDate.plusMinutes(idx).getMillis,
+      fromId           = userId,
+      searchableString = Some(makeSearchableString(text, typed)),
+      text             = text,
+      typed            = typed
     )
   }
 
@@ -113,12 +121,13 @@ object TestUtils {
     ) with EagerMutableDaoTrait
   }
 
-  def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, Seq[User], ChatWithDetails, Seq[Message]) = {
-    val ds    = dao.datasets.head
-    val users = dao.users(ds.uuid)
-    val cwd   = dao.chats(ds.uuid).head
-    val msgs  = dao.firstMessages(cwd.chat, Int.MaxValue)
-    (ds, users, cwd, msgs)
+  def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, DatasetRoot, Seq[User], ChatWithDetails, Seq[Message]) = {
+    val ds     = dao.datasets.head
+    val dsRoot = dao.datasetRoot(ds.uuid)
+    val users  = dao.users(ds.uuid)
+    val cwd    = dao.chats(ds.uuid).head
+    val msgs   = dao.firstMessages(cwd.chat, Int.MaxValue)
+    (ds, dsRoot, users, cwd, msgs)
   }
 
   implicit class RichUserSeq(users: Seq[User]) {
@@ -128,7 +137,7 @@ object TestUtils {
 
   implicit class RichMsgSeq(msgs: Seq[Message]) {
     def bySrcId[TM <: Message with TaggedMessage](id: Long): TM =
-      tag(msgs.find(_.sourceIdOption.get == id).get)
+      tag(msgs.find(_.sourceIdTyped.get == id).get)
   }
 
   def tag[TM <: Message with TaggedMessage](m: Message): TM = m.asInstanceOf[TM]

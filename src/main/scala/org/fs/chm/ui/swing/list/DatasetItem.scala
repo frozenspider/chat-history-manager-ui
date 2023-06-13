@@ -5,11 +5,11 @@ import java.awt.Color
 import scala.swing.GridBagPanel
 import scala.swing._
 import scala.swing.event.MouseReleased
-
 import javax.swing.SwingUtilities
 import javax.swing.border.MatteBorder
+
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.Dataset
+import org.fs.chm.dao.Entities.Dataset
 import org.fs.chm.ui.swing.general.SwingUtils._
 
 class DatasetItem[I <: Panel](

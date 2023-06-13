@@ -6,13 +6,12 @@ import java.util.UUID
 
 import scala.collection.immutable.ListMap
 import scala.swing.Dialog
-import scala.swing.Dialog.Result
 import scala.swing.Swing
 import scala.swing.Swing.EmptyIcon
-import scala.swing.Swing.nullPeer
-
 import javax.swing.JOptionPane
-import org.fs.chm.dao._
+
+import org.fs.chm.dao.EagerChatHistoryDao
+import org.fs.chm.dao.Entities._
 import org.fs.chm.utility.EntityUtils
 import org.fs.utility.Imports._
 import org.json4s._
@@ -110,6 +109,6 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
     fullUsers.toSeq sortBy (u => (u.id, u.prettyName))
   } ensuring { users =>
     // Ensuring all IDs are unique
-    users.toStream.map(_.id).toSet.size == users.size
+    users.to(LazyList).map(_.id).toSet.size == users.size
   }
 }

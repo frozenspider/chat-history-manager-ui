@@ -3,7 +3,7 @@ package org.fs.chm.ui.swing.user
 import scala.swing._
 
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.User
+import org.fs.chm.dao.Entities.User
 import org.fs.chm.ui.swing.general.CustomDialog
 
 class UserDetailsDialog(

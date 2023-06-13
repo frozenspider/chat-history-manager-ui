@@ -17,12 +17,15 @@ import scala.swing._
 import com.github.nscala_time.time.Imports._
 import javax.swing.SwingUtilities
 import javax.swing.event.HyperlinkEvent
+
 import org.fs.chm.BuildInfo
-import org.fs.chm.dao._
+import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.loader._
 import org.fs.chm.loader.telegram._
+import org.fs.chm.protobuf.Message
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils
 import org.fs.chm.ui.swing.general.SwingUtils._
@@ -40,6 +43,7 @@ import org.fs.chm.utility.CliUtils
 import org.fs.chm.utility.EntityUtils
 import org.fs.chm.utility.InterruptableFuture._
 import org.fs.chm.utility.IoUtils._
+import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.SimpleConfigAware
 import org.slf4s.Logging
 

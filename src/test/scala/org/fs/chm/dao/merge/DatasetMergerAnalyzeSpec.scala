@@ -1,9 +1,9 @@
 package org.fs.chm.dao.merge
 
 import org.fs.chm.TestHelper
-import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger._
-import org.fs.chm.dao.merge.DatasetMerger.{ ChatMergeOption => CMO }
+import org.fs.chm.dao.merge.DatasetMerger.{ChatMergeOption => CMO}
+import org.fs.chm.protobuf.Message
 import org.fs.chm.utility.TestUtils._
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
@@ -40,7 +40,7 @@ class DatasetMergerAnalyzeSpec //
       assert(messagesForChat1(helper, None) === helper.d1msgs)
       assert(messagesForChat1(helper, helper.d1msgs.headOption) === helper.d1msgs.tail)
       val since4 = helper.d1msgs.drop(3)
-      assert(since4.head.sourceIdOption === Some(4))
+      assert(since4.head.sourceId === Some(4))
       assert(messagesForChat1(helper, Some(helper.d1msgs.bySrcId(3))) === since4)
     }
 
@@ -118,7 +118,7 @@ class DatasetMergerAnalyzeSpec //
 
   test("combine - no new slave messages, matching sequence in the middle") {
     val msgs     = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
-    val msgs2    = msgs.filter(m => (5 to 10) contains m.sourceIdOption.get)
+    val msgs2    = msgs.filter(m => (5 to 10) contains m.sourceId.get)
     val helper   = new MergerHelper(msgs, msgs2)
     val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
@@ -149,7 +149,7 @@ class DatasetMergerAnalyzeSpec //
   test("combine - added one message in the middle") {
     val msgs     = for (i <- 1 to 3) yield createRegularMessage(i, rndUserId)
     val msgs123  = msgs
-    val msgs13   = msgs123.filter(_.sourceIdOption.get != 2)
+    val msgs13   = msgs123.filter(_.sourceId.get != 2)
     val helper   = new MergerHelper(msgs13, msgs123)
     val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
@@ -174,7 +174,6 @@ class DatasetMergerAnalyzeSpec //
       )
     )
   }
-
 
   test("combine - changed one message in the middle") {
     val msgs     = for (i <- 1 to 3) yield createRegularMessage(i, rndUserId)
@@ -430,7 +429,7 @@ class DatasetMergerAnalyzeSpec //
   test("combine - master has messages not present in slave") {
     val msgs     = for (i <- 1 to 5) yield createRegularMessage(i, rndUserId)
     val msgsA    = msgs
-    val msgsB    = msgs.filter(Seq(2, 4) contains _.sourceIdOption.get)
+    val msgsB    = msgs.filter(Seq(2, 4) contains _.sourceId.get)
     val helper   = new MergerHelper(msgsA, msgsB)
     val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
@@ -478,9 +477,9 @@ class DatasetMergerAnalyzeSpec //
    */
   test("combine - everything") {
     val msgs  = for (i <- 1 to 12) yield createRegularMessage(i, rndUserId)
-    val msgsA = msgs.filter(Seq(1, 2, 5, 6, 7, 8, 9, 10) contains _.sourceIdOption.get)
+    val msgsA = msgs.filter(Seq(1, 2, 5, 6, 7, 8, 9, 10) contains _.sourceId.get)
     val msgsB = changedMessages(
-      msgs.filter((3 to 12) contains _.sourceIdOption.get),
+      msgs.filter((3 to 12) contains _.sourceId.get),
       (id => Seq(5, 6, 9, 10) contains id)
     )
     val helper   = new MergerHelper(msgsA, msgsB)
@@ -532,9 +531,9 @@ class DatasetMergerAnalyzeSpec //
    */
   test("combine - everything, roles inverted") {
     val msgs  = for (i <- 1 to 12) yield createRegularMessage(i, rndUserId)
-    val msgsA = msgs.filter((3 to 12) contains _.sourceIdOption.get)
+    val msgsA = msgs.filter((3 to 12) contains _.sourceId.get)
     val msgsB = changedMessages(
-      msgs.filter(Seq(1, 2, 5, 6, 7, 8, 9, 10) contains _.sourceIdOption.get),
+      msgs.filter(Seq(1, 2, 5, 6, 7, 8, 9, 10) contains _.sourceId.get),
       (id => Seq(5, 6, 9, 10) contains id)
     )
     val helper   = new MergerHelper(msgsA, msgsB)
@@ -584,16 +583,16 @@ class DatasetMergerAnalyzeSpec //
   //
 
   class MergerHelper(msgs1: Seq[Message], msgs2: Seq[Message]) {
-    val (dao1, d1ds, d1users, d1cwd, d1msgs) = createDaoAndEntities("One", msgs1, maxUserId)
-    val (dao2, d2ds, d2users, d2cwd, d2msgs) = createDaoAndEntities("Two", msgs2, maxUserId)
+    val (dao1, d1ds, d1root, d1users, d1cwd, d1msgs) = createDaoAndEntities("One", msgs1, maxUserId)
+    val (dao2, d2ds, d2root, d2users, d2cwd, d2msgs) = createDaoAndEntities("Two", msgs2, maxUserId)
 
     def merger: DatasetMerger =
       new DatasetMerger(dao1, d1ds, dao2, d2ds)
 
     private def createDaoAndEntities(nameSuffix: String, srcMsgs: Seq[Message], numUsers: Int) = {
       val dao                     = createSimpleDao(nameSuffix, srcMsgs, numUsers)
-      val (ds, users, cwd, msgs) = getSimpleDaoEntities(dao)
-      (dao, ds, users, cwd, msgs)
+      val (ds, root, users, cwd, msgs) = getSimpleDaoEntities(dao)
+      (dao, ds, root, users, cwd, msgs)
     }
   }
 }

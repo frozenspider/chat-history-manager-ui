@@ -4,7 +4,8 @@ import scala.swing.GridBagPanel.Anchor
 import scala.swing.GridBagPanel.Fill
 import scala.swing._
 
-import org.fs.chm.dao._
+import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.Entities.User
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 

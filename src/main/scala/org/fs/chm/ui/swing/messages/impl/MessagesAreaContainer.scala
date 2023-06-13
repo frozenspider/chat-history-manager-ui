@@ -5,17 +5,20 @@ import javax.swing.text.DefaultCaret
 import javax.swing.text.html.HTMLEditorKit
 
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.ChatWithDetails
-import org.fs.chm.dao.Message
+import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.ContentLocation
+import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.MessageRegular
+import org.fs.chm.protobuf.MessageService
+import org.fs.chm.protobuf.MessageServiceGroupCall
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
-import org.fs.chm.ui.swing.messages.impl.MessagesService._
+import org.fs.chm.ui.swing.messages.impl.MessagesDocumentService._
 
 class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingComponent[MessageDocument] {
   // TODO: This should really be private, but we're hacking into it for SelectMergeMessagesDialog
-  val msgService = new MessagesService(htmlKit)
+  val msgService = new MessagesDocumentService(htmlKit)
 
   //
   // Fields
@@ -73,8 +76,9 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     if (beginReached) {
       sb.append(msgService.nothingNewerHtml)
     }
+    val dsRoot = dao.datasetRoot(cwd.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cwd, m))
+      sb.append(msgService.renderMessageHtml(dao, cwd, dsRoot, m))
     }
     md.insert(sb.toString, MessageInsertPosition.Leading)
     document = md
@@ -123,8 +127,9 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     if (beginReached) {
       sb.append(msgService.nothingNewerHtml)
     }
+    val dsRoot = dao.datasetRoot(cwd.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cwd, m))
+      sb.append(msgService.renderMessageHtml(dao, cwd, dsRoot, m))
     }
     document.removeLoading(true)
     document.insert(sb.toString, MessageInsertPosition.Leading)
@@ -142,8 +147,9 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     appended = true
     // TODO: Prevent flickering
     val sb = new StringBuilder
+    val dsRoot = dao.datasetRoot(cwd.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cwd, m))
+      sb.append(msgService.renderMessageHtml(dao, cwd, dsRoot, m))
     }
     //    if (endReached) {
     //      sb.append(msgService.nothingNewerHtml)
@@ -184,7 +190,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
 
   protected def onDocumentChange(): Unit = {}
 
-  protected def documentOption = _documentOption
+  protected def documentOption: Option[MessageDocument] = _documentOption
 
   protected def document = _documentOption.get
 
@@ -215,7 +221,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
 }
 
 object MessagesAreaContainer {
-  type MessageDocument = MessagesService.MessageDocument
+  type MessageDocument = MessagesDocumentService.MessageDocument
 
   def main(args: Array[String]): Unit = {
     import java.awt.Desktop
@@ -236,32 +242,46 @@ object MessagesAreaContainer {
       )
       val users = (1 to 2) map (createUser(ds.uuid, _))
       val msgs = IndexedSeq(
-        Message.Service.Group.Call(
-          internalId             = Message.NoInternalId,
-          sourceIdOption         = Some(1L.asInstanceOf[Message.SourceId]),
-          time                   = baseDate.plusMinutes(1),
-          fromId                 = users.head.id,
-          textOption             = Some(RichText.fromPlainString(s"Join the call!")),
-          members                = users map (_.prettyName)
-        ),
-        Message.Regular(
-          internalId             = Message.NoInternalId,
-          sourceIdOption         = Some(2L.asInstanceOf[Message.SourceId]),
-          time                   = baseDate.plusMinutes(2),
-          editTimeOption         = Some(baseDate.plusMinutes(2).plusSeconds(5)),
-          fromId                 = users.last.id,
-          forwardFromNameOption  = Some("u" + users.head.id),
-          replyToMessageIdOption = Some(1L.asInstanceOf[Message.SourceId]),
-          textOption             = Some(RichText.fromPlainString(s"Sharing my location")),
-          contentOption = Some(
-            Content(Content.Val.Location(ContentLocation(
-              title       = Some("My Brand New Place"),
-              address     = Some("1 Caesar Ave"),
-              latStr      = "11.11111",
-              lonStr      = "22.22222",
-              durationSec = Some(5)
-            ))))
-        )
+        {
+          val text = Seq(RichText.makePlain(s"Join the call!"));
+          val typed = Message.Typed.Service(MessageService(MessageService.Val.GroupCall(MessageServiceGroupCall(
+            members = users map (_.prettyName)
+          ))))
+          Message(
+            internalId       = NoInternalId,
+            sourceId         = Some(1L.asInstanceOf[MessageSourceId]),
+            timestamp        = baseDate.plusMinutes(1).getMillis,
+            fromId           = users.head.id,
+            text             = text,
+            searchableString = Some(makeSearchableString(text, typed)),
+            typed            = typed
+          )
+        },
+        {
+          val typed = Message.Typed.Regular(MessageRegular(
+            editTimestamp    = Some(baseDate.plusMinutes(2).plusSeconds(5).getMillis),
+            forwardFromName  = Some("u" + users.head.id),
+            replyToMessageId = Some(1L.asInstanceOf[MessageSourceId]),
+            content = Some(
+              Content(Content.Val.Location(ContentLocation(
+                title       = Some("My Brand New Place"),
+                address     = Some("1 Caesar Ave"),
+                latStr      = "11.11111",
+                lonStr      = "22.22222",
+                durationSec = Some(5)
+              ))))
+          ))
+          val text = Seq(RichText.makePlain(s"Sharing my location"))
+          Message(
+            internalId       = NoInternalId,
+            sourceId         = Some(2L.asInstanceOf[MessageSourceId]),
+            timestamp        = baseDate.plusMinutes(2).getMillis,
+            fromId           = users.last.id,
+            text             = text,
+            searchableString = Some(makeSearchableString(text, typed)),
+            typed            = typed
+          )
+        }
       )
 
       val chat = createPersonalChat(ds.uuid, 1, users.head, users.map(_.id), msgs.size)
@@ -277,7 +297,7 @@ object MessagesAreaContainer {
       ) with EagerMutableDaoTrait
     }
 
-    val (_, _, cwd, msgs) = getSimpleDaoEntities(dao)
+    val (_, _, _, cwd, msgs) = getSimpleDaoEntities(dao)
 
     Swing.onEDTWait {
       val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
