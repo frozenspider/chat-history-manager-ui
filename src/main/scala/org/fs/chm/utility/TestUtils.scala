@@ -71,7 +71,7 @@ object TestUtils {
       fromId                 = userId,
       forwardFromNameOption  = Some("u" + userId),
       replyToMessageIdOption = replyToMessageIdOption,
-      textOption             = Some(RichText(Seq(RichText.Plain(s"Hello there, ${idx}!")))),
+      textOption             = Some(RichText.fromPlainString((s"Hello there, ${idx}!"))),
       contentOption          = Some(Content(Content.Val.Poll(ContentPoll(question = s"Hey, ${idx}!"))))
     )
   }

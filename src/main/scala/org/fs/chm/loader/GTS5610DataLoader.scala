@@ -3,7 +3,7 @@ package org.fs.chm.loader
 import java.io.File
 import java.nio.file.Files
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.immutable.ListMap
 
 import com.github.nscala_time.time.Imports._
@@ -73,7 +73,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
                 fromId                 = userId,
                 forwardFromNameOption  = None,
                 replyToMessageIdOption = None,
-                textOption             = Some(RichText(Seq(RichText.Plain(vmsg.text)))),
+                textOption             = Some(RichText.fromPlainString(vmsg.text)),
                 contentOption          = None
               )
             }

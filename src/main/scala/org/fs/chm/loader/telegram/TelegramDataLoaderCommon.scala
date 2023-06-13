@@ -15,6 +15,15 @@ import org.fs.chm.protobuf.ContentSharedContact
 import org.fs.chm.protobuf.ContentSticker
 import org.fs.chm.protobuf.ContentVideoMsg
 import org.fs.chm.protobuf.ContentVoiceMsg
+import org.fs.chm.protobuf.RichTextElement
+import org.fs.chm.protobuf.RteBold
+import org.fs.chm.protobuf.RteItalic
+import org.fs.chm.protobuf.RteLink
+import org.fs.chm.protobuf.RtePlain
+import org.fs.chm.protobuf.RtePrefmtBlock
+import org.fs.chm.protobuf.RtePrefmtInline
+import org.fs.chm.protobuf.RteStrikethrough
+import org.fs.chm.protobuf.RteUnderline
 import org.fs.utility.Imports._
 import org.json4s._
 import org.json4s.jackson.JsonMethods
@@ -228,6 +237,8 @@ trait TelegramDataLoaderCommon {
   }
 
   protected object RichTextParser {
+    private val RteEmpty = RichTextElement(RichTextElement.Val.Empty)
+
     def parseRichTextOption(jv: JValue)(implicit tracker: FieldUsageTracker): Option[RichText] = {
       val jText = getRawField(jv, "text", true)
       jText match {
@@ -243,7 +254,7 @@ trait TelegramDataLoaderCommon {
       }
     }
 
-    private def parseElement(jv: JValue): RichText.Element = {
+    private def parseElement(jv: JValue): RichTextElement = {
       jv match {
         case s: JString  => parsePlain(s)
         case jo: JObject => parseElementObject(jo)
@@ -251,90 +262,90 @@ trait TelegramDataLoaderCommon {
       }
     }
 
-    private def parseElementObject(jo: JObject): RichText.Element = {
+    private def parseElementObject(jo: JObject): RichTextElement = {
       val values = jo.values
       values("type") match {
         case "bold" =>
           require(values.keys == Set("type", "text"), s"Unexpected bold format: $jo")
-          RichText.Bold(values("text").asInstanceOf[String])
+          RteEmpty.withBold(RteBold(values("text").asInstanceOf[String]))
         case "italic" =>
           require(values.keys == Set("type", "text"), s"Unexpected italic format: $jo")
-          RichText.Italic(values("text").asInstanceOf[String])
+          RteEmpty.withItalic(RteItalic(values("text").asInstanceOf[String]))
         case "underline" =>
           require(values.keys == Set("type", "text"), s"Unexpected underline format: $jo")
-          RichText.Underline(values("text").asInstanceOf[String])
+          RteEmpty.withUnderline(RteUnderline(values("text").asInstanceOf[String]))
         case "strikethrough" =>
           require(values.keys == Set("type", "text"), s"Unexpected strikethrough format: $jo")
-          RichText.Strikethrough(values("text").asInstanceOf[String])
+          RteEmpty.withStrikethrough(RteStrikethrough(values("text").asInstanceOf[String]))
         case "unknown" =>
           require(values.keys == Set("type", "text"), s"Unexpected unknown format: $jo")
           // Unknown is rendered as plaintext in telegram
-          RichText.Plain(values("text").asInstanceOf[String])
+          RteEmpty.withPlain(RtePlain(values("text").asInstanceOf[String]))
         case "code" =>
           require(values.keys == Set("type", "text"), s"Unexpected code format: $jo")
-          RichText.PrefmtInline(values("text").asInstanceOf[String])
+          RteEmpty.withPrefmtInline(RtePrefmtInline((values("text").asInstanceOf[String])))
         case "pre" =>
           require(values.keys == Set("type", "text", "language"), s"Unexpected pre format: $jo")
-          RichText.PrefmtBlock(
-            text           = values("text").asInstanceOf[String],
-            languageOption = stringToOption(values("language").asInstanceOf[String])
-          )
+          RteEmpty.withPrefmtBlock(RtePrefmtBlock(
+            text     = values("text").asInstanceOf[String],
+            language = stringToOption(values("language").asInstanceOf[String])
+          ))
         case "text_link" =>
           require(values.keys == Set("type", "text", "href"), s"Unexpected text_link format: $jo")
-          val text = stringToOption(values("text").asInstanceOf[String]).getOrElse("")
-          RichText.Link(
+          val text = stringToOption(values("text").asInstanceOf[String])
+          RteEmpty.withLink(RteLink(
             text   = text,
             href   = values("href").asInstanceOf[String],
             hidden = isWhitespaceOrInvisible(text)
-          )
+          ))
         case "link" =>
           // Link format is hyperlink alone
           require(values.keys == Set("type", "text"), s"Unexpected link format: $jo")
-          RichText.Link(
-            text   = values("text").asInstanceOf[String],
+          RteEmpty.withLink(RteLink(
+            text   = Some(values("text").asInstanceOf[String]),
             href   = values("text").asInstanceOf[String],
             hidden = false
-          )
+          ))
         case "email" =>
           // No special treatment for email
           require(values.keys == Set("type", "text"), s"Unexpected email format: $jo")
-          RichText.Plain(values("text").asInstanceOf[String])
+          RteEmpty.withPlain(RtePlain(values("text").asInstanceOf[String]))
         case "mention" =>
           // No special treatment for mention
           require(values.keys == Set("type", "text"), s"Unexpected mention format: $jo")
-          RichText.Plain(values("text").asInstanceOf[String])
+          RteEmpty.withPlain(RtePlain(values("text").asInstanceOf[String]))
         case "mention_name" =>
           // No special treatment for mention_name, but prepent @
           require(values.keys == Set("type", "text", "user_id"), s"Unexpected mention_name format: $jo")
-          RichText.Plain("@" + values("text").asInstanceOf[String])
+          RteEmpty.withPlain(RtePlain("@" + values("text").asInstanceOf[String]))
         case "phone" =>
           // No special treatment for phone
           require(values.keys == Set("type", "text"), s"Unexpected phone format: $jo")
-          RichText.Plain(values("text").asInstanceOf[String])
+          RteEmpty.withPlain(RtePlain(values("text").asInstanceOf[String]))
         case "hashtag" =>
           // No special treatment for hashtag
           require(values.keys == Set("type", "text"), s"Unexpected hashtag format: $jo")
-          RichText.Plain(values("text").asInstanceOf[String])
+          RteEmpty.withPlain(RtePlain(values("text").asInstanceOf[String]))
         case "bot_command" =>
           // No special treatment for bot_command
           require(values.keys == Set("type", "text"), s"Unexpected bot_command format: $jo")
-          RichText.Plain(values("text").asInstanceOf[String])
+          RteEmpty.withPlain(RtePlain(values("text").asInstanceOf[String]))
         case "bank_card" =>
           // No special treatment for bank_card
           require(values.keys == Set("type", "text"), s"Unexpected bank_card format: $jo")
-          RichText.Plain(values("text").asInstanceOf[String])
+          RteEmpty.withPlain(RtePlain(values("text").asInstanceOf[String]))
         case "cashtag" =>
           // No special treatment for cashtag
           require(values.keys == Set("type", "text"), s"Unexpected cashtag format: $jo")
-          RichText.Plain(values("text").asInstanceOf[String])
+          RteEmpty.withPlain(RtePlain(values("text").asInstanceOf[String]))
         case other =>
           throw new IllegalArgumentException(
             s"Don't know how to parse RichText element of type '${values("type")}' for ${jo.toString.take(500)}")
       }
     }
 
-    private def parsePlain(s: JString): RichText.Plain = {
-      RichText.Plain(s.extract[String])
+    private def parsePlain(s: JString): RichTextElement = {
+      RteEmpty.withPlain(RtePlain(s.extract[String]))
     }
   }
 
@@ -515,6 +526,13 @@ trait TelegramDataLoaderCommon {
   protected def isWhitespaceOrInvisible(s: String): Boolean = {
     // Accounts for invisible formatting indicator, e.g. zero-width space \u200B
     s matches "[\\s\\p{Cf}]*"
+  }
+
+  protected def isWhitespaceOrInvisible(s: Option[String]): Boolean = {
+    s match {
+      case None => true
+      case Some(s) => isWhitespaceOrInvisible(s)
+    }
   }
 
   /** Dates in TG history is exported in local timezone, so we'll try to import in current one as well */

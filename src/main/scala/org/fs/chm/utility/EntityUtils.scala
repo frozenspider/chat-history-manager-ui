@@ -19,7 +19,9 @@ object EntityUtils {
     timeOptions.maxBy(_ getOrElse startOfTime)
   }
 
-  private implicit class RichString(s: String) {
+  implicit class RichString(s: String) {
+    def toOption: Option[String] = if (s.isEmpty) None else Some(s)
+
     def toFile(datasetRoot: JFile): JFile = new JFile(datasetRoot, s.replace('\\', '/')).getAbsoluteFile
   }
 }

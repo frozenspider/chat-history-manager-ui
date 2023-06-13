@@ -21,6 +21,15 @@ import org.fs.chm.protobuf.ContentSharedContact
 import org.fs.chm.protobuf.ContentSticker
 import org.fs.chm.protobuf.ContentVideoMsg
 import org.fs.chm.protobuf.ContentVoiceMsg
+import org.fs.chm.protobuf.RichTextElement
+import org.fs.chm.protobuf.RteBold
+import org.fs.chm.protobuf.RteItalic
+import org.fs.chm.protobuf.RteLink
+import org.fs.chm.protobuf.RtePlain
+import org.fs.chm.protobuf.RtePrefmtBlock
+import org.fs.chm.protobuf.RtePrefmtInline
+import org.fs.chm.protobuf.RteStrikethrough
+import org.fs.chm.protobuf.RteUnderline
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.utility.EntityUtils
 import org.fs.utility.Imports._
@@ -243,35 +252,38 @@ class MessagesService(htmlKit: HTMLEditorKit) {
   object RichTextHtmlRenderer {
     def render(rt: RichText): String = {
       val components = for (rtel <- rt.components) yield {
-        renderComponent(rtel)
+        renderComponent(rt, rtel)
       }
-      val hiddenLinkOption = rt.components collectFirst { case l: RichText.Link if l.hidden => l }
+      val hiddenLinkOption = rt.components.map(_.`val`.link) collectFirst { case Some(l) if l.hidden => l }
       val link = hiddenLinkOption map { l =>
-        "<p> &gt; Link: " + renderComponent(l.copy(text = l.href, hidden = false))
+        "<p> &gt; Link: " + renderLink(rt, l.copy(text = Some(l.href), hidden = false))
       } getOrElse ""
       components.mkString + link
     }
 
-    private def renderComponent(rtel: RichText.Element): String = {
-      rtel match {
-        case RichText.Plain(text)          => text replace ("\n", "<br>")
-        case RichText.Bold(text)           => s"<b>${text replace ("\n", "<br>")}</b>"
-        case RichText.Italic(text)         => s"<i>${text replace ("\n", "<br>")}</i>"
-        case RichText.Underline(text)      => s"<u>${text replace ("\n", "<br>")}</u>"
-        case RichText.Strikethrough(text)  => s"<strike>${text replace ("\n", "<br>")}</strike>"
-        case link: RichText.Link           => renderLink(link)
-        case RichText.PrefmtBlock(text, _) => s"""<pre>${text}</pre>"""
-        case RichText.PrefmtInline(text)   => s"""<code>${text}</code>"""
+    private def renderComponent(rt: RichText, rtel: RichTextElement): String = {
+      val text = rtel.textOrEmptyString
+      if (rtel.`val`.isEmpty) {
+        text
+      } else rtel.`val`.value match {
+        case _: RtePlain         => text replace ("\n", "<br>")
+        case _: RteBold          => s"<b>${text replace ("\n", "<br>")}</b>"
+        case _: RteItalic        => s"<i>${text replace ("\n", "<br>")}</i>"
+        case _: RteUnderline     => s"<u>${text replace ("\n", "<br>")}</u>"
+        case _: RteStrikethrough => s"<strike>${text replace ("\n", "<br>")}</strike>"
+        case link: RteLink       => renderLink(rt, link)
+        case _: RtePrefmtBlock   => s"""<pre>${text}</pre>"""
+        case _: RtePrefmtInline  => s"""<code>${text}</code>"""
       }
     }
 
-    private def renderLink(rtel: RichText.Link) = {
-      if (rtel.hidden) {
-        rtel.plainSearchableString
+    private def renderLink(rt: RichText, link: RteLink) = {
+      if (link.hidden) {
+        rt.plainSearchableString
       } else {
         // Space in the end is needed if link is followed by text
-        val text = if (rtel.text.nonEmpty) rtel.text else rtel.href
-        s"""<a href="${rtel.href}">${text}</a> """
+        val text = if (link.text.nonEmpty) link.text else link.href
+        s"""<a href="${link.href}">${text}</a> """
       }
     }
   }

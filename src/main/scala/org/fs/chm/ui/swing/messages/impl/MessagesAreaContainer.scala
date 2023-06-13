@@ -241,7 +241,7 @@ object MessagesAreaContainer {
           sourceIdOption         = Some(1L.asInstanceOf[Message.SourceId]),
           time                   = baseDate.plusMinutes(1),
           fromId                 = users.head.id,
-          textOption             = Some(RichText(Seq(RichText.Plain(s"Join the call!")))),
+          textOption             = Some(RichText.fromPlainString(s"Join the call!")),
           members                = users map (_.prettyName)
         ),
         Message.Regular(
@@ -252,7 +252,7 @@ object MessagesAreaContainer {
           fromId                 = users.last.id,
           forwardFromNameOption  = Some("u" + users.head.id),
           replyToMessageIdOption = Some(1L.asInstanceOf[Message.SourceId]),
-          textOption             = Some(RichText(Seq(RichText.Plain(s"Sharing my location")))),
+          textOption             = Some(RichText.fromPlainString(s"Sharing my location")),
           contentOption = Some(
             Content(Content.Val.Location(ContentLocation(
               title       = Some("My Brand New Place"),

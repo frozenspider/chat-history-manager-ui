@@ -53,7 +53,7 @@ class TelegramFullDataLoaderSpec //
           "...have the same timestamp...",
           "...but different IDs...",
           "...and we expect order to be preserved."
-        ).map(s => RichText(Seq(RichText.Plain(s))))
+        ).map(s => RichText.fromPlainString(s))
       )
     }
   }

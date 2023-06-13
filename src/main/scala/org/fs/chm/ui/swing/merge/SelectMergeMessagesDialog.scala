@@ -5,8 +5,11 @@ import scala.swing._
 
 import com.github.nscala_time.time.Imports._
 import javax.swing.text.html.HTMLEditorKit
+
 import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger.MessagesMergeOption
+import org.fs.chm.protobuf.RichTextElement
+import org.fs.chm.protobuf.RtePlain
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
@@ -315,7 +318,8 @@ private object SelectMergeMessagesDialog {
         val longText = (
           Seq.fill(100)("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").mkString(" ") + " " + Seq.fill(100)("abcdefg").mkString
         )
-        msg.asInstanceOf[Message.Regular].copy(textOption = Some(RichText(Seq(RichText.Plain(longText)))))
+        msg.asInstanceOf[Message.Regular].copy(textOption =
+          Some(RichText.fromPlainString(longText)))
       } else {
         msg
       }

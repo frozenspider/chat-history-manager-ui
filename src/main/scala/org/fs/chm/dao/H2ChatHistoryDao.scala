@@ -29,6 +29,15 @@ import org.fs.chm.protobuf.ContentSharedContact
 import org.fs.chm.protobuf.ContentSticker
 import org.fs.chm.protobuf.ContentVideoMsg
 import org.fs.chm.protobuf.ContentVoiceMsg
+import org.fs.chm.protobuf.RichTextElement
+import org.fs.chm.protobuf.RtePlain
+import org.fs.chm.protobuf.RteBold
+import org.fs.chm.protobuf.RteItalic
+import org.fs.chm.protobuf.RteLink
+import org.fs.chm.protobuf.RtePrefmtBlock
+import org.fs.chm.protobuf.RtePrefmtInline
+import org.fs.chm.protobuf.RteStrikethrough
+import org.fs.chm.protobuf.RteUnderline
 import org.fs.chm.utility.EntityUtils._
 import org.fs.chm.utility.IoUtils
 import org.fs.chm.utility.Logging
@@ -1075,24 +1084,30 @@ class H2ChatHistoryDao(
       }
     }
 
-    def toRichTextElement(r: RawRichTextElement): RichText.Element = {
+    def toRichTextElement(r: RawRichTextElement): RichTextElement = {
       r.elementType match {
+        case "empty" =>
+          RichTextElement(RichTextElement.Val.Empty)
         case "plain" =>
-          RichText.Plain(text = r.text)
+          RichTextElement(RichTextElement.Val.Plain(RtePlain(text = r.text)))
         case "bold" =>
-          RichText.Bold(text = r.text)
+          RichTextElement(RichTextElement.Val.Bold(RteBold(text = r.text)))
         case "italic" =>
-          RichText.Italic(text = r.text)
+          RichTextElement(RichTextElement.Val.Italic(RteItalic(text = r.text)))
         case "underline" =>
-          RichText.Underline(text = r.text)
+          RichTextElement(RichTextElement.Val.Underline(RteUnderline(text = r.text)))
         case "strikethrough" =>
-          RichText.Strikethrough(text = r.text)
+          RichTextElement(RichTextElement.Val.Strikethrough(RteStrikethrough(text = r.text)))
         case "link" =>
-          RichText.Link(text = r.text, href = r.hrefOption.get, hidden = r.hiddenOption.get)
+          RichTextElement(RichTextElement.Val.Link(RteLink(
+            text = r.textOption,
+            href = r.hrefOption.get,
+            hidden = r.hiddenOption.get
+          )))
         case "prefmt_inline" =>
-          RichText.PrefmtInline(text = r.text)
+          RichTextElement(RichTextElement.Val.PrefmtInline(RtePrefmtInline(text = r.text)))
         case "prefmt_block" =>
-          RichText.PrefmtBlock(text = r.text, languageOption = r.languageOption)
+          RichTextElement(RichTextElement.Val.PrefmtBlock(RtePrefmtBlock(text = r.text, language = r.languageOption)))
       }
     }
 
@@ -1284,28 +1299,30 @@ class H2ChatHistoryDao(
         val template = RawRichTextElement(
           messageInternalId = msgId,
           elementType       = "",
-          text              = el.text,
+          text              = el.textOrEmptyString,
           hrefOption        = None,
           hiddenOption      = None,
           languageOption    = None
         )
-        el match {
-          case el: RichText.Plain         => template.copy(elementType = "plain")
-          case el: RichText.Bold          => template.copy(elementType = "bold")
-          case el: RichText.Italic        => template.copy(elementType = "italic")
-          case el: RichText.Underline     => template.copy(elementType = "underline")
-          case el: RichText.Strikethrough => template.copy(elementType = "strikethrough")
-          case el: RichText.Link =>
+        if (el.`val`.isEmpty) {
+          template.copy(elementType = "empty")
+        } else el.`val`.value match {
+          case _: RtePlain         => template.copy(elementType = "plain")
+          case _: RteBold          => template.copy(elementType = "bold")
+          case _: RteItalic        => template.copy(elementType = "italic")
+          case _: RteUnderline     => template.copy(elementType = "underline")
+          case _: RteStrikethrough => template.copy(elementType = "strikethrough")
+          case link: RteLink =>
             template.copy(
               elementType  = "link",
-              hrefOption   = Some(el.href),
-              hiddenOption = Some(el.hidden)
+              hrefOption   = Some(link.href),
+              hiddenOption = Some(link.hidden)
             )
-          case el: RichText.PrefmtInline => template.copy(elementType = "prefmt_inline")
-          case el: RichText.PrefmtBlock =>
+          case _: RtePrefmtInline => template.copy(elementType = "prefmt_inline")
+          case el: RtePrefmtBlock =>
             template.copy(
               elementType    = "prefmt_block",
-              languageOption = el.languageOption
+              languageOption = el.language
             )
         }
       }
@@ -1506,11 +1523,14 @@ object H2ChatHistoryDao {
   case class RawRichTextElement(
       messageInternalId: Message.InternalId,
       elementType: String,
+      // Can be empty string!
       text: String,
       hrefOption: Option[String],
       hiddenOption: Option[Boolean],
       languageOption: Option[String]
-  )
+  ) {
+    def textOption: Option[String] = text.toOption
+  }
 
   /** Could hold any kind of content, distinguished by elementType. */
   case class RawContent(

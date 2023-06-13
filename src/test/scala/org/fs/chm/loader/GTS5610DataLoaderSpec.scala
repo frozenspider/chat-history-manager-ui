@@ -4,6 +4,7 @@ import java.io.File
 
 import org.fs.chm.TestHelper
 import org.fs.chm.dao._
+import org.fs.chm.dao.Helpers._
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
 import org.scalatest.BeforeAndAfterAll
@@ -77,7 +78,7 @@ class GTS5610DataLoaderSpec //
   def txt(m: Message): String =
     m.textOption.map { t =>
       assert(t.components.size === 1)
-      assert(t.components.head.isInstanceOf[RichText.Plain])
-      t.components.head.text
+      assert(t.components.head.`val`.isPlain)
+      t.components.head.textOrEmptyString
     } getOrElse fail(s"No text for message $m!")
 }

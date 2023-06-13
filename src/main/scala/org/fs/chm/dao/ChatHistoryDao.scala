@@ -6,6 +6,7 @@ import java.util.UUID
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao.Helpers._
 import org.fs.chm.protobuf._
+import org.fs.chm.utility.EntityUtils._
 import org.fs.chm.utility.IoUtils._
 import org.fs.utility.Imports._
 
@@ -227,75 +228,21 @@ case class ChatWithDetails(chat: Chat,
 //
 
 case class RichText(
-    components: Seq[RichText.Element]
+    components: Seq[RichTextElement]
 ) extends Searchable {
-  override val plainSearchableString: String = {
-    val joined = (components map (_.plainSearchableString) mkString " ")
+  val plainSearchableString: String = {
+    val joined = (components map (_.textOrEmptyString) mkString " ")
       .replaceAll("[\\s\\p{Cf}\n]+", " ")
       .trim
     // Adding all links to the end to enable search over hrefs/hidden links too
-    val links = components.collect({ case l: RichText.Link => l.href }).mkString(" ")
+    val links = components.map(_.`val`.link).collect({ case Some(l) => l.href }).mkString(" ")
     joined + links
   }
 }
+
 object RichText {
-  sealed trait Element extends Searchable {
-    def text: String
-  }
-
-  case class Plain(
-      text: String
-  ) extends Element {
-    override val plainSearchableString = text.replaceAll("[\\s\\p{Cf}\n]+", " ")
-  }
-
-  case class Bold(
-      text: String
-  ) extends Element {
-    override val plainSearchableString = text.trim
-  }
-
-  case class Italic(
-      text: String
-  ) extends Element {
-    override val plainSearchableString = text.trim
-  }
-
-  case class Underline(
-      text: String
-  ) extends Element {
-    override val plainSearchableString = text.trim
-  }
-
-  case class Strikethrough(
-      text: String
-  ) extends Element {
-    override val plainSearchableString = text.trim
-  }
-
-  case class Link(
-      /** Empty text would mean that this link is hidden - but it can still be hidden even if it's not */
-      text: String,
-      href: String,
-      /** Some TG chats use text_links with empty/invisible text to be shown as preview but not appear in text */
-      hidden: Boolean
-  ) extends Element {
-    override val plainSearchableString = (text + " " + href).replaceAll("[\\s\\p{Cf}\n]+", " ").trim
-  }
-
-  case class PrefmtInline(
-      text: String
-  ) extends Element {
-    override val plainSearchableString = text.trim
-  }
-
-  case class PrefmtBlock(
-      text: String,
-      languageOption: Option[String]
-  ) extends Element {
-    override val plainSearchableString = text.replaceAll("[\\s\\p{Cf}\n]+", " ")
-  }
-
+  def fromPlainString(s: String): RichText =
+    RichText(Seq(RichTextElement(RichTextElement.Val.Plain(RtePlain(s)))))
 }
 
 //
@@ -402,7 +349,7 @@ object Message {
       })
     }
 
-    override def =~=(that: Message) = that match {
+    override def =~=(that: Message): Boolean = that match {
       case that: Message.Regular =>
         val contentEquals = (this.contentOption, that.contentOption) match {
           case (None, None)               => true
@@ -634,11 +581,39 @@ object Message {
   }
 }
 
-//
-// Content
-//
-
 object Helpers {
+
+  //
+  // Rich Text
+  //
+
+  implicit class ScalaRichRTE(rte: RichTextElement) {
+    def textOption: Option[String] = {
+      if (rte.`val`.isEmpty) {
+        None
+      } else rte.`val`.value match {
+        case el: RtePlain         => el.text.toOption
+        case el: RteBold          => el.text.toOption
+        case el: RteItalic        => el.text.toOption
+        case el: RteUnderline     => el.text.toOption
+        case el: RteStrikethrough => el.text.toOption
+        case el: RteLink          => el.text
+        case el: RtePrefmtInline  => el.text.toOption
+        case el: RtePrefmtBlock   => el.text.toOption
+      }
+    }
+
+    def textOrEmptyString: String =
+      textOption match {
+        case None    => ""
+        case Some(s) => s
+      }
+  }
+
+  //
+  // Content
+  //
+
   implicit class ScalaRichContent(c: Content) {
     def pathFileOption: Option[JFile] = {
       require(hasPath, "No path available!")
