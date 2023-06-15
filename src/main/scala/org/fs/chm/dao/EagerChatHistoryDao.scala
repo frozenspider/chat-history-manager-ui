@@ -9,6 +9,7 @@ import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.PbUuid
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
 
@@ -45,7 +46,7 @@ class EagerChatHistoryDao(
   override def datasetFiles(dsUuid: PbUuid): Set[File] = {
     val dsRoot       = datasetRoot(dsUuid)
     val cwds         = chats(dsUuid)
-    val chatImgFiles = cwds.map(_.chat.imgPath.map(_.toFile(dsRoot))).yieldDefined.toSet
+    val chatImgFiles = cwds.map(_.chat.imgPathOption.map(_.toFile(dsRoot))).yieldDefined.toSet
     val msgFiles = for {
       cwd <- cwds
       m   <- firstMessages(cwd.chat, Int.MaxValue)
@@ -72,7 +73,7 @@ class EagerChatHistoryDao(
   }
 
   private def chatMembers(chat: Chat): Seq[User] = {
-    val me = myself(chat.dsUuid.get)
+    val me = myself(chat.dsUuid)
     me +: (chat.memberIds
       .filter(_ != me.id)
       .map(mId => users1.find(_.id == mId).get)
@@ -143,7 +144,7 @@ class EagerChatHistoryDao(
   }
 
   override def messageOption(chat: Chat, id: MessageSourceId): Option[Message] =
-    chatsWithMessages.get(chat) flatMap (_ find (_.sourceId contains id))
+    chatsWithMessages.get(chat) flatMap (_ find (_.sourceIdOption contains id))
 
   override def messageOptionByInternalId(chat: Chat, id: MessageInternalId): Option[Message] =
     chatsWithMessages.get(chat) flatMap (_ find (_.internalId == id))

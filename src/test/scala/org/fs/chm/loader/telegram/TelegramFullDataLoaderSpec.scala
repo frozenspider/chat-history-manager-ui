@@ -9,6 +9,7 @@ import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.ContentLocation
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.PbUuid
+import org.fs.chm.protobuf.User
 import org.junit.runner.RunWith
 import org.scalatest.funsuite.AnyFunSuite
 import org.slf4s.Logging

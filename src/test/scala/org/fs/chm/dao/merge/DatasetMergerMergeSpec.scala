@@ -15,6 +15,7 @@ import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.ContentFile
 import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.TestUtils._
 import org.junit.runner.RunWith

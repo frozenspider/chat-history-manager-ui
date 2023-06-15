@@ -14,6 +14,7 @@ import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
+import org.fs.chm.protobuf.User
 
 /** Loads messages exported from Samsung GT-S5610 */
 class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
@@ -86,7 +87,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
               )
             }
             val chat = Chat(
-              dsUuid    = Some(dataset.uuid),
+              dsUuid    = dataset.uuid,
               id        = userId,
               name      = user.firstNameOption,
               tpe       = ChatType.Personal,

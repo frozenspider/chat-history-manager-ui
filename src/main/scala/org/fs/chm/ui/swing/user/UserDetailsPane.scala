@@ -6,11 +6,11 @@ import scala.swing.GridBagPanel.Anchor
 import scala.swing.GridBagPanel.Fill
 import scala.swing._
 import scala.swing.event.MouseReleased
-
 import javax.swing.SwingUtilities
 import javax.swing.border.MatteBorder
+
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.Entities.User
+import org.fs.chm.protobuf.User
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.general.field.TextComponent
 import org.fs.chm.ui.swing.general.field.TextOptionComponent

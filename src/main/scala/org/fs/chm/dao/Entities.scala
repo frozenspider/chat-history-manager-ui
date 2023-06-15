@@ -29,36 +29,11 @@ object Entities {
       )
   }
 
-  sealed trait PersonInfo {
-    val firstNameOption: Option[String]
-    val lastNameOption: Option[String]
-    val phoneNumberOption: Option[String]
-
-    lazy val prettyNameOption: Option[String] = {
-      val parts = Seq(firstNameOption, lastNameOption).yieldDefined
-      if (parts.isEmpty) None else Some(parts.mkString(" ").trim)
-    }
-
-    lazy val prettyName: String =
-      prettyNameOption getOrElse Unnamed
-  }
-
-  case class User(
-      dsUuid: PbUuid,
-      /** Unique within a dataset */
-      id: Long,
-      /** If there's no first/last name separation, everything will be in first name */
-      firstNameOption: Option[String],
-      lastNameOption: Option[String],
-      usernameOption: Option[String],
-      phoneNumberOption: Option[String]
-  ) extends PersonInfo
-
   case class ChatWithDetails(chat: Chat,
                              lastMsgOption: Option[Message],
                              /** First element MUST be myself, the rest should be in some fixed order. */
                              members: Seq[User]) {
-    val dsUuid: PbUuid = chat.dsUuid.get
+    val dsUuid: PbUuid = chat.dsUuid
   }
 
 
@@ -121,21 +96,21 @@ object Entities {
     override def practicallyEquals(v1: (ContentSticker, DatasetRoot), v2: (ContentSticker, DatasetRoot)): Boolean = {
       v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
         v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v1._2) &&
-        v1._1.copy(path = None, thumbnailPath = None) == v2._1.copy(path = None, thumbnailPath = None)
+        v1._1.copy(pathOption = None, thumbnailPathOption = None) == v2._1.copy(pathOption = None, thumbnailPathOption = None)
     }
   }
 
   implicit object ContentPhotoPracticallyEquals extends PracticallyEquals[(ContentPhoto, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentPhoto, DatasetRoot), v2: (ContentPhoto, DatasetRoot)): Boolean = {
       v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
-        v1._1.copy(path = None) == v2._1.copy(path = None)
+        v1._1.copy(pathOption = None) == v2._1.copy(pathOption = None)
     }
   }
 
   implicit object ContentVoiceMsgPracticallyEquals extends PracticallyEquals[(ContentVoiceMsg, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentVoiceMsg, DatasetRoot), v2: (ContentVoiceMsg, DatasetRoot)): Boolean = {
       v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
-        v1._1.copy(path = None) == v2._1.copy(path = None)
+        v1._1.copy(pathOption = None) == v2._1.copy(pathOption = None)
     }
   }
 
@@ -143,7 +118,7 @@ object Entities {
     override def practicallyEquals(v1: (ContentVideoMsg, DatasetRoot), v2: (ContentVideoMsg, DatasetRoot)): Boolean = {
       v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
         v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v1._2) &&
-        v1._1.copy(path = None, thumbnailPath = None) == v2._1.copy(path = None, thumbnailPath = None)
+        v1._1.copy(pathOption = None, thumbnailPathOption = None) == v2._1.copy(pathOption = None, thumbnailPathOption = None)
     }
   }
 
@@ -151,7 +126,7 @@ object Entities {
     override def practicallyEquals(v1: (ContentAnimation, DatasetRoot), v2: (ContentAnimation, DatasetRoot)): Boolean = {
       v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
         v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v1._2) &&
-        v1._1.copy(path = None, thumbnailPath = None) == v2._1.copy(path = None, thumbnailPath = None)
+        v1._1.copy(pathOption = None, thumbnailPathOption = None) == v2._1.copy(pathOption = None, thumbnailPathOption = None)
     }
   }
 
@@ -159,7 +134,7 @@ object Entities {
     override def practicallyEquals(v1: (ContentFile, DatasetRoot), v2: (ContentFile, DatasetRoot)): Boolean = {
       v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
         v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v1._2) &&
-        v1._1.copy(path = None, thumbnailPath = None) == v2._1.copy(path = None, thumbnailPath = None)
+        v1._1.copy(pathOption = None, thumbnailPathOption = None) == v2._1.copy(pathOption = None, thumbnailPathOption = None)
     }
   }
 
@@ -178,7 +153,7 @@ object Entities {
   implicit object ContentSharedContactPracticallyEquals extends PracticallyEquals[(ContentSharedContact, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentSharedContact, DatasetRoot), v2: (ContentSharedContact, DatasetRoot)): Boolean = {
       v1._1.vcardFileOption(v1._2) =~= v2._1.vcardFileOption(v1._2) &&
-        v1._1.copy(vcardPath = None) == v2._1.copy(vcardPath = None)
+        v1._1.copy(vcardPathOption = None) == v2._1.copy(vcardPathOption = None)
     }
   }
 
@@ -202,18 +177,18 @@ object Entities {
 
   implicit object MessageRegularPracticallyEquals extends PracticallyEquals[(MessageRegular, DatasetRoot)] {
     override def practicallyEquals(v1: (MessageRegular, DatasetRoot), v2: (MessageRegular, DatasetRoot)): Boolean = {
-      val contentEquals = (v1._1.content, v2._1.content) match {
+      val contentEquals = (v1._1.contentOption, v2._1.contentOption) match {
         case (None, None)           => true
         case (Some(v1c), Some(v2c)) => (v1c, v1._2) =~= (v2c, v2._2)
         case _                      => false
       }
       contentEquals &&
         v1._1.copy(
-          forwardFromName = None,
-          content = None
+          forwardFromNameOption = None,
+          contentOption = None
         ) == v2._1.copy(
-          forwardFromName = None,
-          content = None
+          forwardFromNameOption = None,
+          contentOption = None
         )
     }
   }
@@ -229,7 +204,7 @@ object Entities {
         case (m1: ClearHistory,       m2: ClearHistory)       => m1 == m2
         case (m1: GroupCreate,        m2: GroupCreate)        => m1 == m2
         case (m1: GroupEditTitle,     m2: GroupEditTitle)     => m1 == m2
-        case (m1: GroupEditPhoto,     m2: GroupEditPhoto)     => m1.value.photo.map(_ -> v1._2) =~= m2.value.photo.map(_ -> v2._2)
+        case (m1: GroupEditPhoto,     m2: GroupEditPhoto)     => (m1.value.photo, v1._2) =~= (m2.value.photo, v2._2)
         case (m1: GroupInviteMembers, m2: GroupInviteMembers) => m1 == m2
         case (m1: GroupRemoveMembers, m2: GroupRemoveMembers) => m1 == m2
         case (m1: GroupMigrateFrom,   m2: GroupMigrateFrom)   => m1 == m2
@@ -273,11 +248,20 @@ object Entities {
   //
 
   implicit class ExtendedUser(u: User) {
-    def nameOrUnnamed: String = u.firstNameOption getOrElse Unnamed
+    def firstNameOrUnnamed: String = u.firstNameOption getOrElse Unnamed
+
+    // Same as ExtendedContentSharedContact
+    lazy val prettyNameOption: Option[String] = {
+      val parts = Seq(u.firstNameOption, u.lastNameOption).yieldDefined
+      if (parts.isEmpty) None else Some(parts.mkString(" ").trim)
+    }
+
+    lazy val prettyName: String =
+      prettyNameOption getOrElse Unnamed
   }
 
   implicit class ExtendedChat(c: Chat) {
-    def nameOrUnnamed: String = c.name getOrElse Unnamed
+    def nameOrUnnamed: String = c.nameOption getOrElse Unnamed
   }
 
   //
@@ -288,25 +272,25 @@ object Entities {
     def internalIdTyped: MessageInternalId =
       msg.internalId.asInstanceOf[MessageInternalId]
 
-    def sourceIdTyped: Option[MessageSourceId] =
-      msg.sourceId.map(_.asInstanceOf[MessageSourceId])
+    def sourceIdTypedOption: Option[MessageSourceId] =
+      msg.sourceIdOption.map(_.asInstanceOf[MessageSourceId])
 
     def files(datasetRoot: DatasetRoot): Set[JFile] = {
       val optionsSet: Set[Option[String]] = msg.typed.value match {
         case msgRegular: MessageRegular  =>
-          msgRegular.content match {
+          msgRegular.contentOption match {
             case None => Set.empty
             case Some(content) =>
               content.`val` match {
-                case Content.Val.Sticker(v)       => Set(v.path, v.thumbnailPath)
-                case Content.Val.Photo(v)         => Set(v.path)
-                case Content.Val.VoiceMsg(v)      => Set(v.path)
-                case Content.Val.VideoMsg(v)      => Set(v.path, v.thumbnailPath)
-                case Content.Val.Animation(v)     => Set(v.path, v.thumbnailPath)
-                case Content.Val.File(v)          => Set(v.path, v.thumbnailPath)
+                case Content.Val.Sticker(v)       => Set(v.pathOption, v.thumbnailPathOption)
+                case Content.Val.Photo(v)         => Set(v.pathOption)
+                case Content.Val.VoiceMsg(v)      => Set(v.pathOption)
+                case Content.Val.VideoMsg(v)      => Set(v.pathOption, v.thumbnailPathOption)
+                case Content.Val.Animation(v)     => Set(v.pathOption, v.thumbnailPathOption)
+                case Content.Val.File(v)          => Set(v.pathOption, v.thumbnailPathOption)
                 case Content.Val.Location(_)      => Set.empty
                 case Content.Val.Poll(_)          => Set.empty
-                case Content.Val.SharedContact(v) => Set(v.vcardPath)
+                case Content.Val.SharedContact(v) => Set(v.vcardPathOption)
                 case Content.Val.Empty            => throw new IllegalArgumentException("Empty content!")
               }
           }
@@ -317,7 +301,7 @@ object Entities {
             case _: MessageService.Val.ClearHistory       => Set.empty
             case _: MessageService.Val.GroupCreate        => Set.empty
             case _: MessageService.Val.GroupEditTitle     => Set.empty
-            case m: MessageService.Val.GroupEditPhoto     => Set(m.value.photo.map(_.path)).yieldDefined
+            case m: MessageService.Val.GroupEditPhoto     => Set(m.value.photo.pathOption)
             case _: MessageService.Val.GroupInviteMembers => Set.empty
             case _: MessageService.Val.GroupRemoveMembers => Set.empty
             case _: MessageService.Val.GroupMigrateFrom   => Set.empty
@@ -334,10 +318,10 @@ object Entities {
 
   implicit class ExtendedMessageRegular(msg: MessageRegular) {
     def editTimeOption: Option[DateTime] =
-      msg.editTimestamp map (ts => new DateTime(ts))
+      msg.editTimestampOption map (ts => new DateTime(ts))
 
     def replyToMessageIdTypedOption: Option[MessageSourceId] =
-      msg.replyToMessageId.map(_.asInstanceOf[MessageSourceId])
+      msg.replyToMessageIdOption.map(_.asInstanceOf[MessageSourceId])
   }
 
   implicit class ExtendedMessageServicePinMessage(msg: MessageServicePinMessage) {
@@ -368,9 +352,9 @@ object Entities {
     def makeLink(textOption: Option[String], href: String, hidden: Boolean): RichTextElement = {
       val searchableString = (normalizeSeachableString(textOption getOrElse "") + " " + href).trim
       RichTextElement(RichTextElement.Val.Link(RteLink(
-        text   = textOption,
-        href   = href,
-        hidden = hidden
+        textOption = textOption,
+        href       = href,
+        hidden     = hidden
       )), Some(normalizeSeachableString(searchableString)))
     }
 
@@ -379,7 +363,7 @@ object Entities {
 
     def makePrefmtBlock(text: String, languageOption: Option[String]): RichTextElement =
       RichTextElement(
-        RichTextElement.Val.PrefmtBlock(RtePrefmtBlock(text = text, language = languageOption)),
+        RichTextElement.Val.PrefmtBlock(RtePrefmtBlock(text = text, languageOption = languageOption)),
         Some(normalizeSeachableString(text))
       )
   }
@@ -394,7 +378,7 @@ object Entities {
         case el: RteItalic        => el.text.toOption
         case el: RteUnderline     => el.text.toOption
         case el: RteStrikethrough => el.text.toOption
-        case el: RteLink          => el.text
+        case el: RteLink          => el.textOption
         case el: RtePrefmtInline  => el.text.toOption
         case el: RtePrefmtBlock   => el.text.toOption
       }
@@ -438,35 +422,35 @@ object Entities {
   }
 
   implicit class ExtendedContentSticker(c: ContentSticker) {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.path.map(_.toFile(datasetRoot))
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
 
-    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPath.map(_.toFile(datasetRoot))
+    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
   }
 
   implicit class ExtendedContentPhoto(c: ContentPhoto) {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.path.map(_.toFile(datasetRoot))
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
   }
 
   implicit class ExtendedContentVoiceMsg(c: ContentVoiceMsg) {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.path.map(_.toFile(datasetRoot))
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
   }
 
   implicit class ExtendedContentVideoMsg(c: ContentVideoMsg) {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.path.map(_.toFile(datasetRoot))
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
 
-    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPath.map(_.toFile(datasetRoot))
+    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
   }
 
   implicit class ExtendedContentAnimation(c: ContentAnimation) {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.path.map(_.toFile(datasetRoot))
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
 
-    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPath.map(_.toFile(datasetRoot))
+    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
   }
 
   implicit class ExtendedContentFile(c: ContentFile) {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.path.map(_.toFile(datasetRoot))
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
 
-    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPath.map(_.toFile(datasetRoot))
+    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
   }
 
   implicit class ExtendedContentLocation(c: ContentLocation) {
@@ -476,11 +460,11 @@ object Entities {
   }
 
   implicit class ExtendedContentSharedContact(c: ContentSharedContact) {
-    def vcardFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.vcardPath.map(_.toFile(datasetRoot))
+    def vcardFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.vcardPathOption.map(_.toFile(datasetRoot))
 
-    // TODO: Merge with PersonInfo!
+    // Same as ExtendedUser
     lazy val prettyNameOption: Option[String] = {
-      val parts = Seq(Some(c.firstName), c.lastName).yieldDefined
+      val parts = Seq(Some(c.firstName), c.lastNameOption).yieldDefined
       if (parts.isEmpty) None else Some(parts.mkString(" ").trim)
     }
 

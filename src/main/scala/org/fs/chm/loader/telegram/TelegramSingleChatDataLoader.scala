@@ -12,6 +12,7 @@ import javax.swing.JOptionPane
 import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.PbUuid
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.EntityUtils
 import org.fs.utility.Imports._
 import org.json4s._
@@ -59,7 +60,7 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
   }
 
   protected def chooseMyself(users: Seq[User]): User = {
-    val options = users map (_.nameOrUnnamed)
+    val options = users map (_.prettyName)
     val res = JOptionPane.showOptionDialog(
       null,
       "Choose yourself",

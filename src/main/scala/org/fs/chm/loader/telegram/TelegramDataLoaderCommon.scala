@@ -40,6 +40,7 @@ import org.fs.chm.protobuf.RtePrefmtBlock
 import org.fs.chm.protobuf.RtePrefmtInline
 import org.fs.chm.protobuf.RteStrikethrough
 import org.fs.chm.protobuf.RteUnderline
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
 import org.json4s._
@@ -152,11 +153,11 @@ trait TelegramDataLoaderCommon {
           ))))
         case "edit_group_photo" =>
           Some(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(
-            Some(ContentPhoto(
+            ContentPhoto(
               path     = getFileOpt(jv, "photo", true, rootFile),
               width    = getCheckedField[Int](jv, "width"),
               height   = getCheckedField[Int](jv, "height"),
-            ))
+            )
           ))))
         case "edit_group_title" =>
           Some(MessageService(MessageService.Val.GroupEditTitle(MessageServiceGroupEditTitle(
@@ -458,7 +459,7 @@ trait TelegramDataLoaderCommon {
 
     tracker.ensuringUsage(jv) {
       Chat(
-        dsUuid    = Some(dsUuid),
+        dsUuid    = dsUuid,
         id        = id,
         name      = getStringOpt(jv, "name", true),
         tpe       = tpe,

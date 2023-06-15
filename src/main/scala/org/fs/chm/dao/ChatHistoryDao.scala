@@ -7,6 +7,7 @@ import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.PbUuid
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.LangUtils._
 
 /**
@@ -51,7 +52,7 @@ trait ChatHistoryDao extends AutoCloseable {
    * Message must be present, so the result would contain at least one element.
    */
   final def messagesBefore(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
-    val root = datasetRoot(chat.dsUuid.get)
+    val root = datasetRoot(chat.dsUuid)
     messagesBeforeImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit && (seq.last, root) =~= (msg, root) )
   }
 
@@ -62,7 +63,7 @@ trait ChatHistoryDao extends AutoCloseable {
    * Message must be present, so the result would contain at least one element.
    */
   final def messagesAfter(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
-    val root = datasetRoot(chat.dsUuid.get)
+    val root = datasetRoot(chat.dsUuid)
     messagesAfterImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit && (seq.head, root) =~= (msg, root))
   }
 
@@ -73,7 +74,7 @@ trait ChatHistoryDao extends AutoCloseable {
    * Messages must be present, so the result would contain at least one element (if both are the same message).
    */
   final def messagesBetween(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] = {
-    val root = datasetRoot(chat.dsUuid.get)
+    val root = datasetRoot(chat.dsUuid)
     messagesBetweenImpl(chat, msg1, msg2) ensuring (seq =>
       seq.nonEmpty && (seq.head, root) =~= (msg1, root) && (seq.last, root) =~= (msg2, root))
   }

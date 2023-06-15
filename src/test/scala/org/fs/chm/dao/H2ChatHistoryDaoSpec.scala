@@ -14,6 +14,7 @@ import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.PbUuid
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.TestUtils
@@ -91,8 +92,8 @@ class H2ChatHistoryDaoSpec //
       val h2Chat = h2Cwd.chat
       assert(tgChat === h2Chat)
 
-      val tgRoot = tgDao.datasetRoot(tgChat.dsUuid.get)
-      val h2Root = h2dao.datasetRoot(h2Chat.dsUuid.get)
+      val tgRoot = tgDao.datasetRoot(tgChat.dsUuid)
+      val h2Root = h2dao.datasetRoot(h2Chat.dsUuid)
 
       val allTg = tgDao.lastMessages(tgChat, tgChat.msgCount)
       val allH2 = h2dao.lastMessages(h2Chat, tgChat.msgCount)

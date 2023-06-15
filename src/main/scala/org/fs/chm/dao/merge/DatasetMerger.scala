@@ -11,6 +11,7 @@ import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.IoUtils
 import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
@@ -241,7 +242,7 @@ class DatasetMerger(
         for {
           firstMasterChat <- chatsToMerge.find(_.masterCwdOption.isDefined)
           masterCwd <- firstMasterChat.masterCwdOption
-        } require(masterDao.users(masterCwd.chat.dsUuid.get).size <= usersToMerge.size, "Not enough user merges!")
+        } require(masterDao.users(masterCwd.chat.dsUuid).size <= usersToMerge.size, "Not enough user merges!")
 
         // Users
         val masterSelf = masterDao.myself(masterDs.uuid)
@@ -271,7 +272,7 @@ class DatasetMerger(
                   case _ =>
                     c
                 }
-                (f, c2.copy(dsUuid = Some(newDs.uuid)))
+                (f, c2.copy(dsUuid = newDs.uuid))
             }
           }
           masterDao.insertChat(dsRoot, chat)

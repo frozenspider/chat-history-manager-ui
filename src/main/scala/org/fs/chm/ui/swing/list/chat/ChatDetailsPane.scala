@@ -31,8 +31,8 @@ class ChatDetailsPane(
       ("Messages:", Some(cwd.chat.msgCount.toString)),
       ("", Some("")),
       ("ID:", Some(cwd.chat.id.toString)),
-      ("Dataset ID:", Some(cwd.chat.dsUuid.get.value)),
-      ("Dataset:", Some(dao.datasets.find(_.uuid == cwd.chat.dsUuid.get).get.alias)),
+      ("Dataset ID:", Some(cwd.chat.dsUuid.value)),
+      ("Dataset:", Some(dao.datasets.find(_.uuid == cwd.chat.dsUuid).get.alias)),
       ("Database:", Some(dao.name))
     ).collect {
       case ((x, Some(y))) => (x, y)

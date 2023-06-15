@@ -2,6 +2,7 @@ package org.fs.chm.dao.merge
 
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.TestUtils._
 
 object DatasetMergerHelper {

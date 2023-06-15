@@ -8,6 +8,7 @@ import scala.collection.immutable.ListMap
 import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.PbUuid
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.PerfUtils._
 import org.fs.utility.Imports._
 import org.json4s._

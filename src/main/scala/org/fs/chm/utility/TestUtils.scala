@@ -17,6 +17,7 @@ import org.fs.chm.protobuf.ContentPoll
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
 import org.fs.chm.protobuf.PbUuid
+import org.fs.chm.protobuf.User
 
 /**
  * Utility stuff used for testing, both automatically and manually
@@ -40,7 +41,7 @@ object TestUtils {
   def createGroupChat(dsUuid: PbUuid, idx: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat = {
     require(memberIds.size >= 2)
     Chat(
-      dsUuid    = Some(dsUuid),
+      dsUuid    = dsUuid,
       id        = idx,
       name      = Some("Chat " + nameSuffix),
       tpe       = ChatType.PrivateGroup,
@@ -53,7 +54,7 @@ object TestUtils {
   def createPersonalChat(dsUuid: PbUuid, idx: Int, user: User, memberIds: Iterable[Long], messagesSize: Int): Chat = {
     require(memberIds.size == 2)
     Chat(
-      dsUuid    = Some(dsUuid),
+      dsUuid    = dsUuid,
       id        = idx,
       name      = user.prettyNameOption,
       tpe       = ChatType.Personal,
@@ -118,7 +119,7 @@ object TestUtils {
       myself1      = users1.head,
       users1       = users1,
       _chatsWithMessages = chatsWithMsgs.map {
-        case (c, ms) => (c.copy(dsUuid = Some(ds.uuid)) -> ms.map(amend2).toIndexedSeq)
+        case (c, ms) => (c.copy(dsUuid = ds.uuid) -> ms.map(amend2).toIndexedSeq)
       }
     ) with EagerMutableDaoTrait
   }

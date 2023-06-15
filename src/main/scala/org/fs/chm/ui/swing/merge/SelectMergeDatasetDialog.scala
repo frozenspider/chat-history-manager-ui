@@ -140,7 +140,7 @@ private class MergeDatasetCellRenderer extends DefaultTableCellRenderer {
       setFocusable(false)
       setEnabled(false)
     case ds: Dataset =>
-      setText("    " + ds.alias + " (" + ds.uuid.toString.toLowerCase + ")")
+      setText("    " + ds.alias + " (" + ds.uuid.value + ")")
       setFocusable(true)
       setEnabled(true)
   }

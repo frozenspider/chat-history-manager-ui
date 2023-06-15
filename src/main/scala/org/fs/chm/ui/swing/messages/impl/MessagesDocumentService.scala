@@ -251,9 +251,9 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
     private def renderEditPhotoMessage(sm: MessageServiceGroupEditPhoto, dsRoot: DatasetRoot) = {
       val image = renderImage(
-        sm.photo flatMap (_.pathFileOption(dsRoot)),
-        sm.photo map (_.width),
-        sm.photo map (_.height),
+        sm.photo.pathFileOption(dsRoot),
+        Some(sm.photo.width),
+        Some(sm.photo.height),
         None, "Photo")
       s"Changed group photo<br>$image"
     }

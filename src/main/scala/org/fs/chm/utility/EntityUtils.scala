@@ -1,7 +1,7 @@
 package org.fs.chm.utility
 
 import org.fs.chm.dao.Entities._
-import org.fs.chm.dao._
+import org.fs.chm.protobuf.User
 
 object EntityUtils {
   def groupById[T: WithId](cs: Seq[T]): Map[Long, T] = {
