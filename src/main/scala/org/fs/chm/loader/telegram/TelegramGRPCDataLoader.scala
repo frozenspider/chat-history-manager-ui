@@ -1,12 +1,15 @@
 package org.fs.chm.loader.telegram
 
-import io.grpc.{ManagedChannel, ManagedChannelBuilder}
-import org.fs.chm.dao.EagerChatHistoryDao
-import org.fs.chm.protobuf._
-import org.fs.utility.StopWatch
 import java.io.{File => JFile}
 
 import scala.collection.immutable.ListMap
+
+import io.grpc.ManagedChannel
+import io.grpc.ManagedChannelBuilder
+import org.fs.chm.dao.EagerChatHistoryDao
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf._
+import org.fs.utility.StopWatch
 
 class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
   private val channel: ManagedChannel = ManagedChannelBuilder
@@ -28,7 +31,15 @@ class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
       val root = new JFile(response.rootFile).getAbsoluteFile
       require(root.exists, s"Dataset root ${root} does not exist!")
       val chatsWithMessagesLM: ListMap[Chat, IndexedSeq[Message]] =
-        ListMap.from(response.cwm.map(cwm => cwm.chat -> cwm.messages.toIndexedSeq))
+        ListMap.from(response.cwm.map(cwm => cwm.chat -> cwm.messages.map { m =>
+          val textWithSs = m.text.map(rte => {
+            rte.copy(searchableString = Some(makeSearchableString(rte)))
+          })
+          m.copy(
+            searchableString = Some(makeSearchableString(textWithSs, m.typed)),
+            text             = textWithSs
+          )
+        }.toIndexedSeq))
       new EagerChatHistoryDao(
         name               = "Telegram export data from " + root.getName,
         _dataRootFile      = root,

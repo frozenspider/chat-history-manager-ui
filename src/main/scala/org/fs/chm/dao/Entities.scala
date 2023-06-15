@@ -43,6 +43,20 @@ object Entities {
       sourceType = srcType
     )
 
+  /** Should be kept in sync with RichTet.make*! */
+  def makeSearchableString(rte: RichTextElement): String = {
+    rte.`val`.value match {
+      case RtePlain(text, _)                 => text
+      case RteBold(text, _)                  => text
+      case RteItalic(text, _)                => text
+      case RteUnderline(text, _)             => text
+      case RteStrikethrough(text, _)         => text
+      case RteLink(textOpt, href, hiddem, _) => (textOpt getOrElse "") + href
+      case RtePrefmtInline(text, _)          => text
+      case RtePrefmtBlock(text, langOpt, _)  => text
+    }
+  }
+
   def makeSearchableString(components: Seq[RichTextElement], typed: Message.Typed): String = {
     val joinedText: String = (components.map(_.searchableString).yieldDefined mkString " ")
 
@@ -317,6 +331,7 @@ object Entities {
   // Rich Text
   //
 
+  /** Should be kept in sync with makeSearchableString! */
   object RichText {
     def makePlain(text: String): RichTextElement =
       RichTextElement(RichTextElement.Val.Plain(RtePlain(text)), Some(normalizeSeachableString(text)))
