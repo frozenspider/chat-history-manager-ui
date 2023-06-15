@@ -4,43 +4,7 @@ import java.io.File
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao.Entities._
-import org.fs.chm.protobuf.Chat
-import org.fs.chm.protobuf.ChatType
-import org.fs.chm.protobuf.Content
-import org.fs.chm.protobuf.ContentAnimation
-import org.fs.chm.protobuf.ContentFile
-import org.fs.chm.protobuf.ContentLocation
-import org.fs.chm.protobuf.ContentPhoto
-import org.fs.chm.protobuf.ContentPoll
-import org.fs.chm.protobuf.ContentSharedContact
-import org.fs.chm.protobuf.ContentSticker
-import org.fs.chm.protobuf.ContentVideoMsg
-import org.fs.chm.protobuf.ContentVoiceMsg
-import org.fs.chm.protobuf.Message
-import org.fs.chm.protobuf.MessageRegular
-import org.fs.chm.protobuf.MessageService
-import org.fs.chm.protobuf.MessageServiceClearHistory
-import org.fs.chm.protobuf.MessageServiceGroupCall
-import org.fs.chm.protobuf.MessageServiceGroupCreate
-import org.fs.chm.protobuf.MessageServiceGroupEditPhoto
-import org.fs.chm.protobuf.MessageServiceGroupEditTitle
-import org.fs.chm.protobuf.MessageServiceGroupInviteMembers
-import org.fs.chm.protobuf.MessageServiceGroupMigrateFrom
-import org.fs.chm.protobuf.MessageServiceGroupMigrateTo
-import org.fs.chm.protobuf.MessageServiceGroupRemoveMembers
-import org.fs.chm.protobuf.MessageServicePhoneCall
-import org.fs.chm.protobuf.MessageServicePinMessage
-import org.fs.chm.protobuf.PbUuid
-import org.fs.chm.protobuf.RichTextElement
-import org.fs.chm.protobuf.RteBold
-import org.fs.chm.protobuf.RteItalic
-import org.fs.chm.protobuf.RteLink
-import org.fs.chm.protobuf.RtePlain
-import org.fs.chm.protobuf.RtePrefmtBlock
-import org.fs.chm.protobuf.RtePrefmtInline
-import org.fs.chm.protobuf.RteStrikethrough
-import org.fs.chm.protobuf.RteUnderline
-import org.fs.chm.protobuf.User
+import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
 import org.json4s._
@@ -109,14 +73,14 @@ trait TelegramDataLoaderCommon {
       tracker.markUsed("text_entities")
       val text = RichTextParser.parseRichText(jv)
       val typed = Message.Typed.Regular(MessageRegular(
-        editTimestamp     = stringOptToDateTimeOpt(getStringOpt(jv, "edited", false)).map(_.getMillis),
-        forwardFromName   = getStringOpt(jv, "forwarded_from", false),
-        replyToMessageId  = getFieldOpt[MessageSourceId](jv, "reply_to_message_id", false),
-        content           = ContentParser.parseContentOption(jv, rootFile),
+        editTimestampOption    = stringOptToDateTimeOpt(getStringOpt(jv, "edited", false)).map(_.getMillis),
+        forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
+        replyToMessageIdOption = getFieldOpt[MessageSourceId](jv, "reply_to_message_id", false),
+        contentOption          = ContentParser.parseContentOption(jv, rootFile),
       ))
       Message(
         internalId       = NoInternalId,
-        sourceId         = Some(getCheckedField[MessageSourceId](jv, "id")),
+        sourceIdOption   = Some(getCheckedField[MessageSourceId](jv, "id")),
         timestamp        = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get.getMillis,
         fromId           = getUserId(jv, "from_id"),
         text             = text,
@@ -131,14 +95,14 @@ trait TelegramDataLoaderCommon {
       val serviceOption: Option[MessageService] =  getCheckedField[String](jv, "action") match {
         case "phone_call" =>
           Some(MessageService(MessageService.Val.PhoneCall(MessageServicePhoneCall(
-            durationSec   = getFieldOpt[Int](jv, "duration_seconds", false),
-            discardReason = getStringOpt(jv, "discard_reason", false),
+            durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
+            discardReasonOption = getStringOpt(jv, "discard_reason", false),
           ))))
         case "group_call" =>
           // Treated the same as phone_call
           Some(MessageService(MessageService.Val.PhoneCall(MessageServicePhoneCall(
-            durationSec   = None,
-            discardReason = None,
+            durationSecOption   = None,
+            discardReasonOption = None,
           ))))
         case "pin_message" =>
           Some(MessageService(MessageService.Val.PinMessage(MessageServicePinMessage(
@@ -154,9 +118,9 @@ trait TelegramDataLoaderCommon {
         case "edit_group_photo" =>
           Some(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(
             ContentPhoto(
-              path     = getFileOpt(jv, "photo", true, rootFile),
-              width    = getCheckedField[Int](jv, "width"),
-              height   = getCheckedField[Int](jv, "height"),
+              pathOption = getFileOpt(jv, "photo", true, rootFile),
+              width      = getCheckedField[Int](jv, "width"),
+              height     = getCheckedField[Int](jv, "height"),
             )
           ))))
         case "edit_group_title" =>
@@ -200,7 +164,7 @@ trait TelegramDataLoaderCommon {
         val typed = Message.Typed.Service(service)
         Message(
           internalId       = NoInternalId,
-          sourceId         = Some(getCheckedField[MessageSourceId](jv, "id")),
+          sourceIdOption   = Some(getCheckedField[MessageSourceId](jv, "id")),
           timestamp        = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get.getMillis,
           fromId           = getUserId(jv, "actor_id"),
           text             = text,
@@ -350,75 +314,75 @@ trait TelegramDataLoaderCommon {
 
     private def parseSticker(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Val.Sticker = {
       Content.Val.Sticker(ContentSticker(
-        path          = getRelativePathOpt(jv, "file", true, rootFile),
-        thumbnailPath = getRelativePathOpt(jv, "thumbnail", true, rootFile),
-        emoji         = getStringOpt(jv, "sticker_emoji", false),
-        width         = getCheckedField[Int](jv, "width"),
-        height        = getCheckedField[Int](jv, "height")
+        pathOption          = getRelativePathOpt(jv, "file", true, rootFile),
+        thumbnailPathOption = getRelativePathOpt(jv, "thumbnail", true, rootFile),
+        emojiOption         = getStringOpt(jv, "sticker_emoji", false),
+        width               = getCheckedField[Int](jv, "width"),
+        height              = getCheckedField[Int](jv, "height")
       ))
     }
 
     private def parsePhoto(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Val.Photo = {
       Content.Val.Photo(ContentPhoto(
-        path   = getRelativePathOpt(jv, "photo", true, rootFile),
-        width  = getCheckedField[Int](jv, "width"),
-        height = getCheckedField[Int](jv, "height"),
+        pathOption = getRelativePathOpt(jv, "photo", true, rootFile),
+        width      = getCheckedField[Int](jv, "width"),
+        height     = getCheckedField[Int](jv, "height"),
       ))
     }
 
     private def parseAnimation(jv: JValue, rootFile: File)(
         implicit tracker: FieldUsageTracker): Content.Val.Animation = {
       Content.Val.Animation(ContentAnimation(
-        path          = getRelativePathOpt(jv, "file", true, rootFile),
-        thumbnailPath = getRelativePathOpt(jv, "thumbnail", false, rootFile),
-        mimeType      = getCheckedField[String](jv, "mime_type"),
-        durationSec   = getFieldOpt[Int](jv, "duration_seconds", false),
-        width         = getCheckedField[Int](jv, "width"),
-        height        = getCheckedField[Int](jv, "height"),
+        pathOption          = getRelativePathOpt(jv, "file", true, rootFile),
+        thumbnailPathOption = getRelativePathOpt(jv, "thumbnail", false, rootFile),
+        mimeType            = getCheckedField[String](jv, "mime_type"),
+        durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
+        width               = getCheckedField[Int](jv, "width"),
+        height              = getCheckedField[Int](jv, "height"),
       ))
     }
 
     private def parseVoiceMsg(jv: JValue, rootFile: File)(
         implicit tracker: FieldUsageTracker): Content.Val.VoiceMsg = {
       Content.Val.VoiceMsg(ContentVoiceMsg(
-        path        = getRelativePathOpt(jv, "file", true, rootFile),
-        mimeType    = getCheckedField[String](jv, "mime_type"),
-        durationSec = getFieldOpt[Int](jv, "duration_seconds", false),
+        pathOption        = getRelativePathOpt(jv, "file", true, rootFile),
+        mimeType          = getCheckedField[String](jv, "mime_type"),
+        durationSecOption = getFieldOpt[Int](jv, "duration_seconds", false),
       ))
     }
 
     private def parseVideoMsg(jv: JValue, rootFile: File)(
         implicit tracker: FieldUsageTracker): Content.Val.VideoMsg = {
       Content.Val.VideoMsg(ContentVideoMsg(
-        path          = getRelativePathOpt(jv, "file", true, rootFile),
-        thumbnailPath = getRelativePathOpt(jv, "thumbnail", true, rootFile),
-        mimeType      = getCheckedField[String](jv, "mime_type"),
-        durationSec   = getFieldOpt[Int](jv, "duration_seconds", false),
-        width         = getCheckedField[Int](jv, "width"),
-        height        = getCheckedField[Int](jv, "height"),
+        pathOption          = getRelativePathOpt(jv, "file", true, rootFile),
+        thumbnailPathOption = getRelativePathOpt(jv, "thumbnail", true, rootFile),
+        mimeType            = getCheckedField[String](jv, "mime_type"),
+        durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
+        width               = getCheckedField[Int](jv, "width"),
+        height              = getCheckedField[Int](jv, "height"),
       ))
     }
 
     private def parseFile(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Val.File = {
       Content.Val.File(ContentFile(
-        path          = getRelativePathOpt(jv, "file", true, rootFile),
-        thumbnailPath = getRelativePathOpt(jv, "thumbnail", false, rootFile),
-        mimeType      = getStringOpt(jv, "mime_type", true),
-        title         = getStringOpt(jv, "title", false) getOrElse "<File>",
-        performer     = getStringOpt(jv, "performer", false),
-        durationSec   = getFieldOpt[Int](jv, "duration_seconds", false),
-        width         = getFieldOpt[Int](jv, "width", false),
-        height        = getFieldOpt[Int](jv, "height", false)
+        pathOption          = getRelativePathOpt(jv, "file", true, rootFile),
+        thumbnailPathOption = getRelativePathOpt(jv, "thumbnail", false, rootFile),
+        mimeTypeOption      = getStringOpt(jv, "mime_type", true),
+        title               = getStringOpt(jv, "title", false) getOrElse "<File>",
+        performerOption     = getStringOpt(jv, "performer", false),
+        durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
+        widthOption         = getFieldOpt[Int](jv, "width", false),
+        heightOption        = getFieldOpt[Int](jv, "height", false)
       ))
     }
 
     private def parseLocation(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Val.Location = {
       Content.Val.Location(ContentLocation(
-        title       = getStringOpt(jv, "place_name", false),
-        address     = getStringOpt(jv, "address", false),
-        latStr      = getCheckedField[String](jv, "location_information", "latitude"),
-        lonStr      = getCheckedField[String](jv, "location_information", "longitude"),
-        durationSec = getFieldOpt[Int](jv, "live_location_period_seconds", false)
+        titleOption       = getStringOpt(jv, "place_name", false),
+        addressOption     = getStringOpt(jv, "address", false),
+        latStr            = getCheckedField[String](jv, "location_information", "latitude"),
+        lonStr            = getCheckedField[String](jv, "location_information", "longitude"),
+        durationSecOption = getFieldOpt[Int](jv, "live_location_period_seconds", false)
       ))
     }
 
@@ -432,10 +396,10 @@ trait TelegramDataLoaderCommon {
         implicit tracker: FieldUsageTracker): Content.Val.SharedContact = {
       val ci = getRawField(jv, "contact_information", true)
       Content.Val.SharedContact(ContentSharedContact(
-        firstName   = getCheckedField[String](ci, "first_name"),
-        lastName    = getStringOpt(ci, "last_name", true),
-        phoneNumber = getStringOpt(ci, "phone_number", true),
-        vcardPath   = getRelativePathOpt(jv, "contact_vcard", false, rootFile)
+        firstName         = getCheckedField[String](ci, "first_name"),
+        lastNameOption    = getStringOpt(ci, "last_name", true),
+        phoneNumberOption = getStringOpt(ci, "phone_number", true),
+        vcardPathOption   = getRelativePathOpt(jv, "contact_vcard", false, rootFile)
       ))
     }
   }
@@ -459,13 +423,13 @@ trait TelegramDataLoaderCommon {
 
     tracker.ensuringUsage(jv) {
       Chat(
-        dsUuid    = dsUuid,
-        id        = id,
-        name      = getStringOpt(jv, "name", true),
-        tpe       = tpe,
-        imgPath   = None,
-        memberIds = memberIds.toSeq,
-        msgCount  = msgCount
+        dsUuid        = dsUuid,
+        id            = id,
+        nameOption    = getStringOpt(jv, "name", true),
+        tpe           = tpe,
+        imgPathOption = None,
+        memberIds     = memberIds.toSeq,
+        msgCount      = msgCount
       )
     }
   }

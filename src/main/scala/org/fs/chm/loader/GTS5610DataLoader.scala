@@ -12,6 +12,7 @@ import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.ChatType
+import org.fs.chm.protobuf.Dataset
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
 import org.fs.chm.protobuf.User
@@ -40,7 +41,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
     }
     val vmsgs = nameWithSrcs map { case (name, src) => parseVmessage(name, src) }
 
-    val dataset = Dataset.createDefault("GT-S5610", "samsung-gt-s5610")
+    val dataset = createDataset("GT-S5610", "samsung-gt-s5610")
 
     val myself = User(
       dsUuid             = dataset.uuid,
@@ -73,27 +74,27 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
             val msgs: IndexedSeq[Message] = vmsgs.toIndexedSeq map { vmsg =>
               Message(
                 internalId       = NoInternalId,
-                sourceId         = None,
+                sourceIdOption   = None,
                 timestamp        = vmsg.dateTime.getMillis,
                 fromId           = userId,
                 text             = Seq(RichText.makePlain(vmsg.text)),
                 searchableString = Some(normalizeSeachableString(vmsg.text)),
                 typed            = Message.Typed.Regular(MessageRegular(
-                  editTimestamp    = None,
-                  forwardFromName  = None,
-                  replyToMessageId = None,
-                  content          = None
+                  editTimestampOption    = None,
+                  forwardFromNameOption  = None,
+                  replyToMessageIdOption = None,
+                  contentOption          = None
                 ))
               )
             }
             val chat = Chat(
-              dsUuid    = dataset.uuid,
-              id        = userId,
-              name      = user.firstNameOption,
-              tpe       = ChatType.Personal,
-              imgPath   = None,
-              memberIds = Seq(myself, user).map(_.id),
-              msgCount  = msgs.size
+              dsUuid        = dataset.uuid,
+              id            = userId,
+              nameOption    = user.firstNameOption,
+              tpe           = ChatType.Personal,
+              imgPathOption = None,
+              memberIds     = Seq(myself, user).map(_.id),
+              msgCount      = msgs.size
             )
             user -> (chat, msgs)
         }

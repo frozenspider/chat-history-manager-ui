@@ -8,6 +8,7 @@ import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.ContentLocation
+import org.fs.chm.protobuf.Dataset
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
 import org.fs.chm.protobuf.MessageService
@@ -248,7 +249,7 @@ object MessagesAreaContainer {
           ))))
           Message(
             internalId       = NoInternalId,
-            sourceId         = Some(1L.asInstanceOf[MessageSourceId]),
+            sourceIdOption   = Some(1L.asInstanceOf[MessageSourceId]),
             timestamp        = baseDate.plusMinutes(1).getMillis,
             fromId           = users.head.id,
             text             = text,
@@ -258,22 +259,22 @@ object MessagesAreaContainer {
         },
         {
           val typed = Message.Typed.Regular(MessageRegular(
-            editTimestamp    = Some(baseDate.plusMinutes(2).plusSeconds(5).getMillis),
-            forwardFromName  = Some("u" + users.head.id),
-            replyToMessageId = Some(1L.asInstanceOf[MessageSourceId]),
-            content = Some(
+            editTimestampOption    = Some(baseDate.plusMinutes(2).plusSeconds(5).getMillis),
+            forwardFromNameOption  = Some("u" + users.head.id),
+            replyToMessageIdOption = Some(1L.asInstanceOf[MessageSourceId]),
+            contentOption          = Some(
               Content(Content.Val.Location(ContentLocation(
-                title       = Some("My Brand New Place"),
-                address     = Some("1 Caesar Ave"),
-                latStr      = "11.11111",
-                lonStr      = "22.22222",
-                durationSec = Some(5)
+                titleOption       = Some("My Brand New Place"),
+                addressOption     = Some("1 Caesar Ave"),
+                latStr            = "11.11111",
+                lonStr            = "22.22222",
+                durationSecOption = Some(5)
               ))))
           ))
           val text = Seq(RichText.makePlain(s"Sharing my location"))
           Message(
             internalId       = NoInternalId,
-            sourceId         = Some(2L.asInstanceOf[MessageSourceId]),
+            sourceIdOption   = Some(2L.asInstanceOf[MessageSourceId]),
             timestamp        = baseDate.plusMinutes(2).getMillis,
             fromId           = users.last.id,
             text             = text,

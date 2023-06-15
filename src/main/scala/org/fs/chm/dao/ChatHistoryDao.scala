@@ -5,6 +5,7 @@ import java.io.{File => JFile}
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.Dataset
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.PbUuid
 import org.fs.chm.protobuf.User

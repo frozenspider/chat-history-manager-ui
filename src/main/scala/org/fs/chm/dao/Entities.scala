@@ -8,39 +8,6 @@ import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
 
 object Entities {
-  case class Dataset(
-      uuid: PbUuid,
-      alias: String,
-      sourceType: String
-  ) {
-    override def equals(that: Any): Boolean = that match {
-      case that: Dataset => this.uuid == that.uuid
-      case _             => false
-    }
-    override def hashCode: Int = this.uuid.hashCode
-  }
-
-  object Dataset {
-    def createDefault(srcAlias: String, srcType: String): Dataset =
-      Dataset(
-        uuid       = randomUuid,
-        alias      = s"${srcAlias} data loaded @ " + DateTime.now().toString("yyyy-MM-dd"),
-        sourceType = srcType
-      )
-  }
-
-  case class ChatWithDetails(chat: Chat,
-                             lastMsgOption: Option[Message],
-                             /** First element MUST be myself, the rest should be in some fixed order. */
-                             members: Seq[User]) {
-    val dsUuid: PbUuid = chat.dsUuid
-  }
-
-
-
-
-
-
 
   sealed trait InternalIdTag
   type MessageInternalId = Long with InternalIdTag
@@ -51,6 +18,14 @@ object Entities {
   sealed trait DatasetRootTag
   type DatasetRoot = JFile with DatasetRootTag
 
+  case class ChatWithDetails(chat: Chat,
+                             lastMsgOption: Option[Message],
+
+                             /** First element MUST be myself, the rest should be in some fixed order. */
+                             members: Seq[User]) {
+    val dsUuid: PbUuid = chat.dsUuid
+  }
+
   val NoInternalId: MessageInternalId = -1L.asInstanceOf[MessageInternalId]
 
   val Unnamed = "[unnamed]"
@@ -60,6 +35,13 @@ object Entities {
 
   def randomUuid: PbUuid =
     fromJavaUuid(java.util.UUID.randomUUID)
+
+  def createDataset(srcAlias: String, srcType: String): Dataset =
+    Dataset(
+      uuid = randomUuid,
+      alias = s"${srcAlias} data loaded @ " + DateTime.now().toString("yyyy-MM-dd"),
+      sourceType = srcType
+    )
 
   def makeSearchableString(components: Seq[RichTextElement], typed: Message.Typed): String = {
     val joinedText: String = (components.map(_.searchableString).yieldDefined mkString " ")

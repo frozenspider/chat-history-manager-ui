@@ -14,6 +14,7 @@ import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.ContentPoll
+import org.fs.chm.protobuf.Dataset
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
 import org.fs.chm.protobuf.PbUuid

@@ -19,43 +19,7 @@ import doobie.free.connection.ConnectionOp
 import doobie.h2.implicits._
 import doobie.implicits._
 import org.fs.chm.dao.Entities._
-import org.fs.chm.protobuf.Chat
-import org.fs.chm.protobuf.ChatType
-import org.fs.chm.protobuf.Content
-import org.fs.chm.protobuf.ContentAnimation
-import org.fs.chm.protobuf.ContentFile
-import org.fs.chm.protobuf.ContentLocation
-import org.fs.chm.protobuf.ContentPhoto
-import org.fs.chm.protobuf.ContentPoll
-import org.fs.chm.protobuf.ContentSharedContact
-import org.fs.chm.protobuf.ContentSticker
-import org.fs.chm.protobuf.ContentVideoMsg
-import org.fs.chm.protobuf.ContentVoiceMsg
-import org.fs.chm.protobuf.Message
-import org.fs.chm.protobuf.MessageRegular
-import org.fs.chm.protobuf.MessageService
-import org.fs.chm.protobuf.MessageServiceClearHistory
-import org.fs.chm.protobuf.MessageServiceGroupCall
-import org.fs.chm.protobuf.MessageServiceGroupCreate
-import org.fs.chm.protobuf.MessageServiceGroupEditPhoto
-import org.fs.chm.protobuf.MessageServiceGroupEditTitle
-import org.fs.chm.protobuf.MessageServiceGroupInviteMembers
-import org.fs.chm.protobuf.MessageServiceGroupMigrateFrom
-import org.fs.chm.protobuf.MessageServiceGroupMigrateTo
-import org.fs.chm.protobuf.MessageServiceGroupRemoveMembers
-import org.fs.chm.protobuf.MessageServicePhoneCall
-import org.fs.chm.protobuf.MessageServicePinMessage
-import org.fs.chm.protobuf.PbUuid
-import org.fs.chm.protobuf.RichTextElement
-import org.fs.chm.protobuf.RteBold
-import org.fs.chm.protobuf.RteItalic
-import org.fs.chm.protobuf.RteLink
-import org.fs.chm.protobuf.RtePlain
-import org.fs.chm.protobuf.RtePrefmtBlock
-import org.fs.chm.protobuf.RtePrefmtInline
-import org.fs.chm.protobuf.RteStrikethrough
-import org.fs.chm.protobuf.RteUnderline
-import org.fs.chm.protobuf.User
+import org.fs.chm.protobuf._
 import org.fs.chm.utility.IoUtils
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.Logging
@@ -1549,6 +1513,28 @@ object H2ChatHistoryDao {
       lastNameOption    = u.lastNameOption,
       usernameOption    = u.usernameOption,
       phoneNumberOption = u.phoneNumberOption
+    )
+  }
+
+  private case class DatasetMapping(
+    uuid      : PbUuid,
+    alias     : String,
+    sourceType: String
+  )
+
+  implicit val datasetRead: Read[Dataset] = Read[DatasetMapping].map { dm =>
+    Dataset(
+      uuid       = dm.uuid,
+      alias      = dm.alias,
+      sourceType = dm.sourceType,
+    )
+  }
+
+  implicit val datasetWrite: Write[Dataset] = Write[DatasetMapping].contramap { d =>
+    DatasetMapping(
+      uuid       = d.uuid,
+      alias      = d.alias,
+      sourceType = d.sourceType,
     )
   }
 

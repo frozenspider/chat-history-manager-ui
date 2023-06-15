@@ -8,6 +8,7 @@ import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.Dataset
 import org.fs.chm.protobuf.User
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._

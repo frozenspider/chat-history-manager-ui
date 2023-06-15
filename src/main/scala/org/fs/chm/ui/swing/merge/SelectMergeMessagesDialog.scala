@@ -11,8 +11,6 @@ import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger.MessagesMergeOption
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Message
-import org.fs.chm.protobuf.RichTextElement
-import org.fs.chm.protobuf.RtePlain
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer

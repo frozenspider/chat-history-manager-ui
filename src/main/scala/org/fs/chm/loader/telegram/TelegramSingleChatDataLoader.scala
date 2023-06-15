@@ -33,7 +33,7 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
       throw new FileNotFoundException("result.json not found in " + rootFile.getAbsolutePath)
     }
 
-    val dataset = Dataset.createDefault("Telegram", "telegram")
+    val dataset = createDataset("Telegram", "telegram")
 
     val parsed = JsonMethods.parse(resultJsonFile)
 

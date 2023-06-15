@@ -9,7 +9,7 @@ import javax.swing.SwingUtilities
 import javax.swing.border.MatteBorder
 
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.Entities.Dataset
+import org.fs.chm.protobuf.Dataset
 import org.fs.chm.ui.swing.general.SwingUtils._
 
 class DatasetItem[I <: Panel](

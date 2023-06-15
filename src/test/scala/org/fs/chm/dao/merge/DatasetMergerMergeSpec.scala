@@ -11,11 +11,7 @@ import org.fs.chm.WithH2Dao
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger._
-import org.fs.chm.protobuf.Chat
-import org.fs.chm.protobuf.Content
-import org.fs.chm.protobuf.ContentFile
-import org.fs.chm.protobuf.Message
-import org.fs.chm.protobuf.User
+import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.TestUtils._
 import org.junit.runner.RunWith
