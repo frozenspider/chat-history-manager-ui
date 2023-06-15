@@ -40,6 +40,9 @@ class EagerChatHistoryDao(
     }
   }
 
+  // Sanity check: all chat members should have users.
+  _chatsWithMessages.keys.foreach(c => chatMembers(c))
+
   override def datasets: Seq[Dataset] = Seq(dataset)
 
   override def datasetRoot(dsUuid: PbUuid): DatasetRoot = _dataRootFile.getAbsoluteFile.asInstanceOf[DatasetRoot]
@@ -77,7 +80,7 @@ class EagerChatHistoryDao(
     val me = myself(chat.dsUuid)
     me +: (chat.memberIds
       .filter(_ != me.id)
-      .map(mId => users1.find(_.id == mId).get)
+      .map(mId => users1.find(_.id == mId).getOrElse(throw new IllegalStateException(s"No member with id ${mId} found for chat ${chat}")))
       .toSeq
       .sortBy(_.id))
   }

@@ -156,11 +156,11 @@ object SelectMergeChatsDialog {
       val dataPathRoot = Files.createTempDirectory(null).toFile
       dataPathRoot.deleteOnExit()
       new EagerChatHistoryDao(
-        name = "Dao",
-        _dataRootFile = dataPathRoot,
-        dataset = ds,
-        myself1 = users.head,
-        users1 = users,
+        name               = "Dao",
+        _dataRootFile      = dataPathRoot,
+        dataset            = ds,
+        myself1            = users.head,
+        users1             = users,
         _chatsWithMessages = ListMap(chats.map(c => (c, IndexedSeq.empty)): _*)
       ) with EagerMutableDaoTrait
     }

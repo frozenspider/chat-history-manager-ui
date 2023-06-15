@@ -114,11 +114,11 @@ object TestUtils {
     dataPathRoot.deleteOnExit()
     val amend2 = amendMessage.curried(dataPathRoot)
     new EagerChatHistoryDao(
-      name         = "Dao " + nameSuffix,
-      _dataRootFile = dataPathRoot,
-      dataset      = ds,
-      myself1      = users1.head,
-      users1       = users1,
+      name               = "Dao " + nameSuffix,
+      _dataRootFile      = dataPathRoot,
+      dataset            = ds,
+      myself1            = users1.head,
+      users1             = users1,
       _chatsWithMessages = chatsWithMsgs.map {
         case (c, ms) => (c.copy(dsUuid = ds.uuid) -> ms.map(amend2).toIndexedSeq)
       }
