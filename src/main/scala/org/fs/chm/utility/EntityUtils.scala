@@ -20,7 +20,4 @@ object EntityUtils {
   implicit object UserWithId extends WithId[User] {
     override def id(user: User): Long = user.id
   }
-
-  def getOrUnnamed(so: Option[String]): String =
-    so getOrElse ChatHistoryDao.Unnamed
 }

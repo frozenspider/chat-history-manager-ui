@@ -10,6 +10,8 @@ import com.github.nscala_time.time.Imports._
 import org.apache.commons.codec.net.QuotedPrintableCodec
 import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
 
@@ -84,13 +86,13 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
               )
             }
             val chat = Chat(
-              dsUuid        = dataset.uuid,
-              id            = userId,
-              nameOption    = user.firstNameOption,
-              tpe           = ChatType.Personal,
-              imgPathOption = None,
-              memberIds     = Set(myself, user).map(_.id),
-              msgCount      = msgs.size
+              dsUuid    = Some(dataset.uuid),
+              id        = userId,
+              name      = user.firstNameOption,
+              tpe       = ChatType.Personal,
+              imgPath   = None,
+              memberIds = Seq(myself, user).map(_.id),
+              msgCount  = msgs.size
             )
             user -> (chat, msgs)
         }

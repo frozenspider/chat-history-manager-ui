@@ -11,6 +11,7 @@ import org.fs.chm.WithH2Dao
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger._
+import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.ContentFile
 import org.fs.chm.protobuf.Message
@@ -108,7 +109,7 @@ class DatasetMergerMergeSpec //
     assert(helper.dao1.datasets.size === 2)
     val newChats = helper.dao1.chats(newDs.uuid)
     assert(helper.dao1.chats(newDs.uuid).size === 1)
-    assert(helper.dao1.chats(newDs.uuid).head.chat.nameOption === usersA(1).prettyNameOption)
+    assert(helper.dao1.chats(newDs.uuid).head.chat.name === usersA(1).prettyNameOption)
     val newMessages = helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     assert(newMessages.size === 1)
     assert((newMessages.head, helper.d1root) =~= (helper.d2msgs.head, helper.d2root))

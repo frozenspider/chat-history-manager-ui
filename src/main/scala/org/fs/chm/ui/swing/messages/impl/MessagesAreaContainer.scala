@@ -226,7 +226,6 @@ object MessagesAreaContainer {
   def main(args: Array[String]): Unit = {
     import java.awt.Desktop
     import java.nio.file.Files
-    import java.util.UUID
 
     import scala.collection.immutable.ListMap
 
@@ -236,7 +235,7 @@ object MessagesAreaContainer {
 
     val dao = {
       val ds = Dataset(
-        uuid       = UUID.randomUUID(),
+        uuid       = randomUuid,
         alias      = "Dataset",
         sourceType = "test source"
       )

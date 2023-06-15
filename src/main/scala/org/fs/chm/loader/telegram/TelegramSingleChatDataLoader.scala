@@ -2,7 +2,6 @@ package org.fs.chm.loader.telegram
 
 import java.io.File
 import java.io.FileNotFoundException
-import java.util.UUID
 
 import scala.collection.immutable.ListMap
 import scala.swing.Dialog
@@ -12,6 +11,7 @@ import javax.swing.JOptionPane
 
 import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.PbUuid
 import org.fs.chm.utility.EntityUtils
 import org.fs.utility.Imports._
 import org.json4s._
@@ -59,7 +59,7 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
   }
 
   protected def chooseMyself(users: Seq[User]): User = {
-    val options = users map (u => EntityUtils.getOrUnnamed(u.firstNameOption))
+    val options = users map (_.nameOrUnnamed)
     val res = JOptionPane.showOptionDialog(
       null,
       "Choose yourself",
@@ -82,7 +82,7 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
   //
 
   /** Parse users from chat messages to get as much info as possible. */
-  private def parseUsers(parsed: JValue, dsUuid: UUID): Seq[User] = {
+  private def parseUsers(parsed: JValue, dsUuid: PbUuid): Seq[User] = {
     implicit val dummyTracker = new FieldUsageTracker
 
     // Doing additional pass over messages to fetch all users

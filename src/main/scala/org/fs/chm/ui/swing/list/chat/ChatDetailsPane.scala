@@ -5,11 +5,10 @@ import scala.swing.GridBagPanel.Fill
 import scala.swing._
 
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.Entities.ChatType
-import org.fs.chm.dao.Entities.ChatWithDetails
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.ChatType
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.general.field.TextComponent
-import org.fs.chm.utility.EntityUtils
 
 class ChatDetailsPane(
     dao: ChatHistoryDao,
@@ -17,23 +16,23 @@ class ChatDetailsPane(
 ) extends GridBagPanel {
   {
     val data: Seq[(String, String)] = Seq(
-      ("Name:", Some(EntityUtils.getOrUnnamed(cwd.chat.nameOption))),
+      ("Name:", Some(cwd.chat.nameOrUnnamed)),
       ("Type:", Some(cwd.chat.tpe match {
         case ChatType.Personal     => "Personal"
         case ChatType.PrivateGroup => "Private Group"
       })),
       ("Members:", cwd.chat.tpe match {
         case ChatType.PrivateGroup =>
-          Some(cwd.members.filter(_.prettyName != cwd.chat.nameOption.get).map(_.prettyName).mkString("\n"))
+          Some(cwd.members.filter(_.prettyName != cwd.chat.name.get).map(_.prettyName).mkString("\n"))
         case ChatType.Personal     =>
           None
       }),
-      ("Image:", Some(if (cwd.chat.imgPathOption.isDefined) "(Yes)" else "(None)")),
+      ("Image:", Some(if (cwd.chat.imgPath.isDefined) "(Yes)" else "(None)")),
       ("Messages:", Some(cwd.chat.msgCount.toString)),
       ("", Some("")),
       ("ID:", Some(cwd.chat.id.toString)),
-      ("Dataset ID:", Some(cwd.chat.dsUuid.toString.toLowerCase)),
-      ("Dataset:", Some(dao.datasets.find(_.uuid == cwd.chat.dsUuid).get.alias)),
+      ("Dataset ID:", Some(cwd.chat.dsUuid.get.value)),
+      ("Dataset:", Some(dao.datasets.find(_.uuid == cwd.chat.dsUuid.get).get.alias)),
       ("Database:", Some(dao.name))
     ).collect {
       case ((x, Some(y))) => (x, y)

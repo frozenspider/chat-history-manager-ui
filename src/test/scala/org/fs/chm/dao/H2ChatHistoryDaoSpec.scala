@@ -3,7 +3,6 @@ package org.fs.chm.dao
 import java.io.File
 import java.nio.charset.Charset
 import java.nio.file.Files
-import java.util.UUID
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.TestHelper
@@ -11,7 +10,10 @@ import org.fs.chm.WithH2Dao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.loader.H2DataManager
 import org.fs.chm.loader.telegram.TelegramFullDataLoader
+import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.PbUuid
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.TestUtils
@@ -35,7 +37,7 @@ class H2ChatHistoryDaoSpec //
   val telegramDir = new File(resourcesFolder, "telegram_2020-01")
 
   var tgDao:  ChatHistoryDao   = _
-  var dsUuid: UUID             = _
+  var dsUuid: PbUuid           = _
 
   override def beforeAll(): Unit = {
     tgDao  = loader.loadData(telegramDir)
@@ -89,8 +91,8 @@ class H2ChatHistoryDaoSpec //
       val h2Chat = h2Cwd.chat
       assert(tgChat === h2Chat)
 
-      val tgRoot = tgDao.datasetRoot(tgChat.dsUuid)
-      val h2Root = h2dao.datasetRoot(h2Chat.dsUuid)
+      val tgRoot = tgDao.datasetRoot(tgChat.dsUuid.get)
+      val h2Root = h2dao.datasetRoot(h2Chat.dsUuid.get)
 
       val allTg = tgDao.lastMessages(tgChat, tgChat.msgCount)
       val allH2 = h2dao.lastMessages(h2Chat, tgChat.msgCount)
@@ -181,7 +183,7 @@ class H2ChatHistoryDaoSpec //
       assert(usersA.find(_.id == user1.id).get === u)
 
       val chatA = personalChatWith(u) getOrElse fail("Chat not found after updating!")
-      assert(chatA.nameOption === u.prettyNameOption)
+      assert(chatA.name === u.prettyNameOption)
     }
 
     doUpdate(
@@ -212,7 +214,7 @@ class H2ChatHistoryDaoSpec //
         )
       )
       val chat1After = personalChatWith(user1) getOrElse fail("Chat not found after updating!")
-      assert(chat1After.nameOption === chat1Before.nameOption)
+      assert(chat1After.name === chat1Before.name)
     }
   }
 
@@ -314,7 +316,7 @@ class H2ChatHistoryDaoSpec //
     // Verify chats
     assert(chatsAfter.size === chatsBefore.size - 1)
     val expectedChat = baseUserPc.copy(
-      nameOption = expectedUser.firstNameOption,
+      name       = expectedUser.firstNameOption,
       msgCount   = baseUserPcMsgs.size + absorbedUserPcMsgs.size
     )
     assert(chatsAfter.find(_.chat.id == baseUserPc.id).map(_.chat) === Some(expectedChat))
@@ -337,7 +339,7 @@ class H2ChatHistoryDaoSpec //
 
     // Dataset files has been moved to a backup dir
     assert(!h2dao.datasetRoot(dsUuid).exists())
-    assert(new File(h2dao.getBackupPath(), dsUuid.toString).exists())
+    assert(new File(h2dao.getBackupPath(), dsUuid.value).exists())
   }
 
   test("shift dataset time") {

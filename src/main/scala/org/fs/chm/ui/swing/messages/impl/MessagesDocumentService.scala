@@ -162,7 +162,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     }
     val color = if (idx >= 0) Colors.stringForIdx(idx) else "#000000"
     val resolvedName = nameOption getOrElse {
-      EntityUtils.getOrUnnamed(idOption flatMap (id => cwd.members.find(_.id == id)) map (_.prettyName))
+      idOption flatMap (id => cwd.members.find(_.id == id)) map (_.prettyName) getOrElse Unnamed
     }
 
     s"""<span class="title-name" style="color: $color;">${resolvedName}</span>"""

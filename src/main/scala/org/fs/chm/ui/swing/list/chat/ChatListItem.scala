@@ -13,6 +13,7 @@ import javax.swing.border.LineBorder
 import org.apache.commons.lang3.StringEscapeUtils
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
@@ -47,7 +48,7 @@ class ChatListItem(
 
     layout(new BorderPanel {
       // Name
-      val nameString = EntityUtils.getOrUnnamed(cwd.chat.nameOption)
+      val nameString = cwd.chat.nameOrUnnamed
       val nameLabel = new Label(
         s"""<html><p style="text-align: left; width: ${labelPreferredWidth}px;">"""
           + StringEscapeUtils.escapeHtml4(nameString)
@@ -126,7 +127,7 @@ class ChatListItem(
   private def showDeletePopup(): Unit = {
     Dialog.showConfirmation(
       title   = "Deleting Chat",
-      message = s"Are you sure you want to delete a chat '${EntityUtils.getOrUnnamed(cwd.chat.nameOption)}'?"
+      message = s"Are you sure you want to delete a chat '${cwd.chat.nameOrUnnamed}'?"
     ) match {
       case Dialog.Result.Yes => callbacksOption.get.deleteChat(dao, cwd.chat)
       case _                 => // NOOP
@@ -154,7 +155,7 @@ class ChatListItem(
           (cwd.members find (_.id == msg.fromId))
             .orElse(dao.userOption(cwd.dsUuid, msg.fromId))
             .flatMap(_.prettyNameOption)
-        (EntityUtils.getOrUnnamed(fromNameOption) + ": ")
+        (fromNameOption.getOrElse(Unnamed) + ": ")
       }
     val text: String = msg.typed.value match {
       case msgRegular: MessageRegular =>

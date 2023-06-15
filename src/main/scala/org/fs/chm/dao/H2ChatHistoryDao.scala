@@ -4,7 +4,6 @@ import java.io.{File => JFile}
 import java.nio.file.Files
 import java.nio.file.attribute.FileTime
 import java.sql.Timestamp
-import java.util.UUID
 
 import scala.collection.parallel.CollectionConverters._
 
@@ -20,6 +19,8 @@ import doobie.free.connection.ConnectionOp
 import doobie.h2.implicits._
 import doobie.implicits._
 import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.ContentAnimation
 import org.fs.chm.protobuf.ContentFile
@@ -44,6 +45,7 @@ import org.fs.chm.protobuf.MessageServiceGroupMigrateTo
 import org.fs.chm.protobuf.MessageServiceGroupRemoveMembers
 import org.fs.chm.protobuf.MessageServicePhoneCall
 import org.fs.chm.protobuf.MessageServicePinMessage
+import org.fs.chm.protobuf.PbUuid
 import org.fs.chm.protobuf.RichTextElement
 import org.fs.chm.protobuf.RteBold
 import org.fs.chm.protobuf.RteItalic
@@ -70,7 +72,7 @@ class H2ChatHistoryDao(
 
   private val Lock = new Object
 
-  private var _usersCacheOption: Option[Map[UUID, (Option[User], Seq[User])]] = None
+  private var _usersCacheOption: Option[Map[PbUuid, (Option[User], Seq[User])]] = None
   private var _backupsEnabled = true
   private var _closed = false
 
@@ -84,15 +86,15 @@ class H2ChatHistoryDao(
     queries.datasets.selectAll.transact(txctr).unsafeRunSync()
   }
 
-  override def datasetRoot(dsUuid: UUID): DatasetRoot = {
-    new JFile(dataPathRoot, dsUuid.toString.toLowerCase).getAbsoluteFile.asInstanceOf[DatasetRoot]
+  override def datasetRoot(dsUuid: PbUuid): DatasetRoot = {
+    new JFile(dataPathRoot, dsUuid.value.toLowerCase).getAbsoluteFile.asInstanceOf[DatasetRoot]
   }
 
-  override def datasetFiles(dsUuid: UUID): Set[JFile] = {
+  override def datasetFiles(dsUuid: PbUuid): Set[JFile] = {
     queries.selectAllPaths(dsUuid).transact(txctr).unsafeRunSync() map (_.toFile(datasetRoot(dsUuid)))
   }
 
-  private def usersCache: Map[UUID, (Option[User], Seq[User])] =
+  private def usersCache: Map[PbUuid, (Option[User], Seq[User])] =
     Lock.synchronized {
       if (_usersCacheOption.isEmpty) {
         _usersCacheOption = Some((for {
@@ -114,22 +116,22 @@ class H2ChatHistoryDao(
       _usersCacheOption.get
     }
 
-  override def myself(dsUuid: UUID): User = {
+  override def myself(dsUuid: PbUuid): User = {
     usersCache(dsUuid)._1.getOrElse(throw new IllegalStateException(s"Dataset ${dsUuid} has no self user!"))
   }
 
   /** Contains myself as the first element */
-  override def users(dsUuid: UUID): Seq[User] = {
+  override def users(dsUuid: PbUuid): Seq[User] = {
     usersCache(dsUuid)._2
   } ensuring (us => us.head == myself(dsUuid))
 
-  def userOption(dsUuid: UUID, id: Long): Option[User] = {
+  def userOption(dsUuid: PbUuid, id: Long): Option[User] = {
     usersCache(dsUuid)._2.find(_.id == id)
   }
 
   private def chatMembers(chat: Chat): Seq[User] = {
-    val allUsers = users(chat.dsUuid)
-    val me = myself(chat.dsUuid)
+    val allUsers = users(chat.dsUuid.get)
+    val me = myself(chat.dsUuid.get)
     me +: (chat.memberIds
       .filter(_ != me.id)
       .map(mId => allUsers.find(_.id == mId).get)
@@ -137,21 +139,21 @@ class H2ChatHistoryDao(
       .sortBy(_.id))
   }
 
-  private def addChatsDetails(dsUuid: UUID, chatQuery: ConnectionIO[Seq[Chat]]):  ConnectionIO[Seq[ChatWithDetails]] = {
+  private def addChatsDetails(dsUuid: PbUuid, chatQuery: ConnectionIO[Seq[Chat]]):  ConnectionIO[Seq[ChatWithDetails]] = {
     for {
       chats <- chatQuery
       lasts <- materializeMessagesQuery(dsUuid, queries.rawMessages.selectLastForChats(dsUuid, chats))
     } yield chats map (c => ChatWithDetails(c, lasts.find(_._1 == c.id).map(_._2), chatMembers(c)))
   }
 
-  override def chats(dsUuid: UUID): Seq[ChatWithDetails] = {
+  override def chats(dsUuid: PbUuid): Seq[ChatWithDetails] = {
     // FIXME: Double-call when loading a DB!
     logPerformance {
       addChatsDetails(dsUuid, queries.chats.selectAll(dsUuid)).transact(txctr).unsafeRunSync().sortBy(_.lastMsgOption.map(_.timestamp)).reverse
     }((res, ms) => s"${res.size} chats fetched in ${ms} ms")
   }
 
-  override def chatOption(dsUuid: UUID, id: ChatId): Option[ChatWithDetails] = {
+  override def chatOption(dsUuid: PbUuid, id: ChatId): Option[ChatWithDetails] = {
     addChatsDetails(dsUuid, queries.chats.select(dsUuid, id).map(_.toSeq)).transact(txctr).unsafeRunSync().headOption
   }
 
@@ -160,7 +162,7 @@ class H2ChatHistoryDao(
    * Tries to do so efficiently.
    */
   private def materializeMessagesQuery(
-      dsUuid: UUID,
+      dsUuid: PbUuid,
       msgsQuery: ConnectionIO[IndexedSeq[RawMessage]]
   ): ConnectionIO[IndexedSeq[(ChatId, Message)]] = {
     for {
@@ -182,7 +184,7 @@ class H2ChatHistoryDao(
 
   override def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message] = {
     logPerformance {
-      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectSlice(chat, offset, limit))
+      materializeMessagesQuery(chat.dsUuid.get, queries.rawMessages.selectSlice(chat, offset, limit))
         .transact(txctr)
         .unsafeRunSync()
         .map(_._2)
@@ -191,7 +193,7 @@ class H2ChatHistoryDao(
 
   override def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message] = {
     logPerformance {
-      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectLastInversed(chat, limit))
+      materializeMessagesQuery(chat.dsUuid.get, queries.rawMessages.selectLastInversed(chat, limit))
         .transact(txctr)
         .unsafeRunSync()
         .reverse
@@ -201,20 +203,20 @@ class H2ChatHistoryDao(
 
   override def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
     logPerformance {
-      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectBeforeInversedInc(chat, msg, limit))
+      materializeMessagesQuery(chat.dsUuid.get, queries.rawMessages.selectBeforeInversedInc(chat, msg, limit))
         .transact(txctr)
         .unsafeRunSync()
         .reverse
         .map(_._2)
     }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesBeforeImpl]")
   } ensuring (seq => seq.nonEmpty && {
-    val root = datasetRoot(chat.dsUuid)
+    val root = datasetRoot(chat.dsUuid.get)
     (seq.last, root) =~= (msg, root)
   })
 
   override def messagesAfterImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
     logPerformance {
-      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectAfterInc(chat, msg, limit))
+      materializeMessagesQuery(chat.dsUuid.get, queries.rawMessages.selectAfterInc(chat, msg, limit))
         .transact(txctr)
         .unsafeRunSync()
         .map(_._2)
@@ -223,7 +225,7 @@ class H2ChatHistoryDao(
 
   override def messagesBetweenImpl(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] = {
     logPerformance {
-      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectBetweenInc(chat, msg1, msg2))
+      materializeMessagesQuery(chat.dsUuid.get, queries.rawMessages.selectBetweenInc(chat, msg1, msg2))
         .transact(txctr)
         .unsafeRunSync()
         .map(_._2)
@@ -243,7 +245,7 @@ class H2ChatHistoryDao(
 
   override def messageOption(chat: Chat, id: MessageSourceId): Option[Message] = {
     logPerformance {
-      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectOptionBySourceId(chat, id).map(_.toIndexedSeq))
+      materializeMessagesQuery(chat.dsUuid.get, queries.rawMessages.selectOptionBySourceId(chat, id).map(_.toIndexedSeq))
         .transact(txctr)
         .unsafeRunSync()
         .headOption
@@ -253,7 +255,7 @@ class H2ChatHistoryDao(
 
   override def messageOptionByInternalId(chat: Chat, id: MessageInternalId): Option[Message] =
     logPerformance {
-      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectOption(chat, id).map(_.toIndexedSeq))
+      materializeMessagesQuery(chat.dsUuid.get, queries.rawMessages.selectOption(chat, id).map(_.toIndexedSeq))
         .transact(txctr)
         .unsafeRunSync()
         .headOption
@@ -331,7 +333,7 @@ class H2ChatHistoryDao(
           assert(chats1.size == chats2.size, s"Chat size differs:\nWas    ${chats1.size}\nBecame ${chats2.size}")
           for (((c1, c2), i) <- chats1.zip(chats2).zipWithIndex) {
             StopWatch.measureAndCall {
-              log.info(s"Checking chat '${c1.nameOption.getOrElse("")}' with ${c1.msgCount} messages")
+              log.info(s"Checking chat '${c1.name.getOrElse("")}' with ${c1.msgCount} messages")
               assert(c1 == c2, s"Chat #$i differs:\nWas    $c1\nBecame $c2")
               val messages1 = dao.lastMessages(c1, c1.msgCount + 1)
               val messages2 = lastMessages(c2, c2.msgCount + 1)
@@ -358,13 +360,13 @@ class H2ChatHistoryDao(
     }
   }
 
-  override def renameDataset(dsUuid: UUID, newName: String): Dataset = {
+  override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = {
     backup()
     queries.datasets.rename(dsUuid, newName).transact(txctr).unsafeRunSync()
     datasets.find(_.uuid == dsUuid).get
   }
 
-  override def deleteDataset(dsUuid: UUID): Unit = {
+  override def deleteDataset(dsUuid: PbUuid): Unit = {
     backup()
     StopWatch.measureAndCall {
       val query = for {
@@ -385,7 +387,7 @@ class H2ChatHistoryDao(
     }((_, t) => log.info(s"Dataset ${dsUuid} deleted in $t ms"))
   }
 
-  override def shiftDatasetTime(dsUuid: UUID, hrs: Int): Unit = {
+  override def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): Unit = {
     backup()
     require(hrs >= -12 && hrs <= 12, "Hours are out of bounds! Expected [-12, 12]")
     StopWatch.measureAndCall {
@@ -448,13 +450,13 @@ class H2ChatHistoryDao(
   override def insertChat(dsRoot: JFile, chat: Chat): Unit = {
     require(chat.id > 0, "ID should be positive!")
     require(chat.memberIds.nonEmpty, "Chat should have more than one member!")
-    val me = myself(chat.dsUuid)
+    val me = myself(chat.dsUuid.get)
     require(chat.memberIds contains me.id, "Chat members list should contain self!")
     backup()
     val query = for {
       _ <- queries.chats.insert(dsRoot, chat)
       r <- chat.memberIds.foldLeft(queries.pure0) { (q, uId) =>
-        q flatMap (_ => queries.chatMembers.insert(chat.dsUuid, chat.id, uId))
+        q flatMap (_ => queries.chatMembers.insert(chat.dsUuid.get, chat.id, uId))
       }
     } yield r
     query.transact(txctr).unsafeRunSync()
@@ -464,25 +466,25 @@ class H2ChatHistoryDao(
     backup()
     StopWatch.measureAndCall {
       val query = for {
-        _ <- queries.rawContent.deleteByChat(chat.dsUuid, chat.id)
-        _ <- queries.rawRichTextElements.deleteByChat(chat.dsUuid, chat.id)
-        _ <- queries.rawMessages.deleteByChat(chat.dsUuid, chat.id)
-        _ <- queries.chatMembers.deleteByChat(chat.dsUuid, chat.id)
-        _ <- queries.chats.delete(chat.dsUuid, chat.id)
-        u <- queries.users.deleteOrphans(chat.dsUuid)
+        _ <- queries.rawContent.deleteByChat(chat.dsUuid.get, chat.id)
+        _ <- queries.rawRichTextElements.deleteByChat(chat.dsUuid.get, chat.id)
+        _ <- queries.rawMessages.deleteByChat(chat.dsUuid.get, chat.id)
+        _ <- queries.chatMembers.deleteByChat(chat.dsUuid.get, chat.id)
+        _ <- queries.chats.delete(chat.dsUuid.get, chat.id)
+        u <- queries.users.deleteOrphans(chat.dsUuid.get)
       } yield u
       val deletedUsersNum = query.transact(txctr).unsafeRunSync()
       log.info(s"Deleted ${deletedUsersNum} orphaned users")
       Lock.synchronized {
         _usersCacheOption = None
       }
-    }((_, t) => log.info(s"Chat ${chat.nameOption.getOrElse("#" + chat.id)} deleted in $t ms"))
+    }((_, t) => log.info(s"Chat ${chat.name.getOrElse("#" + chat.id)} deleted in $t ms"))
   }
 
   override def insertMessages(dsRoot: JFile, chat: Chat, msgs: Seq[Message]): Unit = {
     if (msgs.nonEmpty) {
       val query = msgs
-        .map(msg => queries.messages.insert(chat.dsUuid, dsRoot, chat.id, msg))
+        .map(msg => queries.messages.insert(chat.dsUuid.get, dsRoot, chat.id, msg))
         .reduce((q1, q2) => q1 flatMap (_ => q2))
       query.transact(txctr).unsafeRunSync()
       backup()
@@ -565,26 +567,26 @@ class H2ChatHistoryDao(
       def insert(ds: Dataset): ConnectionIO[Int] =
         (fr"INSERT INTO datasets (" ++ colsFr ++ fr") VALUES (${ds.uuid}, ${ds.alias}, ${ds.sourceType})").update.run
 
-      def rename(dsUuid: UUID, newName: String): ConnectionIO[Int] =
+      def rename(dsUuid: PbUuid, newName: String): ConnectionIO[Int] =
         sql"UPDATE datasets SET alias = ${newName} WHERE uuid = ${dsUuid}".update.run
 
-      def delete(dsUuid: UUID): ConnectionIO[Int] =
+      def delete(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM datasets WHERE uuid = ${dsUuid}".update.run
     }
 
     object users {
-      private val colsFr                 = fr"ds_uuid, id, first_name, last_name, username, phone_number"
-      private val selectAllFr            = fr"SELECT" ++ colsFr ++ fr"FROM users"
-      private def selectFr(dsUuid: UUID) = selectAllFr ++ fr"WHERE ds_uuid = $dsUuid"
-      private val defaultOrder           = fr"ORDER BY id, first_name, last_name, username, phone_number"
+      private val colsFr                   = fr"ds_uuid, id, first_name, last_name, username, phone_number"
+      private val selectAllFr              = fr"SELECT" ++ colsFr ++ fr"FROM users"
+      private def selectFr(dsUuid: PbUuid) = selectAllFr ++ fr"WHERE ds_uuid = $dsUuid"
+      private val defaultOrder             = fr"ORDER BY id, first_name, last_name, username, phone_number"
 
-      def selectAll(dsUuid: UUID) =
+      def selectAll(dsUuid: PbUuid) =
         (selectFr(dsUuid) ++ defaultOrder).query[User].to[Seq]
 
-      def selectMyself(dsUuid: UUID) =
+      def selectMyself(dsUuid: PbUuid) =
         (selectFr(dsUuid) ++ fr"AND is_myself = true").query[User].option
 
-      def select(dsUuid: UUID, id: Long) =
+      def select(dsUuid: PbUuid, id: Long) =
         (selectFr(dsUuid) ++ fr"AND id = $id").query[User].option
 
       def insert(u: User, isMyself: Boolean) =
@@ -605,11 +607,11 @@ class H2ChatHistoryDao(
            """.update.run
 
       /** Delete all users from the given dataset (other than self) that have no messages in any chat */
-      def delete(dsUuid: UUID, id: Long): ConnectionIO[Int] =
+      def delete(dsUuid: PbUuid, id: Long): ConnectionIO[Int] =
         sql"DELETE FROM users u WHERE u.id = ${id}".update.run
 
       /** Delete all users from the given dataset (other than self) that aren't associated any chat */
-      def deleteOrphans(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteOrphans(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"""
             DELETE FROM users u
             WHERE u.ds_uuid = $dsUuid AND u.id IN (
@@ -625,14 +627,14 @@ class H2ChatHistoryDao(
             )
            """.update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM users WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     object chats {
       private val colsFr     = fr"ds_uuid, id, name, type, img_path"
 
-      private def selectFr(dsUuid: UUID) =
+      private def selectFr(dsUuid: PbUuid) =
         (fr"SELECT" ++ colsFr ++ fr","
           ++ fr"(SELECT ARRAY_AGG(u.id) FROM users u"
           ++ fr"  INNER JOIN chat_members cm ON cm.ds_uuid = c.ds_uuid AND cm.user_id = u.id"
@@ -646,10 +648,10 @@ class H2ChatHistoryDao(
         (fr"EXISTS (SELECT m.from_id FROM messages m"
           ++ fr"WHERE m.ds_uuid = c.ds_uuid AND m.chat_id = c.id AND m.from_id = ${userId})")
 
-      def selectAll(dsUuid: UUID): ConnectionIO[Seq[Chat]] =
+      def selectAll(dsUuid: PbUuid): ConnectionIO[Seq[Chat]] =
         selectFr(dsUuid).query[RawChat].to[Seq].map(_ map Raws.toChat)
 
-      def selectAllPersonalChats(dsUuid: UUID, userId: Long): ConnectionIO[Seq[Chat]] =
+      def selectAllPersonalChats(dsUuid: PbUuid, userId: Long): ConnectionIO[Seq[Chat]] =
         if (myself(dsUuid).id == userId) {
           cats.free.Free.pure(Seq.empty)
         } else {
@@ -659,7 +661,7 @@ class H2ChatHistoryDao(
              """).query[RawChat].to[Seq].map(_ map Raws.toChat)
         }
 
-      def select(dsUuid: UUID, id: ChatId): ConnectionIO[Option[Chat]] =
+      def select(dsUuid: PbUuid, id: ChatId): ConnectionIO[Option[Chat]] =
         (selectFr(dsUuid) ++ fr"AND c.id = ${id}").query[RawChat].option.map(_ map Raws.toChat)
 
       def insert(dsRoot: JFile, c: Chat) = {
@@ -687,31 +689,31 @@ class H2ChatHistoryDao(
         }
       }
 
-      def delete(dsUuid: UUID, id: ChatId): ConnectionIO[Int] =
+      def delete(dsUuid: PbUuid, id: ChatId): ConnectionIO[Int] =
         sql"DELETE FROM chats WHERE ds_uuid = ${dsUuid} AND id = ${id}".update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM chats WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     object chatMembers {
-      def insert(dsUuid: UUID, chatId: ChatId, userId: Long) =
+      def insert(dsUuid: PbUuid, chatId: ChatId, userId: Long) =
         sql"INSERT INTO chat_members (ds_uuid, chat_id, user_id) VALUES ($dsUuid, $chatId, $userId)".update.run
 
-      def updateUser(dsUuid: UUID, fromUserId: Long, toUserId: Long): ConnectionIO[Int] =
+      def updateUser(dsUuid: PbUuid, fromUserId: Long, toUserId: Long): ConnectionIO[Int] =
         sql"UPDATE chat_members SET user_id = $toUserId WHERE ds_uuid = $dsUuid AND user_id = $fromUserId".update.run
 
-      def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
+      def deleteByChat(dsUuid: PbUuid, chatId: ChatId): ConnectionIO[Int] =
         sql"DELETE FROM chat_members WHERE ds_uuid = ${dsUuid} AND chat_id = ${chatId}".update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM chat_members WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     object messages {
       /** Inserts a message, overriding it's internal ID. */
       def insert(
-          dsUuid: UUID,
+          dsUuid: PbUuid,
           dsRoot: JFile,
           chatId: Long,
           msg: Message,
@@ -762,25 +764,25 @@ class H2ChatHistoryDao(
       private val orderAsc    = fr"ORDER BY m.time, m.source_id, m.internal_id"
       private val orderDesc   = fr"ORDER BY m.time DESC, m.source_id DESC, m.internal_id DESC"
 
-      private def whereDsAndChatFr(dsUuid: UUID, chatId: Long): Fragment =
+      private def whereDsAndChatFr(dsUuid: PbUuid, chatId: Long): Fragment =
         fr"WHERE m.ds_uuid = $dsUuid AND m.chat_id = $chatId"
 
-      private def selectAllByChatFr(dsUuid: UUID, chatId: Long): Fragment =
+      private def selectAllByChatFr(dsUuid: PbUuid, chatId: Long): Fragment =
         selectAllFr ++ whereDsAndChatFr(dsUuid, chatId)
 
 
       def selectOption(chat: Chat, id: MessageInternalId): ConnectionIO[Option[RawMessage]] =
-        (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND m.internal_id = ${id}").query[RawMessage].option
+        (selectAllByChatFr(chat.dsUuid.get, chat.id) ++ fr"AND m.internal_id = ${id}").query[RawMessage].option
 
       def selectOptionBySourceId(chat: Chat, id: MessageSourceId): ConnectionIO[Option[RawMessage]] =
-        (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND m.source_id = ${id}").query[RawMessage].option
+        (selectAllByChatFr(chat.dsUuid.get, chat.id) ++ fr"AND m.source_id = ${id}").query[RawMessage].option
 
       def selectSlice(chat: Chat, offset: Int, limit: Int): ConnectionIO[IndexedSeq[RawMessage]] =
-        (selectAllByChatFr(chat.dsUuid, chat.id)
+        (selectAllByChatFr(chat.dsUuid.get, chat.id)
           ++ orderAsc ++ withLimit(limit)
           ++ fr"OFFSET $offset").query[RawMessage].to[IndexedSeq]
 
-      def selectLastForChats(dsUuid: UUID, chats: Seq[Chat]): ConnectionIO[IndexedSeq[RawMessage]] =
+      def selectLastForChats(dsUuid: PbUuid, chats: Seq[Chat]): ConnectionIO[IndexedSeq[RawMessage]] =
         (selectAllFr
           ++ fr"WHERE m.ds_uuid = $dsUuid"
           ++ fr"AND m.internal_id IN (SELECT MAX(m2.internal_id) FROM messages m2 WHERE m2.ds_uuid = $dsUuid AND m2.chat_id IN ("
@@ -788,20 +790,20 @@ class H2ChatHistoryDao(
           ++ fr") GROUP BY m2.chat_id)").query[RawMessage].to[IndexedSeq]
 
       def selectLastInversed(chat: Chat, limit: Int): ConnectionIO[IndexedSeq[RawMessage]] =
-        (selectAllByChatFr(chat.dsUuid, chat.id) ++ orderDesc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
+        (selectAllByChatFr(chat.dsUuid.get, chat.id) ++ orderDesc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
 
       def selectBeforeInversedInc(chat: Chat, msg: Message, limit: Int): ConnectionIO[IndexedSeq[RawMessage]] =
-        (selectAllByChatFr(chat.dsUuid, chat.id)
+        (selectAllByChatFr(chat.dsUuid.get, chat.id)
           ++ fr"AND (m.time < ${msg.time} OR (m.time = ${msg.time} AND m.internal_id <= ${msg.internalId}))"
           ++ orderDesc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
 
       def selectAfterInc(chat: Chat, msg: Message, limit: Int): ConnectionIO[IndexedSeq[RawMessage]] =
-        (selectAllByChatFr(chat.dsUuid, chat.id)
+        (selectAllByChatFr(chat.dsUuid.get, chat.id)
           ++ fr"AND (m.time > ${msg.time} OR (m.time = ${msg.time} AND m.internal_id >= ${msg.internalId}))"
           ++ orderAsc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
 
       def selectBetweenInc(chat: Chat, msg1: Message, msg2: Message): ConnectionIO[IndexedSeq[RawMessage]] =
-        (selectAllByChatFr(chat.dsUuid, chat.id)
+        (selectAllByChatFr(chat.dsUuid.get, chat.id)
           ++ fr"AND (m.time > ${msg1.time} OR (m.time = ${msg1.time} AND m.internal_id >= ${msg1.internalId}))"
           ++ fr"AND (m.time < ${msg2.time} OR (m.time = ${msg2.time} AND m.internal_id <= ${msg2.internalId}))"
           ++ orderAsc).query[RawMessage].to[IndexedSeq]
@@ -809,7 +811,7 @@ class H2ChatHistoryDao(
       def countBetweenExc(chat: Chat, msg1: Message, msg2: Message): ConnectionIO[Int] =
         (fr"""
           SELECT COUNT(*) FROM messages m
-          """ ++ whereDsAndChatFr(chat.dsUuid, chat.id) ++ fr"""
+          """ ++ whereDsAndChatFr(chat.dsUuid.get, chat.id) ++ fr"""
           AND (m.time > ${msg1.time} OR (m.time = ${msg1.time} AND m.internal_id > ${msg1.internalId}))
           AND (m.time < ${msg2.time} OR (m.time = ${msg2.time} AND m.internal_id < ${msg2.internalId}))
         """).query[Int].unique
@@ -823,35 +825,35 @@ class H2ChatHistoryDao(
           ++ fr"${m.pinnedMessageIdOption}, ${m.pathOption}, ${m.widthOption}, ${m.heightOption}"
           ++ fr")").update.withUniqueGeneratedKeys[MessageInternalId]("internal_id")
 
-      def removeSourceIds(dsUuid: UUID, fromChatId: Long): ConnectionIO[Int] =
+      def removeSourceIds(dsUuid: PbUuid, fromChatId: Long): ConnectionIO[Int] =
         sql"""
             UPDATE messages m SET m.source_id = NULL
             WHERE m.chat_id = ${fromChatId} AND m.ds_uuid = ${dsUuid}
            """.update.run
 
-      def updateUser(dsUuid: UUID, fromUserId: Long, toUserId: Long): ConnectionIO[Int] =
+      def updateUser(dsUuid: PbUuid, fromUserId: Long, toUserId: Long): ConnectionIO[Int] =
         sql"""
             UPDATE messages m SET m.from_id = ${toUserId}
             WHERE m.from_id = ${fromUserId} AND m.ds_uuid = ${dsUuid}
            """.update.run
 
-      def updateChat(dsUuid: UUID, fromChatId: Long, toChatId: Long): ConnectionIO[Int] =
+      def updateChat(dsUuid: PbUuid, fromChatId: Long, toChatId: Long): ConnectionIO[Int] =
         sql"""
             UPDATE messages m SET m.chat_id = ${toChatId}
             WHERE m.chat_id = ${fromChatId} AND m.ds_uuid = ${dsUuid}
            """.update.run
 
-      def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
+      def deleteByChat(dsUuid: PbUuid, chatId: ChatId): ConnectionIO[Int] =
         (fr"DELETE FROM messages m WHERE m.ds_uuid = ${dsUuid} AND m.chat_id = ${chatId}").update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM messages m WHERE m.ds_uuid = ${dsUuid}".update.run
     }
 
     object rawRichTextElements {
       private val colsNoKeysFr = fr"message_internal_id, element_type, text, href, hidden, language"
 
-      def selectAllForMultiple(dsUuid: UUID, msgIds: Seq[MessageInternalId]): ConnectionIO[Seq[RawRichTextElement]] =
+      def selectAllForMultiple(dsUuid: PbUuid, msgIds: Seq[MessageInternalId]): ConnectionIO[Seq[RawRichTextElement]] =
         if (msgIds.isEmpty)
           pure(Seq.empty)
         else
@@ -859,13 +861,13 @@ class H2ChatHistoryDao(
             ++ fr"WHERE ds_uuid = ${dsUuid} AND message_internal_id IN (" ++ Fragment.const(msgIds.mkString(",")) ++ fr")"
             ++ fr"ORDER BY id").query[RawRichTextElement].to[Seq]
 
-      def insert(rrte: RawRichTextElement, dsUuid: UUID) =
+      def insert(rrte: RawRichTextElement, dsUuid: PbUuid) =
         (fr"INSERT INTO messages_text_elements(ds_uuid, " ++ colsNoKeysFr ++ fr") VALUES ("
           ++ fr"${dsUuid}, ${rrte.messageInternalId}, ${rrte.elementType}, ${rrte.text},"
           ++ fr"${rrte.hrefOption}, ${rrte.hiddenOption}, ${rrte.languageOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
 
-      def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
+      def deleteByChat(dsUuid: PbUuid, chatId: ChatId): ConnectionIO[Int] =
         sql"""
             DELETE FROM messages_text_elements
             WHERE ds_uuid = ${dsUuid} AND message_internal_id IN (
@@ -874,7 +876,7 @@ class H2ChatHistoryDao(
             )
            """.update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM messages_text_elements WHERE ds_uuid = ${dsUuid}".update.run
     }
 
@@ -884,7 +886,7 @@ class H2ChatHistoryDao(
           s"""|message_internal_id, element_type, path, thumbnail_path, emoji, width, height, mime_type, title, performer, address,
               |lat, lon, duration_sec, poll_question, first_name, last_name, phone_number, vcard_path""".stripMargin)
 
-      def selectMultiple(dsUuid: UUID, msgIds: Seq[MessageInternalId]): ConnectionIO[Seq[RawContent]] =
+      def selectMultiple(dsUuid: PbUuid, msgIds: Seq[MessageInternalId]): ConnectionIO[Seq[RawContent]] =
         if (msgIds.isEmpty)
           pure(Seq.empty)
         else
@@ -893,7 +895,7 @@ class H2ChatHistoryDao(
             .query[RawContent]
             .to[Seq]
 
-      def insert(rc: RawContent, dsUuid: UUID): ConnectionIO[Long] =
+      def insert(rc: RawContent, dsUuid: PbUuid): ConnectionIO[Long] =
         (fr"INSERT INTO messages_content(ds_uuid, " ++ colsNoIdentityFr ++ fr") VALUES ("
           ++ fr"${dsUuid}, ${rc.messageInternalId},"
           ++ fr"${rc.elementType}, ${rc.pathOption}, ${rc.thumbnailPathOption}, ${rc.emojiOption}, ${rc.widthOption}, "
@@ -902,7 +904,7 @@ class H2ChatHistoryDao(
           ++ fr" ${rc.lastNameOption}, ${rc.phoneNumberOption}, ${rc.vcardPathOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
 
-      def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
+      def deleteByChat(dsUuid: PbUuid, chatId: ChatId): ConnectionIO[Int] =
         sql"""
             DELETE FROM messages_content
             WHERE ds_uuid = ${dsUuid} AND message_internal_id IN (
@@ -911,12 +913,12 @@ class H2ChatHistoryDao(
             )
            """.update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM messages_content WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     /** Merge all messages from all personal chats with this user into the first one and delete the rest */
-    def mergePersonalChats(dsUuid: UUID, userId: Long): ConnectionIO[Int] = {
+    def mergePersonalChats(dsUuid: PbUuid, userId: Long): ConnectionIO[Int] = {
       // TODO: This looks really inefficient
       for {
         pcs <- queries.chats.selectAllPersonalChats(dsUuid, userId)
@@ -942,7 +944,7 @@ class H2ChatHistoryDao(
     }
 
     /** Select all non-null JFilesystem paths from all tables for the specific dataset */
-    def selectAllPaths(dsUuid: UUID): ConnectionIO[Set[String]] = {
+    def selectAllPaths(dsUuid: PbUuid): ConnectionIO[Set[String]] = {
       def q(col: String, table: String) = {
         val whereFr = Fragments.whereAnd(
           fr"ds_uuid = ${dsUuid}",
@@ -959,7 +961,7 @@ class H2ChatHistoryDao(
       } yield chatImgPaths ++ msgPaths ++ msgCPaths ++ msgCThumbPaths ++ msgCVcardPaths
     } map (_.toSet)
 
-    def shiftDatasetTime(dsUuid: UUID, hrs: Int): ConnectionIO[Int] = {
+    def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): ConnectionIO[Int] = {
       sql"""
         UPDATE messages SET
           time      = DATEADD(HOUR, $hrs, time),
@@ -972,13 +974,13 @@ class H2ChatHistoryDao(
   object Raws {
     def toChat(rc: RawChat): Chat = {
       Chat(
-        dsUuid        = rc.dsUuid,
-        id            = rc.id,
-        nameOption    = rc.nameOption,
-        tpe           = rc.tpe,
-        imgPathOption = rc.imgPathOption map (_.toFile(datasetRoot(rc.dsUuid))),
-        memberIds     = rc.memberIdsOption map (_.toSet) getOrElse Set.empty,
-        msgCount      = rc.msgCount
+        dsUuid    = Some(rc.dsUuid),
+        id        = rc.id,
+        name      = rc.nameOption,
+        tpe       = rc.tpe,
+        imgPath   = rc.imgPathOption map (_.makeRelativePath),
+        memberIds = rc.memberIdsOption map (_.toSeq) getOrElse Seq.empty,
+        msgCount  = rc.msgCount
       )
     }
 
@@ -1077,7 +1079,7 @@ class H2ChatHistoryDao(
       }
     }
 
-    def toContent(dsUuid: UUID, rc: RawContent): Content = {
+    def toContent(dsUuid: PbUuid, rc: RawContent): Content = {
       Content(rc.elementType match {
         case "sticker" =>
           Content.Val.Sticker(ContentSticker(
@@ -1152,18 +1154,18 @@ class H2ChatHistoryDao(
 
     def fromChat(dsRoot: JFile, c: Chat): RawChat = {
       RawChat(
-        dsUuid          = c.dsUuid,
+        dsUuid          = c.dsUuid.get,
         id              = c.id,
-        nameOption      = c.nameOption,
+        nameOption      = c.name,
         tpe             = c.tpe,
-        imgPathOption   = c.imgPathOption map (_.toRelativePath(dsRoot)),
+        imgPathOption   = c.imgPath map (_.makeRelativePath),
         memberIdsOption = Some(c.memberIds.toList),
         msgCount        = c.msgCount
       )
     }
 
     def fromMessage(
-        dsUuid: UUID,
+        dsUuid: PbUuid,
         dsRoot: JFile,
         chatId: Long,
         msg: Message
@@ -1294,7 +1296,7 @@ class H2ChatHistoryDao(
       }
     }
 
-    def fromContent(dsUuid: UUID, dsRoot: JFile, msgId: MessageInternalId)(c: Content): RawContent = {
+    def fromContent(dsUuid: PbUuid, dsRoot: JFile, msgId: MessageInternalId)(c: Content): RawContent = {
       val template = RawContent(
         messageInternalId   = msgId,
         elementType         = "",
@@ -1420,7 +1422,7 @@ object H2ChatHistoryDao {
   //
 
   case class RawChat(
-      dsUuid: UUID,
+      dsUuid: PbUuid,
       id: Long,
       nameOption: Option[String],
       tpe: ChatType,
@@ -1431,7 +1433,7 @@ object H2ChatHistoryDao {
 
   /** [[Message]] class with all the inlined fields, whose type is determined by `messageType` */
   case class RawMessage(
-      dsUuid: UUID,
+      dsUuid: PbUuid,
       chatId: ChatId,
       /** Not assigned (set to -1) before insert! */
       internalId: MessageInternalId,
@@ -1505,10 +1507,18 @@ object H2ChatHistoryDao {
     implicitly[Meta[Long]].asInstanceOf[Meta[MessageSourceId]]
 
   implicit val chatTypeFromString: Get[ChatType] = Get[String].tmap {
-    case x if x == ChatType.Personal.name     => ChatType.Personal
-    case x if x == ChatType.PrivateGroup.name => ChatType.PrivateGroup
+    case "personal"      => ChatType.Personal
+    case "private_group" => ChatType.PrivateGroup
   }
-  implicit val chatTypeToString: Put[ChatType] = Put[String].tcontramap(_.name)
+
+  implicit val chatTypeToString: Put[ChatType] = Put[String].tcontramap {
+    case ChatType.Personal => "personal"
+    case ChatType.PrivateGroup => "private_group"
+  }
+
+  implicit val pbUuidFromString: Get[PbUuid] = Get[String].tmap(s => fromJavaUuid(java.util.UUID.fromString(s)))
+
+  implicit val pbUuidToString: Put[PbUuid] = Put[String].tcontramap(pb => pb.value.toLowerCase)
 
   private val ArraySeparator = ";;;"
   implicit val stringSeqFromString: Get[Seq[String]] = Get[String].tmap(s => s.split(ArraySeparator))

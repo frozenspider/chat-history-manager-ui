@@ -1,13 +1,15 @@
 package org.fs.chm.dao
 
 import java.io.File
-import java.util.UUID
 
 import scala.collection.immutable.ListMap
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.PbUuid
+import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
 
 /**
@@ -38,38 +40,39 @@ class EagerChatHistoryDao(
 
   override def datasets: Seq[Dataset] = Seq(dataset)
 
-  override def datasetRoot(dsUuid: UUID): DatasetRoot = _dataRootFile.getAbsoluteFile.asInstanceOf[DatasetRoot]
+  override def datasetRoot(dsUuid: PbUuid): DatasetRoot = _dataRootFile.getAbsoluteFile.asInstanceOf[DatasetRoot]
 
-  override def datasetFiles(dsUuid: UUID): Set[File] = {
+  override def datasetFiles(dsUuid: PbUuid): Set[File] = {
+    val dsRoot       = datasetRoot(dsUuid)
     val cwds         = chats(dsUuid)
-    val chatImgFiles = cwds.map(_.chat.imgPathOption).yieldDefined.toSet
+    val chatImgFiles = cwds.map(_.chat.imgPath.map(_.toFile(dsRoot))).yieldDefined.toSet
     val msgFiles = for {
       cwd <- cwds
       m   <- firstMessages(cwd.chat, Int.MaxValue)
-    } yield m.files(datasetRoot(dsUuid))
+    } yield m.files(dsRoot)
     chatImgFiles ++ msgFiles.toSet.flatten
   }
 
-  override def myself(dsUuid: UUID): User = myself1
+  override def myself(dsUuid: PbUuid): User = myself1
 
-  override def users(dsUuid: UUID): Seq[User] = myself1 +: users1.filter(_ != myself1)
+  override def users(dsUuid: PbUuid): Seq[User] = myself1 +: users1.filter(_ != myself1)
 
-  override def userOption(dsUuid: UUID, id: Long): Option[User] = users1.find(_.id == id)
+  override def userOption(dsUuid: PbUuid, id: Long): Option[User] = users1.find(_.id == id)
 
   private val chats1: Seq[Chat] = chatsWithMessages.keys.toSeq
 
-  override def chats(dsUuid: UUID): Seq[ChatWithDetails] = {
+  override def chats(dsUuid: PbUuid): Seq[ChatWithDetails] = {
     chatsWithMessages.toSeq.map {
       case (c, msgs) => ChatWithDetails(c, msgs.lastOption, chatMembers(c))
     }.sortBy(_.lastMsgOption.map(_.timestamp)).reverse
   }
 
-  override def chatOption(dsUuid: UUID, id: Long): Option[ChatWithDetails] = chatsWithMessages find (_._1.id == id) map {
+  override def chatOption(dsUuid: PbUuid, id: Long): Option[ChatWithDetails] = chatsWithMessages find (_._1.id == id) map {
     case (c, msgs) => ChatWithDetails(c, msgs.lastOption, chatMembers(c))
   }
 
   private def chatMembers(chat: Chat): Seq[User] = {
-    val me = myself(chat.dsUuid)
+    val me = myself(chat.dsUuid.get)
     me +: (chat.memberIds
       .filter(_ != me.id)
       .map(mId => users1.find(_.id == mId).get)

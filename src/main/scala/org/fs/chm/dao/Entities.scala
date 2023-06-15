@@ -1,7 +1,6 @@
 package org.fs.chm.dao
 
 import java.io.{File => JFile}
-import java.util.UUID
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.protobuf._
@@ -10,7 +9,7 @@ import org.fs.utility.Imports._
 
 object Entities {
   case class Dataset(
-      uuid: UUID,
+      uuid: PbUuid,
       alias: String,
       sourceType: String
   ) {
@@ -24,7 +23,7 @@ object Entities {
   object Dataset {
     def createDefault(srcAlias: String, srcType: String): Dataset =
       Dataset(
-        uuid       = UUID.randomUUID(),
+        uuid       = randomUuid,
         alias      = s"${srcAlias} data loaded @ " + DateTime.now().toString("yyyy-MM-dd"),
         sourceType = srcType
       )
@@ -41,11 +40,11 @@ object Entities {
     }
 
     lazy val prettyName: String =
-      prettyNameOption getOrElse ChatHistoryDao.Unnamed
+      prettyNameOption getOrElse Unnamed
   }
 
   case class User(
-      dsUuid: UUID,
+      dsUuid: PbUuid,
       /** Unique within a dataset */
       id: Long,
       /** If there's no first/last name separation, everything will be in first name */
@@ -55,30 +54,11 @@ object Entities {
       phoneNumberOption: Option[String]
   ) extends PersonInfo
 
-  sealed abstract class ChatType(val name: String)
-  object ChatType {
-    case object Personal     extends ChatType("personal")
-    case object PrivateGroup extends ChatType("private_group")
-  }
-
-  case class Chat(
-      dsUuid: UUID,
-      /** Unique within a dataset */
-      id: Long,
-      nameOption: Option[String],
-      tpe: ChatType,
-      imgPathOption: Option[JFile],
-      memberIds: Set[Long],
-      msgCount: Int
-  ) {
-    override def toString: String = s"Chat(${nameOption.getOrElse("[unnamed]")}, ${tpe.name}})"
-  }
-
   case class ChatWithDetails(chat: Chat,
                              lastMsgOption: Option[Message],
                              /** First element MUST be myself, the rest should be in some fixed order. */
                              members: Seq[User]) {
-    val dsUuid: UUID = chat.dsUuid
+    val dsUuid: PbUuid = chat.dsUuid.get
   }
 
 
@@ -97,6 +77,14 @@ object Entities {
   type DatasetRoot = JFile with DatasetRootTag
 
   val NoInternalId: MessageInternalId = -1L.asInstanceOf[MessageInternalId]
+
+  val Unnamed = "[unnamed]"
+
+  def fromJavaUuid(uuid: java.util.UUID): PbUuid =
+    PbUuid(uuid.toString.toLowerCase)
+
+  def randomUuid: PbUuid =
+    fromJavaUuid(java.util.UUID.randomUUID)
 
   def makeSearchableString(components: Seq[RichTextElement], typed: Message.Typed): String = {
     val joinedText: String = (components.map(_.searchableString).yieldDefined mkString " ")
@@ -278,6 +266,18 @@ object Entities {
         internalId = NoInternalId,
         typed = Message.Typed.Empty
       ) && (v1._1.typed, v1._2) =~= (v2._1.typed, v1._2)
+  }
+
+  //
+  //
+  //
+
+  implicit class ExtendedUser(u: User) {
+    def nameOrUnnamed: String = u.firstNameOption getOrElse Unnamed
+  }
+
+  implicit class ExtendedChat(c: Chat) {
+    def nameOrUnnamed: String = c.name getOrElse Unnamed
   }
 
   //
@@ -485,6 +485,6 @@ object Entities {
     }
 
     lazy val prettyName: String =
-      prettyNameOption getOrElse ChatHistoryDao.Unnamed
+      prettyNameOption getOrElse Unnamed
   }
 }

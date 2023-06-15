@@ -1,13 +1,14 @@
 package org.fs.chm.loader.telegram
 
 import java.io.File
-import java.util.UUID
 
 import org.fs.chm.TestHelper
 import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.ContentLocation
 import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.PbUuid
 import org.junit.runner.RunWith
 import org.scalatest.funsuite.AnyFunSuite
 import org.slf4s.Logging
@@ -70,7 +71,7 @@ class TelegramFullDataLoaderSpec //
     // Group chat
     {
       val cwm = dao.chats(ds.uuid).find(_.chat.id == 8713057715L).get // Chat ID is shifted by 2^33
-      assert(cwm.chat.nameOption === Some("My Group"))
+      assert(cwm.chat.name === Some("My Group"))
       assert(cwm.chat.tpe === ChatType.PrivateGroup)
       // We only know of myself + two users (other's IDs aren't known), as well as service "member".
       assert(cwm.members.size === 4)
@@ -122,7 +123,7 @@ class TelegramFullDataLoaderSpec //
     // Group chat
     {
       val cwm = dao.chats(ds.uuid).find(_.chat.id == 8713057715L).get // Chat ID is shifted by 2^33
-      assert(cwm.chat.nameOption === Some("My Group"))
+      assert(cwm.chat.name === Some("My Group"))
       assert(cwm.chat.tpe === ChatType.PrivateGroup)
       // We only know of myself + one users (ID of one more isn't known).
       assert(cwm.members.size === 2)
@@ -160,7 +161,7 @@ class TelegramFullDataLoaderSpec //
     // Group chat
     {
       val cwm = dao.chats(ds.uuid).find(_.chat.id == 8713057715L).get // Chat ID is shifted by 2^33
-      assert(cwm.chat.nameOption === Some("My Group"))
+      assert(cwm.chat.name === Some("My Group"))
       assert(cwm.chat.tpe === ChatType.PrivateGroup)
       // We only know of myself + one users (ID of one more isn't known).
       assert(cwm.members.size === 2)
@@ -192,7 +193,7 @@ class TelegramFullDataLoaderSpec //
   // Helpers
   //
 
-  private def expectedSelf(dsUuid: UUID) = User(
+  private def expectedSelf(dsUuid: PbUuid) = User(
     dsUuid            = dsUuid,
     id                = 11111111L,
     firstNameOption   = Some("Aaaaa"),

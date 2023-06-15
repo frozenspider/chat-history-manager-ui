@@ -2,7 +2,6 @@ package org.fs.chm.utility
 
 import java.io.File
 import java.nio.file.Files
-import java.util.UUID
 
 import scala.collection.immutable.ListMap
 import scala.util.Random
@@ -11,21 +10,24 @@ import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao._
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger.TaggedMessage
+import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.ContentPoll
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
+import org.fs.chm.protobuf.PbUuid
 
 /**
  * Utility stuff used for testing, both automatically and manually
  */
 object TestUtils {
 
-  val noUuid   = UUID.fromString("00000000-0000-0000-0000-000000000000")
+  val noUuid   = PbUuid("00000000-0000-0000-0000-000000000000")
   val baseDate = DateTime.parse("2019-01-02T11:15:21")
   val rnd      = new Random()
 
-  def createUser(dsUuid: UUID, idx: Int): User =
+  def createUser(dsUuid: PbUuid, idx: Int): User =
     User(
       dsUuid            = dsUuid,
       id                = idx,
@@ -35,29 +37,29 @@ object TestUtils {
       phoneNumberOption = Some("xxx xx xx".replaceAll("x", idx.toString))
     )
 
-  def createGroupChat(dsUuid: UUID, idx: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat = {
+  def createGroupChat(dsUuid: PbUuid, idx: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat = {
     require(memberIds.size >= 2)
     Chat(
-      dsUuid        = dsUuid,
-      id            = idx,
-      nameOption    = Some("Chat " + nameSuffix),
-      tpe           = ChatType.PrivateGroup,
-      imgPathOption = None,
-      memberIds     = memberIds.toSet,
-      msgCount      = messagesSize
+      dsUuid    = Some(dsUuid),
+      id        = idx,
+      name      = Some("Chat " + nameSuffix),
+      tpe       = ChatType.PrivateGroup,
+      imgPath   = None,
+      memberIds = memberIds.toSeq,
+      msgCount  = messagesSize
     )
   }
 
-  def createPersonalChat(dsUuid: UUID, idx: Int, user: User, memberIds: Iterable[Long], messagesSize: Int): Chat = {
+  def createPersonalChat(dsUuid: PbUuid, idx: Int, user: User, memberIds: Iterable[Long], messagesSize: Int): Chat = {
     require(memberIds.size == 2)
     Chat(
-      dsUuid        = dsUuid,
-      id            = idx,
-      nameOption    = user.prettyNameOption,
-      tpe           = ChatType.Personal,
-      imgPathOption = None,
-      memberIds     = memberIds.toSet,
-      msgCount      = messagesSize
+      dsUuid    = Some(dsUuid),
+      id        = idx,
+      name      = user.prettyNameOption,
+      tpe       = ChatType.Personal,
+      imgPath   = None,
+      memberIds = memberIds.toSeq,
+      msgCount  = messagesSize
     )
   }
 
@@ -101,7 +103,7 @@ object TestUtils {
       chatsWithMsgs.values.flatten.forall(userIds contains _.fromId)
     }, "All messages should have valid user IDs!")
     val ds = Dataset(
-      uuid       = UUID.randomUUID(),
+      uuid       = randomUuid,
       alias      = "Dataset " + nameSuffix,
       sourceType = "test source"
     )
@@ -116,7 +118,7 @@ object TestUtils {
       myself1      = users1.head,
       users1       = users1,
       _chatsWithMessages = chatsWithMsgs.map {
-        case (c, ms) => (c.copy(dsUuid = ds.uuid) -> ms.map(amend2).toIndexedSeq)
+        case (c, ms) => (c.copy(dsUuid = Some(ds.uuid)) -> ms.map(amend2).toIndexedSeq)
       }
     ) with EagerMutableDaoTrait
   }
@@ -148,11 +150,11 @@ object TestUtils {
   trait EagerMutableDaoTrait extends MutableChatHistoryDao {
     override def insertDataset(ds: Dataset): Unit = ???
 
-    override def renameDataset(dsUuid: UUID, newName: String): Dataset = ???
+    override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = ???
 
-    override def deleteDataset(dsUuid: UUID): Unit = ???
+    override def deleteDataset(dsUuid: PbUuid): Unit = ???
 
-    override def shiftDatasetTime(dsUuid: UUID, hrs: Int): Unit = ???
+    override def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): Unit = ???
 
     override def insertUser(user: User, isMyself: Boolean): Unit = ???
 

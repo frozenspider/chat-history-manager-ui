@@ -1,11 +1,12 @@
 package org.fs.chm.dao
 
 import java.io.{File => JFile}
-import java.util.UUID
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.PbUuid
 import org.fs.chm.utility.LangUtils._
 
 /**
@@ -21,21 +22,21 @@ trait ChatHistoryDao extends AutoCloseable {
   def datasets: Seq[Dataset]
 
   /** Directory which stores eveything in the dataset. All files are guaranteed to have this as a prefix */
-  def datasetRoot(dsUuid: UUID): DatasetRoot
+  def datasetRoot(dsUuid: PbUuid): DatasetRoot
 
   /** List all files referenced by entities of this dataset. Some might not exist. */
-  def datasetFiles(dsUuid: UUID): Set[JFile]
+  def datasetFiles(dsUuid: PbUuid): Set[JFile]
 
-  def myself(dsUuid: UUID): User
+  def myself(dsUuid: PbUuid): User
 
   /** Contains myself as the first element. Order must be stable. Method is expected to be fast. */
-  def users(dsUuid: UUID): Seq[User]
+  def users(dsUuid: PbUuid): Seq[User]
 
-  def userOption(dsUuid: UUID, id: Long): Option[User]
+  def userOption(dsUuid: PbUuid, id: Long): Option[User]
 
-  def chats(dsUuid: UUID): Seq[ChatWithDetails]
+  def chats(dsUuid: PbUuid): Seq[ChatWithDetails]
 
-  def chatOption(dsUuid: UUID, id: Long): Option[ChatWithDetails]
+  def chatOption(dsUuid: PbUuid, id: Long): Option[ChatWithDetails]
 
   /** Return N messages after skipping first M of them. Trivial pagination in a nutshell. */
   def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message]
@@ -50,7 +51,7 @@ trait ChatHistoryDao extends AutoCloseable {
    * Message must be present, so the result would contain at least one element.
    */
   final def messagesBefore(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
-    val root = datasetRoot(chat.dsUuid)
+    val root = datasetRoot(chat.dsUuid.get)
     messagesBeforeImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit && (seq.last, root) =~= (msg, root) )
   }
 
@@ -61,7 +62,7 @@ trait ChatHistoryDao extends AutoCloseable {
    * Message must be present, so the result would contain at least one element.
    */
   final def messagesAfter(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
-    val root = datasetRoot(chat.dsUuid)
+    val root = datasetRoot(chat.dsUuid.get)
     messagesAfterImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit && (seq.head, root) =~= (msg, root))
   }
 
@@ -72,7 +73,7 @@ trait ChatHistoryDao extends AutoCloseable {
    * Messages must be present, so the result would contain at least one element (if both are the same message).
    */
   final def messagesBetween(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] = {
-    val root = datasetRoot(chat.dsUuid)
+    val root = datasetRoot(chat.dsUuid.get)
     messagesBetweenImpl(chat, msg1, msg2) ensuring (seq =>
       seq.nonEmpty && (seq.head, root) =~= (msg1, root) && (seq.last, root) =~= (msg2, root))
   }
@@ -105,12 +106,12 @@ trait ChatHistoryDao extends AutoCloseable {
 trait MutableChatHistoryDao extends ChatHistoryDao {
   def insertDataset(ds: Dataset): Unit
 
-  def renameDataset(dsUuid: UUID, newName: String): Dataset
+  def renameDataset(dsUuid: PbUuid, newName: String): Dataset
 
-  def deleteDataset(dsUuid: UUID): Unit
+  def deleteDataset(dsUuid: PbUuid): Unit
 
   /** Shift time of all timestamps in the dataset to accommodate timezone differences */
-  def shiftDatasetTime(dsUuid: UUID, hrs: Int): Unit
+  def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): Unit
 
   /** Insert a new user. It should not yet exist */
   def insertUser(user: User, isMyself: Boolean): Unit
@@ -140,8 +141,4 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
 
   /** Create a backup, if enabled, otherwise do nothing */
   def backup(): Unit
-}
-
-object ChatHistoryDao {
-  val Unnamed = "[unnamed]"
 }

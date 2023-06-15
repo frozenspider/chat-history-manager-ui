@@ -9,6 +9,7 @@ import javax.swing.text.html.HTMLEditorKit
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger.MessagesMergeOption
+import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.RichTextElement
 import org.fs.chm.protobuf.RtePlain
@@ -42,7 +43,7 @@ class SelectMergeMessagesDialog(
   private lazy val MaxMessageWidth = 500
 
   private lazy val originalTitle =
-    s"Select messages to merge (${masterCwd.chat.nameOption.getOrElse(ChatHistoryDao.Unnamed)})"
+    s"Select messages to merge (${masterCwd.chat.nameOrUnnamed})"
 
   private val masterRoot = masterDao.datasetRoot(masterCwd.dsUuid)
   private val slaveRoot  = slaveDao.datasetRoot(slaveCwd.dsUuid)

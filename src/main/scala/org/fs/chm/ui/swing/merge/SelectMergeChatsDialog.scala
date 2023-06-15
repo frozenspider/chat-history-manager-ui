@@ -7,6 +7,7 @@ import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger._
+import org.fs.chm.protobuf.Chat
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.list.chat.ChatListItem
@@ -137,7 +138,6 @@ class SelectMergeChatsDialog(
 object SelectMergeChatsDialog {
   def main(args: Array[String]): Unit = {
     import java.nio.file.Files
-    import java.util.UUID
 
     import scala.collection.immutable.ListMap
 
@@ -145,8 +145,8 @@ object SelectMergeChatsDialog {
 
     def createMultiChatDao(chatsProducer: (Dataset, Seq[User]) => Seq[Chat]): MutableChatHistoryDao = {
       val ds = Dataset(
-        uuid = UUID.randomUUID(),
-        alias = "Dataset",
+        uuid       = randomUuid,
+        alias      = "Dataset",
         sourceType = "test source"
       )
       val users        = (1 to 2) map (createUser(ds.uuid, _))

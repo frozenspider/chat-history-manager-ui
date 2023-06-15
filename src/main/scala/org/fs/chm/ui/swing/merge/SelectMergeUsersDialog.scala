@@ -131,7 +131,6 @@ class SelectMergeUsersDialog(
 object SelectMergeUsersDialog {
   def main(args: Array[String]): Unit = {
     import java.nio.file.Files
-    import java.util.UUID
 
     import scala.collection.immutable.ListMap
 
@@ -139,8 +138,8 @@ object SelectMergeUsersDialog {
 
     def createMultiUserDao(usersProducer: Dataset => Seq[User]): MutableChatHistoryDao = {
       val ds = Dataset(
-        uuid = UUID.randomUUID(),
-        alias = "Dataset",
+        uuid       = randomUuid,
+        alias      = "Dataset",
         sourceType = "test source"
       )
       val users        = usersProducer(ds)

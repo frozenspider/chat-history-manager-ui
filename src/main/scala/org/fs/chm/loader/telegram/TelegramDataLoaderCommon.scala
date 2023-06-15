@@ -1,10 +1,11 @@
 package org.fs.chm.loader.telegram
 
 import java.io.File
-import java.util.UUID
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Content
 import org.fs.chm.protobuf.ContentAnimation
 import org.fs.chm.protobuf.ContentFile
@@ -29,6 +30,7 @@ import org.fs.chm.protobuf.MessageServiceGroupMigrateTo
 import org.fs.chm.protobuf.MessageServiceGroupRemoveMembers
 import org.fs.chm.protobuf.MessageServicePhoneCall
 import org.fs.chm.protobuf.MessageServicePinMessage
+import org.fs.chm.protobuf.PbUuid
 import org.fs.chm.protobuf.RichTextElement
 import org.fs.chm.protobuf.RteBold
 import org.fs.chm.protobuf.RteItalic
@@ -437,7 +439,7 @@ trait TelegramDataLoaderCommon {
     }
   }
 
-  protected def parseChat(jv: JValue, dsUuid: UUID, memberIds: Set[Long], msgCount: Int): Chat = {
+  protected def parseChat(jv: JValue, dsUuid: PbUuid, memberIds: Set[Long], msgCount: Int): Chat = {
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("messages")
     val tpe = getCheckedField[String](jv, "type") match {
@@ -456,13 +458,13 @@ trait TelegramDataLoaderCommon {
 
     tracker.ensuringUsage(jv) {
       Chat(
-        dsUuid        = dsUuid,
-        id            = id,
-        nameOption    = getStringOpt(jv, "name", true),
-        tpe           = tpe,
-        imgPathOption = None,
-        memberIds     = memberIds,
-        msgCount      = msgCount
+        dsUuid    = Some(dsUuid),
+        id        = id,
+        name      = getStringOpt(jv, "name", true),
+        tpe       = tpe,
+        imgPath   = None,
+        memberIds = memberIds.toSeq,
+        msgCount  = msgCount
       )
     }
   }

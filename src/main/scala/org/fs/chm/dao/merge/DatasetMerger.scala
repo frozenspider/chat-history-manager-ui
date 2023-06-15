@@ -1,7 +1,6 @@
 package org.fs.chm.dao.merge
 
 import java.io.File
-import java.util.UUID
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -9,6 +8,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.MutableChatHistoryDao
+import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Message
 import org.fs.chm.utility.IoUtils
 import org.fs.chm.utility.LangUtils._
@@ -231,8 +232,8 @@ class DatasetMerger(
         masterDao.backup()
         masterDao.disableBackups()
         val newDs = Dataset(
-          uuid = UUID.randomUUID(),
-          alias = masterDs.alias + " (merged)",
+          uuid       = randomUuid,
+          alias      = masterDs.alias + " (merged)",
           sourceType = masterDs.sourceType
         )
         masterDao.insertDataset(newDs)
@@ -240,7 +241,7 @@ class DatasetMerger(
         for {
           firstMasterChat <- chatsToMerge.find(_.masterCwdOption.isDefined)
           masterCwd <- firstMasterChat.masterCwdOption
-        } require(masterDao.users(masterCwd.chat.dsUuid).size <= usersToMerge.size, "Not enough user merges!")
+        } require(masterDao.users(masterCwd.chat.dsUuid.get).size <= usersToMerge.size, "Not enough user merges!")
 
         // Users
         val masterSelf = masterDao.myself(masterDs.uuid)
@@ -266,11 +267,11 @@ class DatasetMerger(
                   case (ChatType.Personal, Some(userId)) =>
                     // For merged personal chats, name should match whatever user name was chosen
                     val user = masterUsers.find(_.id == userId).get
-                    c.copy(nameOption = user.prettyNameOption)
+                    c.copy(name = user.prettyNameOption)
                   case _ =>
                     c
                 }
-                (f, c2.copy(dsUuid = newDs.uuid))
+                (f, c2.copy(dsUuid = Some(newDs.uuid)))
             }
           }
           masterDao.insertChat(dsRoot, chat)
