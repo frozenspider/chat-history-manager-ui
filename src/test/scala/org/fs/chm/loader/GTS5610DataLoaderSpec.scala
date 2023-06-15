@@ -38,7 +38,7 @@ class GTS5610DataLoaderSpec //
     // Someguy
     {
       val user     = users.find(_.firstNameOption contains "someguy") getOrElse fail("User not found!")
-      val chat     = chats.find(_.name == user.firstNameOption) getOrElse fail("Chat not found!")
+      val chat     = chats.find(_.nameOption == user.firstNameOption) getOrElse fail("Chat not found!")
       val messages = dao.firstMessages(chat, 99999)
       assert(messages.size === 2)
 
@@ -49,7 +49,7 @@ class GTS5610DataLoaderSpec //
     // +12345
     {
       val user     = users.find(_.phoneNumberOption contains "+12345") getOrElse fail("User not found!")
-      val chat     = chats.find(_.name == user.firstNameOption) getOrElse fail("Chat not found!")
+      val chat     = chats.find(_.nameOption == user.firstNameOption) getOrElse fail("Chat not found!")
       val messages = dao.firstMessages(chat, 99999)
       assert(messages.size === 1)
 
@@ -60,7 +60,7 @@ class GTS5610DataLoaderSpec //
     // (Cyrillic names are fucked up in the vcards)
     {
       val user     = users.find(_.firstNameOption contains "Орк") getOrElse fail("User not found!")
-      val chat     = chats.find(_.name == user.firstNameOption) getOrElse fail("Chat not found!")
+      val chat     = chats.find(_.nameOption == user.firstNameOption) getOrElse fail("Chat not found!")
       val messages = dao.firstMessages(chat, 99999)
       assert(user.phoneNumberOption === Some("911"))
       assert(messages.size === 1)

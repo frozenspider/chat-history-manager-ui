@@ -13,8 +13,8 @@ object DatasetMergerHelper {
 
   def changedMessages(msgs: Seq[Message], idCondition: Long => Boolean): Seq[Message] = {
     msgs.collect {
-      case m if m.typed.isRegular && idCondition(m.sourceId.get) =>
-        val text2 = Seq(RichText.makePlain("Different message " + m.sourceId.getOrElse("<no src id>")))
+      case m if m.typed.isRegular && idCondition(m.sourceIdOption.get) =>
+        val text2 = Seq(RichText.makePlain("Different message " + m.sourceIdOption.getOrElse("<no src id>")))
         m.copy(
           text = text2,
           searchableString = Some(makeSearchableString(text2, m.typed))

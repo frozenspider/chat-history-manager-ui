@@ -41,26 +41,26 @@ object TestUtils {
   def createGroupChat(dsUuid: PbUuid, idx: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat = {
     require(memberIds.size >= 2)
     Chat(
-      dsUuid    = dsUuid,
-      id        = idx,
-      name      = Some("Chat " + nameSuffix),
-      tpe       = ChatType.PrivateGroup,
-      imgPath   = None,
-      memberIds = memberIds.toSeq,
-      msgCount  = messagesSize
+      dsUuid        = dsUuid,
+      id            = idx,
+      nameOption    = Some("Chat " + nameSuffix),
+      tpe           = ChatType.PrivateGroup,
+      imgPathOption = None,
+      memberIds     = memberIds.toSeq,
+      msgCount      = messagesSize
     )
   }
 
   def createPersonalChat(dsUuid: PbUuid, idx: Int, user: User, memberIds: Iterable[Long], messagesSize: Int): Chat = {
     require(memberIds.size == 2)
     Chat(
-      dsUuid    = dsUuid,
-      id        = idx,
-      name      = user.prettyNameOption,
-      tpe       = ChatType.Personal,
-      imgPath   = None,
-      memberIds = memberIds.toSeq,
-      msgCount  = messagesSize
+      dsUuid        = dsUuid,
+      id            = idx,
+      nameOption    = user.prettyNameOption,
+      tpe           = ChatType.Personal,
+      imgPathOption = None,
+      memberIds     = memberIds.toSeq,
+      msgCount      = messagesSize
     )
   }
 
@@ -70,15 +70,15 @@ object TestUtils {
       if (idx > 0) Some(rnd.nextInt(idx).toLong.asInstanceOf[MessageSourceId]) else None
 
     val typed = Message.Typed.Regular(MessageRegular(
-      editTimestamp    = Some(baseDate.plusMinutes(idx).plusSeconds(5).getMillis),
-      replyToMessageId = replyToMessageIdOption,
-      forwardFromName  = Some("u" + userId),
-      content          = Some(Content(Content.Val.Poll(ContentPoll(question = s"Hey, ${idx}!"))))
+      editTimestampOption    = Some(baseDate.plusMinutes(idx).plusSeconds(5).getMillis),
+      replyToMessageIdOption = replyToMessageIdOption,
+      forwardFromNameOption  = Some("u" + userId),
+      contentOption          = Some(Content(Content.Val.Poll(ContentPoll(question = s"Hey, ${idx}!"))))
     ))
     val text = Seq(RichText.makePlain(s"Hello there, ${idx}!"))
     Message(
       internalId       = NoInternalId,
-      sourceId         = Some(idx.toLong.asInstanceOf[MessageSourceId]),
+      sourceIdOption   = Some(idx.toLong.asInstanceOf[MessageSourceId]),
       timestamp        = baseDate.plusMinutes(idx).getMillis,
       fromId           = userId,
       searchableString = Some(makeSearchableString(text, typed)),
@@ -140,7 +140,7 @@ object TestUtils {
 
   implicit class RichMsgSeq(msgs: Seq[Message]) {
     def bySrcId[TM <: Message with TaggedMessage](id: Long): TM =
-      tag(msgs.find(_.sourceIdTyped.get == id).get)
+      tag(msgs.find(_.sourceIdTypedOption.get == id).get)
   }
 
   def tag[TM <: Message with TaggedMessage](m: Message): TM = m.asInstanceOf[TM]

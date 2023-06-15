@@ -49,7 +49,7 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
 
           val chatRes = parseChat(chat, dataset.uuid, memberIds, messagesRes.size)
           (chatRes, messagesRes)
-        }((res, ms) => s"Chat '${res._1.name.getOrElse("#" + res._1.id)}' loaded in ${ms} ms")
+        }((res, ms) => s"Chat '${res._1.nameOption.getOrElse("#" + res._1.id)}' loaded in ${ms} ms")
       }
       val chatsWithMessagesLM = ListMap(chatsWithMessages: _*)
 

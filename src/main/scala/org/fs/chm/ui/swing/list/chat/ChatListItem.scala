@@ -159,9 +159,9 @@ class ChatListItem(
       }
     val text: String = msg.typed.value match {
       case msgRegular: MessageRegular =>
-        msgRegular.content map (_.`val`) match {
+        msgRegular.contentOption map (_.`val`) match {
           case None                               => msg.searchableString.get
-          case Some(s: Content.Val.Sticker)       => s.value.emoji.map(_ + " ").getOrElse("") + "(sticker)"
+          case Some(s: Content.Val.Sticker)       => s.value.emojiOption.map(_ + " ").getOrElse("") + "(sticker)"
           case Some(_: Content.Val.Photo)         => "(photo)"
           case Some(_: Content.Val.VoiceMsg)      => "(voice)"
           case Some(_: Content.Val.VideoMsg)      => "(video)"

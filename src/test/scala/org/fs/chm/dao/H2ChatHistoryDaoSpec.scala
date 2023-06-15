@@ -184,7 +184,7 @@ class H2ChatHistoryDaoSpec //
       assert(usersA.find(_.id == user1.id).get === u)
 
       val chatA = personalChatWith(u) getOrElse fail("Chat not found after updating!")
-      assert(chatA.name === u.prettyNameOption)
+      assert(chatA.nameOption === u.prettyNameOption)
     }
 
     doUpdate(
@@ -215,7 +215,7 @@ class H2ChatHistoryDaoSpec //
         )
       )
       val chat1After = personalChatWith(user1) getOrElse fail("Chat not found after updating!")
-      assert(chat1After.name === chat1Before.name)
+      assert(chat1After.nameOption === chat1Before.nameOption)
     }
   }
 
@@ -239,7 +239,7 @@ class H2ChatHistoryDaoSpec //
       chat <- dao.chats(localDsUuid).map(_.chat).sortBy(_.id)
     } {
       val clue                        = s"Dao is ${dao.getClass.getSimpleName}"
-      implicit def toMessage(i: Long) = msgs.find(_.sourceId contains i).get
+      implicit def toMessage(i: Long) = msgs.find(_.sourceIdOption contains i).get
 
       assert(dao.messagesBefore(chat, 3L, 10) === Seq(msgs.head), clue)
 
@@ -317,7 +317,7 @@ class H2ChatHistoryDaoSpec //
     // Verify chats
     assert(chatsAfter.size === chatsBefore.size - 1)
     val expectedChat = baseUserPc.copy(
-      name       = expectedUser.firstNameOption,
+      nameOption = expectedUser.firstNameOption,
       msgCount   = baseUserPcMsgs.size + absorbedUserPcMsgs.size
     )
     assert(chatsAfter.find(_.chat.id == baseUserPc.id).map(_.chat) === Some(expectedChat))
@@ -327,8 +327,8 @@ class H2ChatHistoryDaoSpec //
     val expectedMessages =
       (baseUserPcMsgs ++ absorbedUserPcMsgs.map { m =>
         m.copy(
-          sourceId = None,
-          fromId   = baseUser.id,
+          sourceIdOption = None,
+          fromId         = baseUser.id,
         )
       }).sortBy(_.timestamp)
     assert(h2dao.firstMessages(chatsAfter.find(_.chat.id == baseUserPc.id).get.chat, 99999) === expectedMessages)

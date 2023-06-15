@@ -334,7 +334,7 @@ class H2ChatHistoryDao(
           assert(chats1.size == chats2.size, s"Chat size differs:\nWas    ${chats1.size}\nBecame ${chats2.size}")
           for (((c1, c2), i) <- chats1.zip(chats2).zipWithIndex) {
             StopWatch.measureAndCall {
-              log.info(s"Checking chat '${c1.name.getOrElse("")}' with ${c1.msgCount} messages")
+              log.info(s"Checking chat '${c1.nameOption.getOrElse("")}' with ${c1.msgCount} messages")
               assert(c1 == c2, s"Chat #$i differs:\nWas    $c1\nBecame $c2")
               val messages1 = dao.lastMessages(c1, c1.msgCount + 1)
               val messages2 = lastMessages(c2, c2.msgCount + 1)
@@ -479,7 +479,7 @@ class H2ChatHistoryDao(
       Lock.synchronized {
         _usersCacheOption = None
       }
-    }((_, t) => log.info(s"Chat ${chat.name.getOrElse("#" + chat.id)} deleted in $t ms"))
+    }((_, t) => log.info(s"Chat ${chat.nameOption.getOrElse("#" + chat.id)} deleted in $t ms"))
   }
 
   override def insertMessages(dsRoot: JFile, chat: Chat, msgs: Seq[Message]): Unit = {
@@ -975,13 +975,13 @@ class H2ChatHistoryDao(
   object Raws {
     def toChat(rc: RawChat): Chat = {
       Chat(
-        dsUuid    = rc.dsUuid,
-        id        = rc.id,
-        name      = rc.nameOption,
-        tpe       = rc.tpe,
-        imgPath   = rc.imgPathOption map (_.makeRelativePath),
-        memberIds = rc.memberIdsOption map (_.toSeq) getOrElse Seq.empty,
-        msgCount  = rc.msgCount
+        dsUuid        = rc.dsUuid,
+        id            = rc.id,
+        nameOption     = rc.nameOption,
+        tpe           = rc.tpe,
+        imgPathOption = rc.imgPathOption map (_.makeRelativePath),
+        memberIds     = rc.memberIdsOption map (_.toSeq) getOrElse Seq.empty,
+        msgCount      = rc.msgCount
       )
     }
 
@@ -991,15 +991,15 @@ class H2ChatHistoryDao(
       val typed: Message.Typed = rm.messageType match {
         case "regular" =>
           Message.Typed.Regular(MessageRegular(
-            editTimestamp    = rm.editTimeOption map (_.getMillis),
-            forwardFromName  = rm.forwardFromNameOption,
-            replyToMessageId = rm.replyToMessageIdOption,
-            content          = contents.get(rm.internalId)
+            editTimestampOption    = rm.editTimeOption map (_.getMillis),
+            forwardFromNameOption  = rm.forwardFromNameOption,
+            replyToMessageIdOption = rm.replyToMessageIdOption,
+            contentOption          = contents.get(rm.internalId)
           ))
         case "service_phone_call" =>
           Message.Typed.Service(MessageService(MessageService.Val.PhoneCall(MessageServicePhoneCall(
-            durationSec   = rm.durationSecOption,
-            discardReason = rm.discardReasonOption
+            durationSecOption   = rm.durationSecOption,
+            discardReasonOption = rm.discardReasonOption
           ))))
         case "service_pin_message" =>
           Message.Typed.Service(MessageService(MessageService.Val.PinMessage(MessageServicePinMessage(
@@ -1019,9 +1019,9 @@ class H2ChatHistoryDao(
         case "service_edit_photo" =>
           Message.Typed.Service(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(
             ContentPhoto(
-              path   = rm.pathOption,
-              width  = rm.widthOption.get,
-              height = rm.heightOption.get
+              pathOption = rm.pathOption,
+              width      = rm.widthOption.get,
+              height     = rm.heightOption.get
             )
           ))))
         case "service_invite_group_members" =>
@@ -1046,7 +1046,7 @@ class H2ChatHistoryDao(
       val text = richTexts.getOrElse(rm.internalId, Seq.empty)
       Message(
         internalId             = rm.internalId,
-        sourceId               = rm.sourceIdOption,
+        sourceIdOption         = rm.sourceIdOption,
         timestamp              = rm.time.getMillis,
         fromId                 = rm.fromId,
         text                   = text,
@@ -1084,60 +1084,60 @@ class H2ChatHistoryDao(
       Content(rc.elementType match {
         case "sticker" =>
           Content.Val.Sticker(ContentSticker(
-            path          = rc.pathOption map (_.makeRelativePath),
-            thumbnailPath = rc.thumbnailPathOption map (_.makeRelativePath),
-            emoji         = rc.emojiOption,
-            width         = rc.widthOption.get,
-            height        = rc.heightOption.get
+            pathOption          = rc.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
+            emojiOption         = rc.emojiOption,
+            width               = rc.widthOption.get,
+            height              = rc.heightOption.get
           ))
         case "photo" =>
           Content.Val.Photo(ContentPhoto(
-            path   = rc.pathOption map (_.makeRelativePath),
-            width  = rc.widthOption.get,
-            height = rc.heightOption.get,
+            pathOption = rc.pathOption map (_.makeRelativePath),
+            width      = rc.widthOption.get,
+            height     = rc.heightOption.get,
           ))
         case "voice_message" =>
           Content.Val.VoiceMsg(ContentVoiceMsg(
-            path        = rc.pathOption map (_.makeRelativePath),
-            mimeType    = rc.mimeTypeOption.get,
-            durationSec = rc.durationSecOption
+            pathOption        = rc.pathOption map (_.makeRelativePath),
+            mimeType          = rc.mimeTypeOption.get,
+            durationSecOption = rc.durationSecOption
           ))
         case "video_message" =>
           Content.Val.VideoMsg(ContentVideoMsg(
-            path          = rc.pathOption map (_.makeRelativePath),
-            thumbnailPath = rc.thumbnailPathOption map (_.makeRelativePath),
-            mimeType      = rc.mimeTypeOption.get,
-            durationSec   = rc.durationSecOption,
-            width         = rc.widthOption.get,
-            height        = rc.heightOption.get
+            pathOption          = rc.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
+            mimeType            = rc.mimeTypeOption.get,
+            durationSecOption   = rc.durationSecOption,
+            width               = rc.widthOption.get,
+            height              = rc.heightOption.get
           ))
         case "animation" =>
           Content.Val.Animation(ContentAnimation(
-            path          = rc.pathOption map (_.makeRelativePath),
-            thumbnailPath = rc.thumbnailPathOption map (_.makeRelativePath),
-            mimeType      = rc.mimeTypeOption.get,
-            durationSec   = rc.durationSecOption,
-            width         = rc.widthOption.get,
-            height        = rc.heightOption.get
+            pathOption          = rc.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
+            mimeType            = rc.mimeTypeOption.get,
+            durationSecOption   = rc.durationSecOption,
+            width               = rc.widthOption.get,
+            height              = rc.heightOption.get
           ))
         case "file" =>
           Content.Val.File(ContentFile(
-            path          = rc.pathOption map (_.makeRelativePath),
-            thumbnailPath = rc.thumbnailPathOption map (_.makeRelativePath),
-            mimeType      = rc.mimeTypeOption,
-            title         = rc.titleOption.getOrElse("<File>"),
-            performer     = rc.performerOption,
-            durationSec   = rc.durationSecOption,
-            width         = rc.widthOption,
-            height        = rc.heightOption
+            pathOption          = rc.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
+            mimeTypeOption      = rc.mimeTypeOption,
+            title               = rc.titleOption.getOrElse("<File>"),
+            performerOption     = rc.performerOption,
+            durationSecOption   = rc.durationSecOption,
+            widthOption         = rc.widthOption,
+            heightOption        = rc.heightOption
           ))
         case "location" =>
           Content.Val.Location(ContentLocation(
-            title       = rc.titleOption,
-            address     = rc.addressOption,
-            latStr      = rc.latOption.get.toString,
-            lonStr      = rc.lonOption.get.toString,
-            durationSec = rc.durationSecOption
+            titleOption       = rc.titleOption,
+            addressOption     = rc.addressOption,
+            latStr            = rc.latOption.get.toString,
+            lonStr            = rc.lonOption.get.toString,
+            durationSecOption = rc.durationSecOption
           ))
         case "poll" =>
           Content.Val.Poll(ContentPoll(
@@ -1145,10 +1145,10 @@ class H2ChatHistoryDao(
           ))
         case "shared_contact" =>
           Content.Val.SharedContact(ContentSharedContact(
-            firstName   = rc.firstNameOption.get,
-            lastName    = rc.lastNameOption,
-            phoneNumber = rc.phoneNumberOption,
-            vcardPath   = rc.vcardPathOption map (_.makeRelativePath),
+            firstName         = rc.firstNameOption.get,
+            lastNameOption    = rc.lastNameOption,
+            phoneNumberOption = rc.phoneNumberOption,
+            vcardPathOption   = rc.vcardPathOption map (_.makeRelativePath),
           ))
       })
     }
@@ -1157,9 +1157,9 @@ class H2ChatHistoryDao(
       RawChat(
         dsUuid          = c.dsUuid,
         id              = c.id,
-        nameOption      = c.name,
+        nameOption      = c.nameOption,
         tpe             = c.tpe,
-        imgPathOption   = c.imgPath map (_.makeRelativePath),
+        imgPathOption   = c.imgPathOption map (_.makeRelativePath),
         memberIdsOption = Some(c.memberIds.toList),
         msgCount        = c.msgCount
       )
@@ -1177,7 +1177,7 @@ class H2ChatHistoryDao(
         dsUuid                 = dsUuid,
         chatId                 = chatId,
         internalId             = msg.internalIdTyped,
-        sourceIdOption         = msg.sourceIdTyped,
+        sourceIdOption         = msg.sourceIdTypedOption,
         messageType            = "",
         time                   = msg.time,
         editTimeOption         = None,
@@ -1196,18 +1196,18 @@ class H2ChatHistoryDao(
 
       val (rawMessage: RawMessage, rawContentOption: Option[RawContent]) = msg.typed.value match {
         case m: MessageRegular =>
-          val rawContentOption = m.content map fromContent(dsUuid, dsRoot, msg.internalIdTyped)
+          val rawContentOption = m.contentOption map fromContent(dsUuid, dsRoot, msg.internalIdTyped)
           template.copy(
             messageType            = "regular",
             editTimeOption         = m.editTimeOption,
-            forwardFromNameOption  = m.forwardFromName,
+            forwardFromNameOption  = m.forwardFromNameOption,
             replyToMessageIdOption = m.replyToMessageIdTypedOption
           ) -> rawContentOption
         case MessageService(MessageService.Val.PhoneCall(m), _) =>
           template.copy(
             messageType         = "service_phone_call",
-            durationSecOption   = m.durationSec,
-            discardReasonOption = m.discardReason
+            durationSecOption   = m.durationSecOption,
+            discardReasonOption = m.discardReasonOption
           ) -> None
         case MessageService(MessageService.Val.PinMessage(m), _) =>
           template.copy(
@@ -1233,7 +1233,7 @@ class H2ChatHistoryDao(
           val photo = m.photo
           template.copy(
             messageType  = "service_edit_photo",
-            pathOption   = photo.path map (_.makeRelativePath),
+            pathOption   = photo.pathOption map (_.makeRelativePath),
             widthOption  = Some(photo.width),
             heightOption = Some(photo.height)
           ) -> None
@@ -1292,7 +1292,7 @@ class H2ChatHistoryDao(
         case el: RtePrefmtBlock =>
           template.copy(
             elementType    = "prefmt_block",
-            languageOption = el.language
+            languageOption = el.languageOption
           )
       }
     }
@@ -1323,66 +1323,66 @@ class H2ChatHistoryDao(
         case Content.Val.Sticker(c) =>
           template.copy(
             elementType         = "sticker",
-            pathOption          = c.path map (_.makeRelativePath),
-            thumbnailPathOption = c.thumbnailPath map (_.makeRelativePath),
-            emojiOption         = c.emoji,
+            pathOption          = c.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = c.thumbnailPathOption map (_.makeRelativePath),
+            emojiOption         = c.emojiOption,
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
         case Content.Val.Photo(c) =>
           template.copy(
             elementType  = "photo",
-            pathOption   = c.path map (_.makeRelativePath),
+            pathOption   = c.pathOption map (_.makeRelativePath),
             widthOption  = Some(c.width),
             heightOption = Some(c.height)
           )
         case Content.Val.VoiceMsg(c) =>
           template.copy(
             elementType       = "voice_message",
-            pathOption        = c.path map (_.makeRelativePath),
+            pathOption        = c.pathOption map (_.makeRelativePath),
             mimeTypeOption    = Some(c.mimeType),
-            durationSecOption = c.durationSec
+            durationSecOption = c.durationSecOption
           )
         case Content.Val.VideoMsg(c) =>
           template.copy(
             elementType         = "video_message",
-            pathOption          = c.path map (_.makeRelativePath),
-            thumbnailPathOption = c.thumbnailPath map (_.makeRelativePath),
+            pathOption          = c.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = c.thumbnailPathOption map (_.makeRelativePath),
             mimeTypeOption      = Some(c.mimeType),
-            durationSecOption   = c.durationSec,
+            durationSecOption   = c.durationSecOption,
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
         case Content.Val.Animation(c) =>
           template.copy(
             elementType         = "animation",
-            pathOption          = c.path map (_.makeRelativePath),
-            thumbnailPathOption = c.thumbnailPath map (_.makeRelativePath),
+            pathOption          = c.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = c.thumbnailPathOption map (_.makeRelativePath),
             mimeTypeOption      = Some(c.mimeType),
-            durationSecOption   = c.durationSec,
+            durationSecOption   = c.durationSecOption,
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
         case Content.Val.File(c) =>
           template.copy(
             elementType         = "file",
-            pathOption          = c.path map (_.makeRelativePath),
-            thumbnailPathOption = c.thumbnailPath map (_.makeRelativePath),
-            mimeTypeOption      = c.mimeType,
+            pathOption          = c.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = c.thumbnailPathOption map (_.makeRelativePath),
+            mimeTypeOption      = c.mimeTypeOption,
             titleOption         = Some(c.title),
-            performerOption     = c.performer,
-            durationSecOption   = c.durationSec,
-            widthOption         = c.width,
-            heightOption        = c.height
+            performerOption     = c.performerOption,
+            durationSecOption   = c.durationSecOption,
+            widthOption         = c.widthOption,
+            heightOption        = c.heightOption
           )
         case Content.Val.Location(c) =>
           template.copy(
             elementType       = "location",
-            titleOption       = c.title,
-            addressOption     = c.address,
+            titleOption       = c.titleOption,
+            addressOption     = c.addressOption,
             latOption         = Some(c.lat),
             lonOption         = Some(c.lon),
-            durationSecOption = c.durationSec
+            durationSecOption = c.durationSecOption
           )
         case Content.Val.Poll(c) =>
           template.copy(
@@ -1393,9 +1393,9 @@ class H2ChatHistoryDao(
           template.copy(
             elementType       = "shared_contact",
             firstNameOption   = Some(c.firstName),
-            lastNameOption    = c.lastName,
-            phoneNumberOption = c.phoneNumber,
-            vcardPathOption   = c.vcardPath map (_.makeRelativePath)
+            lastNameOption    = c.lastNameOption,
+            phoneNumberOption = c.phoneNumberOption,
+            vcardPathOption   = c.vcardPathOption map (_.makeRelativePath)
           )
         case Content.Val.Empty =>
           throw new IllegalArgumentException("Empty content!")

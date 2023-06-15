@@ -146,7 +146,7 @@ class DatasetMerger(
       case (Some(mm), Some(sm), NoState)
         if mm.typed.service.flatMap(_.`val`.groupMigrateFrom).isDefined &&
            sm.typed.service.flatMap(_.`val`.groupMigrateFrom).isDefined &&
-           mm.sourceId.isDefined && mm.sourceId == sm.sourceId &&
+           mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption &&
            mm.fromId < 0x100000000L && sm.fromId > 0x100000000L &&
            (mm.copy(fromId = sm.fromId), masterRoot) =~= (sm, slaveRoot) =>
 
@@ -157,7 +157,7 @@ class DatasetMerger(
         val singleConflictState = ConflictInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
         onMismatch(mismatchAfterConflictEnd(cxt.advanceBoth(), singleConflictState))
         iterate(cxt.advanceBoth(), NoState, onMismatch)
-      case (Some(mm), Some(sm), NoState) if mm.sourceId.isDefined && mm.sourceId == sm.sourceId =>
+      case (Some(mm), Some(sm), NoState) if mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption =>
         // Conflict started
         // (Conflicts are only detectable if data source supply source IDs)
         val state2 = ConflictInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
@@ -268,7 +268,7 @@ class DatasetMerger(
                   case (ChatType.Personal, Some(userId)) =>
                     // For merged personal chats, name should match whatever user name was chosen
                     val user = masterUsers.find(_.id == userId).get
-                    c.copy(name = user.prettyNameOption)
+                    c.copy(nameOption = user.prettyNameOption)
                   case _ =>
                     c
                 }
@@ -334,14 +334,14 @@ class DatasetMerger(
   private def matchesDisregardingContent(mm: TaggedMessage.M, sm: TaggedMessage.S): Boolean = {
     (mm.typed, sm.typed) match {
       case (mmRegular: Message.Typed.Regular, smRegular: Message.Typed.Regular) =>
-        (mmRegular.value.content, smRegular.value.content) match {
+        (mmRegular.value.contentOption, smRegular.value.contentOption) match {
           case (Some(mc), Some(sc)) if mc.hasPath && sc.hasPath &&
               mc.pathFileOption(masterRoot).isEmpty && sc.pathFileOption(slaveRoot).isDefined && sc.pathFileOption(slaveRoot).get.exists =>
             // New information available, treat this as a mismatch
             false
           case _ =>
-            val mmCmp  = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(content = None)))
-            val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(content = None)))
+            val mmCmp  = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(contentOption = None)))
+            val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(contentOption = None)))
             (mmCmp, masterRoot) =~= (smCmp, slaveRoot)
         }
       case _ =>
@@ -355,8 +355,8 @@ class DatasetMerger(
       (x, y) match {
         case _ if x.time != y.time =>
           x.time compareTo y.time
-        case _ if x.sourceId.isDefined && y.sourceId.isDefined =>
-          x.sourceId.get compareTo y.sourceId.get
+        case _ if x.sourceIdOption.isDefined && y.sourceIdOption.isDefined =>
+          x.sourceIdOption.get compareTo y.sourceIdOption.get
         case _ if x.searchableString == y.searchableString =>
           0
         case _ =>

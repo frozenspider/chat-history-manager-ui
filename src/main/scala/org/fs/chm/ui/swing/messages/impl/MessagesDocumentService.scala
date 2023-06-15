@@ -127,10 +127,10 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     val msgHtml: String = m.typed.value match {
       case rm: MessageRegular =>
         val textHtmlOption = RichTextHtmlRenderer.render(m.text)
-        val contentHtmlOption = rm.content map { ct =>
+        val contentHtmlOption = rm.contentOption map { ct =>
           s"""<div class="content">${ContentHtmlRenderer.render(cwd, dsRoot, ct)}</div>"""
         }
-        val fwdFromHtmlOption  = rm.forwardFromName map (n => renderFwdFrom(cwd, n))
+        val fwdFromHtmlOption  = rm.forwardFromNameOption map (n => renderFwdFrom(cwd, n))
         val replySrcHtmlOption = if (isQuote) {
           None
         } else {
@@ -143,7 +143,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     val titleNameHtml = renderTitleName(cwd, Some(m.fromId), None)
     val titleHtml =
       s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})"""
-    val sourceIdAttr = m.sourceId map (id => s"""message_source_id="$id"""") getOrElse ""
+    val sourceIdAttr = m.sourceIdOption map (id => s"""message_source_id="$id"""") getOrElse ""
     // "date" attribute is used by overlay to show topmost message date
     s"""
        |<div class="message" ${sourceIdAttr} date="${m.time.toString("yyyy-MM-dd")}">
@@ -234,8 +234,8 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     private def renderPhoneCall(sm: MessageServicePhoneCall) = {
       Seq(
         Some("Phone call"),
-        sm.durationSec map (d => s"($d sec)"),
-        sm.discardReason map (r => s"($r)")
+        sm.durationSecOption map (d => s"($d sec)"),
+        sm.discardReasonOption map (r => s"($r)")
       ).yieldDefined.mkString(" ")
     }
 
@@ -295,7 +295,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         val components = rtes map renderComponent
         val hiddenLink = rtes.zip(rtes.map(_.`val`.link)) collectFirst {
           case (rte, Some(link)) if link.hidden =>
-            "<p> &gt; Link: " + renderLink(rte, link.copy(text = Some(link.href), hidden = false))
+            "<p> &gt; Link: " + renderLink(rte, link.copy(textOption = Some(link.href), hidden = false))
         } getOrElse ""
         s"""<div class="text">${components.mkString + hiddenLink}</div>"""
       }
@@ -322,7 +322,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         rt.searchableString.get
       } else {
         // Space in the end is needed if link is followed by text
-        val text = link.text.getOrElse(link.href)
+        val text = link.textOption.getOrElse(link.href)
         s"""<a href="${link.href}">${text}</a> """
       }
     }
@@ -346,7 +346,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     private def renderVoiceMsg(ct: ContentVoiceMsg, dsRoot: DatasetRoot) = {
       renderPossiblyMissingContent(ct.pathFileOption(dsRoot), "Voice message")(file => {
         val mimeType = s"""type="${ct.mimeType}""""
-        val durationOption = ct.durationSec map (d => s"""duration="$d"""")
+        val durationOption = ct.durationSecOption map (d => s"""duration="$d"""")
         // <audio> tag is not impemented by default AWT toolkit, we're plugging custom view
         s"""<audio ${durationOption getOrElse ""} controls>
            |  <source src=${fileToLocalUriString(file)}" ${mimeType}>
@@ -377,7 +377,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
     def renderSticker(st: ContentSticker, dsRoot: DatasetRoot): String = {
       val pathOption = st.pathFileOption(dsRoot) orElse st.thumbnailPathFileOption(dsRoot)
-      renderImage(pathOption, Some(st.width), Some(st.height), st.emoji, "Sticker")
+      renderImage(pathOption, Some(st.width), Some(st.height), st.emojiOption, "Sticker")
     }
 
     def renderPhoto(ct: ContentPhoto, dsRoot: DatasetRoot): String = {
@@ -386,10 +386,10 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
     def renderLocation(ct: ContentLocation): String = {
       Seq(
-        Some(s"<b>${ct.title}</b>"),
-        ct.address,
+        Some(s"<b>${ct.titleOption}</b>"),
+        ct.addressOption,
         Some(s"<i>Location:</i> <b>${ct.lat}, ${ct.lon}</b>"),
-        ct.durationSec map (s => s"(live for $s s)")
+        ct.durationSecOption map (s => s"(live for $s s)")
       ).yieldDefined.mkString("<blockquote>", "<br>", "</blockquote>")
     }
 
@@ -399,7 +399,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
     def renderSharedContact(cwd: ChatWithDetails, ct: ContentSharedContact): String = {
       val name  = renderTitleName(cwd, None, Some(ct.prettyName))
-      val phone = ct.phoneNumber map (pn => s"(phone: $pn)") getOrElse "(no phone number)"
+      val phone = ct.phoneNumberOption map (pn => s"(phone: $pn)") getOrElse "(no phone number)"
       s"""<blockquote><i>Shared contact:</i> $name $phone</blockquote>"""
     }
   }

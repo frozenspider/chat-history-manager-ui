@@ -23,11 +23,11 @@ class ChatDetailsPane(
       })),
       ("Members:", cwd.chat.tpe match {
         case ChatType.PrivateGroup =>
-          Some(cwd.members.filter(_.prettyName != cwd.chat.name.get).map(_.prettyName).mkString("\n"))
+          Some(cwd.members.filter(_.prettyName != cwd.chat.nameOption.get).map(_.prettyName).mkString("\n"))
         case ChatType.Personal     =>
           None
       }),
-      ("Image:", Some(if (cwd.chat.imgPath.isDefined) "(Yes)" else "(None)")),
+      ("Image:", Some(if (cwd.chat.imgPathOption.isDefined) "(Yes)" else "(None)")),
       ("Messages:", Some(cwd.chat.msgCount.toString)),
       ("", Some("")),
       ("ID:", Some(cwd.chat.id.toString)),

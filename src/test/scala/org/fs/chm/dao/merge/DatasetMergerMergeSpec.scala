@@ -110,7 +110,7 @@ class DatasetMergerMergeSpec //
     assert(helper.dao1.datasets.size === 2)
     val newChats = helper.dao1.chats(newDs.uuid)
     assert(helper.dao1.chats(newDs.uuid).size === 1)
-    assert(helper.dao1.chats(newDs.uuid).head.chat.name === usersA(1).prettyNameOption)
+    assert(helper.dao1.chats(newDs.uuid).head.chat.nameOption === usersA(1).prettyNameOption)
     val newMessages = helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     assert(newMessages.size === 1)
     assert((newMessages.head, helper.d1root) =~= (helper.d2msgs.head, helper.d2root))
@@ -119,7 +119,7 @@ class DatasetMergerMergeSpec //
 
   test("merge chats - keep two messages") {
     val msgs   = for (i <- 1 to 6) yield createRegularMessage(i, 1)
-    val msgsA  = msgs.filter(Seq(3, 4) contains _.sourceId.get)
+    val msgsA  = msgs.filter(Seq(3, 4) contains _.sourceIdOption.get)
     val msgsB  = changedMessages(msgs, _ => true)
     val helper = H2MergerHelper.fromMessages(msgsA, msgsB)
     val chatMerges = Seq[ChatMergeOption](
@@ -141,7 +141,7 @@ class DatasetMergerMergeSpec //
   test("merge chats - add two messages") {
     val msgs   = for (i <- 1 to 5) yield createRegularMessage(i, 1)
     val msgsA  = msgs
-    val msgsB  = changedMessages(msgs.filter(Seq(3, 4) contains _.sourceId.get), _ => true)
+    val msgsB  = changedMessages(msgs.filter(Seq(3, 4) contains _.sourceIdOption.get), _ => true)
     val helper = H2MergerHelper.fromMessages(msgsA, msgsB)
     val chatMerges = Seq[ChatMergeOption](
       ChatMergeOption.Add(helper.d2cwd)
@@ -322,16 +322,16 @@ class DatasetMergerMergeSpec //
           Files.write(file1.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
           Files.write(file2.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
           val content = Content(Content.Val.File(ContentFile(
-            path          = Some(file1.toRelativePath(path)),
-            thumbnailPath = Some(file2.toRelativePath(path)),
-            mimeType      = Some("mt"),
-            title         = "t",
-            performer     = Some("p"),
-            durationSec   = Some(1),
-            width         = Some(2),
-            height        = Some(3),
+            pathOption          = Some(file1.toRelativePath(path)),
+            thumbnailPathOption = Some(file2.toRelativePath(path)),
+            mimeTypeOption      = Some("mt"),
+            title               = "t",
+            performerOption     = Some("p"),
+            durationSecOption   = Some(1),
+            widthOption         = Some(2),
+            heightOption        = Some(3),
           )))
-          Message.Typed.Regular(msg.copy(content = Some(content)))
+          Message.Typed.Regular(msg.copy(contentOption = Some(content)))
         case _ =>
           throw new MatchError("Unexpected message type for " + msg)
       })
