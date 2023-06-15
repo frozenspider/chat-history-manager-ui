@@ -217,11 +217,13 @@ object Entities {
     /** "Practical equality" that ignores internal ID, paths of files with equal content, and some unimportant fields */
     override def practicallyEquals(v1: (Message, DatasetRoot), v2: (Message, DatasetRoot)): Boolean =
       v1._1.copy(
-        internalId = NoInternalId,
-        typed = Message.Typed.Empty
+        internalId       = NoInternalId,
+        searchableString = None,
+        typed            = Message.Typed.Empty
       ) == v2._1.copy(
-        internalId = NoInternalId,
-        typed = Message.Typed.Empty
+        internalId       = NoInternalId,
+        searchableString = None,
+        typed            = Message.Typed.Empty
       ) && (v1._1.typed, v1._2) =~= (v2._1.typed, v1._2)
   }
 

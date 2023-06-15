@@ -4,12 +4,7 @@ import java.io.File
 
 import org.fs.chm.TestHelper
 import org.fs.chm.dao.Entities._
-import org.fs.chm.protobuf.ChatType
-import org.fs.chm.protobuf.Content
-import org.fs.chm.protobuf.ContentLocation
-import org.fs.chm.protobuf.Message
-import org.fs.chm.protobuf.PbUuid
-import org.fs.chm.protobuf.User
+import org.fs.chm.protobuf._
 import org.junit.runner.RunWith
 import org.scalatest.funsuite.AnyFunSuite
 import org.slf4s.Logging
@@ -112,6 +107,110 @@ class TelegramFullDataLoaderSpec //
       assert(typed(2).isRegular)
     }
   }
+
+test("loading @ 2021-06 (supergroup and added user)") {
+  val dao = loader.loadData(new File(resourcesFolder, "telegram_2021-06_supergroup"))
+  assert(dao.datasets.size === 1)
+  val ds = dao.datasets.head
+  val self = dao.myself(ds.uuid)
+  assert(self === expectedSelf(ds.uuid))
+
+  val u222222222 = User(
+    dsUuid            = ds.uuid,
+    id                = 222222222L,
+    firstNameOption   = Some("Sssss Pppppp"),
+    lastNameOption    = None,
+    usernameOption    = None,
+    phoneNumberOption = None
+  )
+  val u333333333 = User(
+    dsUuid            = ds.uuid,
+    id                = 333333333L,
+    firstNameOption   = Some("Tttttt Yyyyyyy"),
+    lastNameOption    = None,
+    usernameOption    = None,
+    phoneNumberOption = None
+  )
+  val u444444444 = User(
+    dsUuid            = ds.uuid,
+    id                = 444444444L,
+    firstNameOption   = Some("Vvvvvvvv Bbbbbbb"),
+    lastNameOption    = None,
+    usernameOption    = None,
+    phoneNumberOption = None
+  )
+
+  {
+    val sortedUsers = dao.users(ds.uuid).sortBy(_.id)
+    assert(sortedUsers.head === self)
+    assert(sortedUsers(1) === u222222222)
+    assert(sortedUsers(2) === u333333333)
+    assert(sortedUsers(3) === u444444444)
+  }
+
+  assert(dao.chats(ds.uuid).size === 1)
+
+  // Group chat
+  {
+    val cwm = dao.chats(ds.uuid).find(_.chat.id == 1234567890L + 8589934592L).get // Chat ID is shifted by 2^33
+    assert(cwm.chat.nameOption === Some("My Supergroup"))
+    assert(cwm.chat.tpe === ChatType.PrivateGroup)
+
+    {
+      // All users are taken from chat itself
+      val sortedMember = cwm.members.sortBy(_.id)
+      assert(sortedMember.size === 4)
+      assert(sortedMember.head === self)
+      assert(sortedMember(1) === u222222222)
+      assert(sortedMember(2) === u333333333)
+      assert(sortedMember(3) === u444444444)
+    }
+
+    val msgs = dao.lastMessages(cwm.chat, 100500)
+    assert(msgs.size === 3)
+    assert(msgs.head === Message(
+      internalId       = 1,
+      sourceIdOption   = Some(-999681092),
+      timestamp        = dt("2020-12-22 23:11:21").getMillis,
+      fromId           = u222222222.id,
+      text             = Seq.empty,
+      searchableString = Some(u444444444.firstNameOption.get),
+      typed            = Message.Typed.Service(MessageService(
+        MessageService.Val.GroupInviteMembers(MessageServiceGroupInviteMembers(
+          members = Seq(u444444444.firstNameOption.get)
+        ))
+      ))
+    ))
+    assert(msgs(1) === Message(
+      internalId       = 2,
+      sourceIdOption   = Some(-999681090),
+      timestamp        = dt("2020-12-22 23:12:09").getMillis,
+      fromId           = u333333333.id,
+      text             = Seq(RichText.makePlain("Message text with emoji 🙂")),
+      searchableString = Some("Message text with emoji 🙂"),
+      typed            = Message.Typed.Regular(MessageRegular(
+        editTimestampOption    = None,
+        forwardFromNameOption  = None,
+        replyToMessageIdOption = None,
+        contentOption          = None
+      ))
+    ))
+    assert(msgs(2) === Message(
+      internalId       = 3,
+      sourceIdOption   = Some(-999681087),
+      timestamp        = dt("2020-12-22 23:12:51").getMillis,
+      fromId           = u444444444.id,
+      text             = Seq(RichText.makePlain("Message from an added user")),
+      searchableString = Some("Message from an added user"),
+      typed            = Message.Typed.Regular(MessageRegular(
+        editTimestampOption    = None,
+        forwardFromNameOption  = None,
+        replyToMessageIdOption = None,
+        contentOption          = None
+      ))
+    ))
+  }
+}
 
   test("loading @ 2021-07 (group calls)") {
     val dao = loader.loadData(new File(resourcesFolder, "telegram_2021-07"))
