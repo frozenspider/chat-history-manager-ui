@@ -16,6 +16,7 @@ import org.fs.chm.protobuf.MessageServiceGroupCall
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesDocumentService._
+import org.fs.chm.utility.LangUtils._
 
 class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingComponent[MessageDocument] {
   // TODO: This should really be private, but we're hacking into it for SelectMergeMessagesDialog
@@ -250,7 +251,7 @@ object MessagesAreaContainer {
           Message(
             internalId       = NoInternalId,
             sourceIdOption   = Some(1L.asInstanceOf[MessageSourceId]),
-            timestamp        = baseDate.plusMinutes(1).getMillis,
+            timestamp        = baseDate.plusMinutes(1).unixTimestamp,
             fromId           = users.head.id,
             text             = text,
             searchableString = Some(makeSearchableString(text, typed)),
@@ -259,7 +260,7 @@ object MessagesAreaContainer {
         },
         {
           val typed = Message.Typed.Regular(MessageRegular(
-            editTimestampOption    = Some(baseDate.plusMinutes(2).plusSeconds(5).getMillis),
+            editTimestampOption    = Some(baseDate.plusMinutes(2).plusSeconds(5).unixTimestamp),
             forwardFromNameOption  = Some("u" + users.head.id),
             replyToMessageIdOption = Some(1L.asInstanceOf[MessageSourceId]),
             contentOption          = Some(
@@ -275,7 +276,7 @@ object MessagesAreaContainer {
           Message(
             internalId       = NoInternalId,
             sourceIdOption   = Some(2L.asInstanceOf[MessageSourceId]),
-            timestamp        = baseDate.plusMinutes(2).getMillis,
+            timestamp        = baseDate.plusMinutes(2).unixTimestamp,
             fromId           = users.last.id,
             text             = text,
             searchableString = Some(makeSearchableString(text, typed)),

@@ -5,6 +5,7 @@ import java.io.File
 import org.fs.chm.TestHelper
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf._
+import org.fs.chm.utility.LangUtils._
 import org.junit.runner.RunWith
 import org.scalatest.funsuite.AnyFunSuite
 import org.slf4s.Logging
@@ -171,7 +172,7 @@ test("loading @ 2021-06 (supergroup and added user)") {
     assert(msgs.head === Message(
       internalId       = 1,
       sourceIdOption   = Some(-999681092),
-      timestamp        = dt("2020-12-22 23:11:21").getMillis,
+      timestamp        = dt("2020-12-22 23:11:21").unixTimestamp,
       fromId           = u222222222.id,
       text             = Seq.empty,
       searchableString = Some(u444444444.firstNameOption.get),
@@ -184,7 +185,7 @@ test("loading @ 2021-06 (supergroup and added user)") {
     assert(msgs(1) === Message(
       internalId       = 2,
       sourceIdOption   = Some(-999681090),
-      timestamp        = dt("2020-12-22 23:12:09").getMillis,
+      timestamp        = dt("2020-12-22 23:12:09").unixTimestamp,
       fromId           = u333333333.id,
       text             = Seq(RichText.makePlain("Message text with emoji 🙂")),
       searchableString = Some("Message text with emoji 🙂"),
@@ -198,7 +199,7 @@ test("loading @ 2021-06 (supergroup and added user)") {
     assert(msgs(2) === Message(
       internalId       = 3,
       sourceIdOption   = Some(-999681087),
-      timestamp        = dt("2020-12-22 23:12:51").getMillis,
+      timestamp        = dt("2020-12-22 23:12:51").unixTimestamp,
       fromId           = u444444444.id,
       text             = Seq(RichText.makePlain("Message from an added user")),
       searchableString = Some("Message from an added user"),

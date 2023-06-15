@@ -73,7 +73,7 @@ trait TelegramDataLoaderCommon {
       tracker.markUsed("text_entities")
       val text = RichTextParser.parseRichText(jv)
       val typed = Message.Typed.Regular(MessageRegular(
-        editTimestampOption    = stringOptToDateTimeOpt(getStringOpt(jv, "edited", false)).map(_.getMillis),
+        editTimestampOption    = stringOptToDateTimeOpt(getStringOpt(jv, "edited", false)).map(_.unixTimestamp),
         forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
         replyToMessageIdOption = getFieldOpt[MessageSourceId](jv, "reply_to_message_id", false),
         contentOption          = ContentParser.parseContentOption(jv, rootFile),
@@ -81,7 +81,7 @@ trait TelegramDataLoaderCommon {
       Message(
         internalId       = NoInternalId,
         sourceIdOption   = Some(getCheckedField[MessageSourceId](jv, "id")),
-        timestamp        = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get.getMillis,
+        timestamp        = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get.unixTimestamp,
         fromId           = getUserId(jv, "from_id"),
         text             = text,
         searchableString = Some(makeSearchableString(text, typed)),
@@ -165,7 +165,7 @@ trait TelegramDataLoaderCommon {
         Message(
           internalId       = NoInternalId,
           sourceIdOption   = Some(getCheckedField[MessageSourceId](jv, "id")),
-          timestamp        = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get.getMillis,
+          timestamp        = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get.unixTimestamp,
           fromId           = getUserId(jv, "actor_id"),
           text             = text,
           searchableString = Some(makeSearchableString(text, typed)),

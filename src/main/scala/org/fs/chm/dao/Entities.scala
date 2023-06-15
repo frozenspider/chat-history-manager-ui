@@ -311,12 +311,12 @@ object Entities {
     }
 
     def time: DateTime =
-      new DateTime(msg.timestamp)
+      new DateTime(msg.timestamp * 1000)
   }
 
   implicit class ExtendedMessageRegular(msg: MessageRegular) {
     def editTimeOption: Option[DateTime] =
-      msg.editTimestampOption map (ts => new DateTime(ts))
+      msg.editTimestampOption map (ts => new DateTime(ts * 1000))
 
     def replyToMessageIdTypedOption: Option[MessageSourceId] =
       msg.replyToMessageIdOption.map(_.asInstanceOf[MessageSourceId])

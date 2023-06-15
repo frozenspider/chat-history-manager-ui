@@ -126,7 +126,7 @@ class EagerChatHistoryDao(
   }
 
   def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
-    val dateTs    = date.getMillis
+    val dateTs    = date.unixTimestamp
     val messages  = chatsWithMessages(chat)
     val idx       = messages.indexWhere(m => m.timestamp >= dateTs)
     if (idx == -1) {

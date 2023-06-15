@@ -3,8 +3,8 @@ package org.fs.chm.loader
 import java.io.File
 import java.nio.file.Files
 
-import scala.jdk.CollectionConverters._
 import scala.collection.immutable.ListMap
+import scala.jdk.CollectionConverters._
 
 import com.github.nscala_time.time.Imports._
 import org.apache.commons.codec.net.QuotedPrintableCodec
@@ -12,10 +12,10 @@ import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.ChatType
-import org.fs.chm.protobuf.Dataset
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
 import org.fs.chm.protobuf.User
+import org.fs.chm.utility.LangUtils._
 
 /** Loads messages exported from Samsung GT-S5610 */
 class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
@@ -75,7 +75,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
               Message(
                 internalId       = NoInternalId,
                 sourceIdOption   = None,
-                timestamp        = vmsg.dateTime.getMillis,
+                timestamp        = vmsg.dateTime.unixTimestamp,
                 fromId           = userId,
                 text             = Seq(RichText.makePlain(vmsg.text)),
                 searchableString = Some(normalizeSeachableString(vmsg.text)),

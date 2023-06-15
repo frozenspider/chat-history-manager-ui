@@ -10,15 +10,8 @@ import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao._
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger.TaggedMessage
-import org.fs.chm.protobuf.Chat
-import org.fs.chm.protobuf.ChatType
-import org.fs.chm.protobuf.Content
-import org.fs.chm.protobuf.ContentPoll
-import org.fs.chm.protobuf.Dataset
-import org.fs.chm.protobuf.Message
-import org.fs.chm.protobuf.MessageRegular
-import org.fs.chm.protobuf.PbUuid
-import org.fs.chm.protobuf.User
+import org.fs.chm.protobuf._
+import org.fs.chm.utility.LangUtils._
 
 /**
  * Utility stuff used for testing, both automatically and manually
@@ -71,7 +64,7 @@ object TestUtils {
       if (idx > 0) Some(rnd.nextInt(idx).toLong.asInstanceOf[MessageSourceId]) else None
 
     val typed = Message.Typed.Regular(MessageRegular(
-      editTimestampOption    = Some(baseDate.plusMinutes(idx).plusSeconds(5).getMillis),
+      editTimestampOption    = Some(baseDate.plusMinutes(idx).plusSeconds(5).unixTimestamp),
       replyToMessageIdOption = replyToMessageIdOption,
       forwardFromNameOption  = Some("u" + userId),
       contentOption          = Some(Content(Content.Val.Poll(ContentPoll(question = s"Hey, ${idx}!"))))
@@ -80,7 +73,7 @@ object TestUtils {
     Message(
       internalId       = NoInternalId,
       sourceIdOption   = Some(idx.toLong.asInstanceOf[MessageSourceId]),
-      timestamp        = baseDate.plusMinutes(idx).getMillis,
+      timestamp        = baseDate.plusMinutes(idx).unixTimestamp,
       fromId           = userId,
       searchableString = Some(makeSearchableString(text, typed)),
       text             = text,

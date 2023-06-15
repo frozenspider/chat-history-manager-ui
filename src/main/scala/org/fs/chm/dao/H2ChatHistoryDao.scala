@@ -955,7 +955,7 @@ class H2ChatHistoryDao(
       val typed: Message.Typed = rm.messageType match {
         case "regular" =>
           Message.Typed.Regular(MessageRegular(
-            editTimestampOption    = rm.editTimeOption map (_.getMillis),
+            editTimestampOption    = rm.editTimeOption map (_.unixTimestamp),
             forwardFromNameOption  = rm.forwardFromNameOption,
             replyToMessageIdOption = rm.replyToMessageIdOption,
             contentOption          = contents.get(rm.internalId)
@@ -1011,7 +1011,7 @@ class H2ChatHistoryDao(
       Message(
         internalId             = rm.internalId,
         sourceIdOption         = rm.sourceIdOption,
-        timestamp              = rm.time.getMillis,
+        timestamp              = rm.time.unixTimestamp,
         fromId                 = rm.fromId,
         text                   = text,
         searchableString       = Some(makeSearchableString(text, typed)),

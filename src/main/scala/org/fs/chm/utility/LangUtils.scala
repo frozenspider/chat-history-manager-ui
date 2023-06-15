@@ -80,6 +80,12 @@ object LangUtils extends Logging {
     }
   }
 
+  implicit class RichDateTime(dt: DateTime) {
+    def unixTimestamp: Long = {
+      dt.getMillis / 1000
+    }
+  }
+
   //
   // PracticallyEquals
   //
