@@ -3,12 +3,19 @@ package org.fs.chm.loader
 import java.io.File
 import java.nio.file.Files
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.ListMap
+import scala.jdk.CollectionConverters._
 
 import com.github.nscala_time.time.Imports._
 import org.apache.commons.codec.net.QuotedPrintableCodec
-import org.fs.chm.dao._
+import org.fs.chm.dao.EagerChatHistoryDao
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.ChatType
+import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.MessageRegular
+import org.fs.chm.protobuf.User
+import org.fs.chm.utility.LangUtils._
 
 /** Loads messages exported from Samsung GT-S5610 */
 class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
@@ -34,7 +41,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
     }
     val vmsgs = nameWithSrcs map { case (name, src) => parseVmessage(name, src) }
 
-    val dataset = Dataset.createDefault("GT-S5610", "samsung-gt-s5610")
+    val dataset = createDataset("GT-S5610", "samsung-gt-s5610")
 
     val myself = User(
       dsUuid             = dataset.uuid,
@@ -65,16 +72,19 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
             )
 
             val msgs: IndexedSeq[Message] = vmsgs.toIndexedSeq map { vmsg =>
-              Message.Regular(
-                internalId             = Message.NoInternalId,
-                sourceIdOption         = None,
-                time                   = vmsg.dateTime,
-                editTimeOption         = None,
-                fromId                 = userId,
-                forwardFromNameOption  = None,
-                replyToMessageIdOption = None,
-                textOption             = Some(RichText(Seq(RichText.Plain(vmsg.text)))),
-                contentOption          = None
+              Message(
+                internalId       = NoInternalId,
+                sourceIdOption   = None,
+                timestamp        = vmsg.dateTime.unixTimestamp,
+                fromId           = userId,
+                text             = Seq(RichText.makePlain(vmsg.text)),
+                searchableString = Some(normalizeSeachableString(vmsg.text)),
+                typed            = Message.Typed.Regular(MessageRegular(
+                  editTimestampOption    = None,
+                  forwardFromNameOption  = None,
+                  replyToMessageIdOption = None,
+                  contentOption          = None
+                ))
               )
             }
             val chat = Chat(
@@ -83,14 +93,14 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
               nameOption    = user.firstNameOption,
               tpe           = ChatType.Personal,
               imgPathOption = None,
-              memberIds     = Set(myself, user).map(_.id),
+              memberIds     = Seq(myself, user).map(_.id),
               msgCount      = msgs.size
             )
             user -> (chat, msgs)
         }
 
     // Ordering by descending last message
-    val chatsWithMessages = ListMap(userToChatWithMsgsMap.values.toSeq.sortBy(_._2.last.time).reverse.toSeq: _*)
+    val chatsWithMessages = ListMap(userToChatWithMsgsMap.values.toSeq.sortBy(_._2.last.timestamp).reverse.toSeq: _*)
 
     val users = (userToChatWithMsgsMap.keys.toSet + myself).toSeq sortBy (u => (u.id, u.prettyName))
 

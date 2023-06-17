@@ -5,11 +5,10 @@ import scala.swing.GridBagPanel.Fill
 import scala.swing._
 
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.ChatType
-import org.fs.chm.dao.ChatWithDetails
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.ChatType
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.general.field.TextComponent
-import org.fs.chm.utility.EntityUtils
 
 class ChatDetailsPane(
     dao: ChatHistoryDao,
@@ -17,7 +16,7 @@ class ChatDetailsPane(
 ) extends GridBagPanel {
   {
     val data: Seq[(String, String)] = Seq(
-      ("Name:", Some(EntityUtils.getOrUnnamed(cwd.chat.nameOption))),
+      ("Name:", Some(cwd.chat.nameOrUnnamed)),
       ("Type:", Some(cwd.chat.tpe match {
         case ChatType.Personal     => "Personal"
         case ChatType.PrivateGroup => "Private Group"
@@ -32,7 +31,7 @@ class ChatDetailsPane(
       ("Messages:", Some(cwd.chat.msgCount.toString)),
       ("", Some("")),
       ("ID:", Some(cwd.chat.id.toString)),
-      ("Dataset ID:", Some(cwd.chat.dsUuid.toString.toLowerCase)),
+      ("Dataset ID:", Some(cwd.chat.dsUuid.value)),
       ("Dataset:", Some(dao.datasets.find(_.uuid == cwd.chat.dsUuid).get.alias)),
       ("Database:", Some(dao.name))
     ).collect {

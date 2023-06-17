@@ -2,11 +2,13 @@ package org.fs.chm.loader.telegram
 
 import java.io.File
 import java.io.FileNotFoundException
-import java.util.UUID
 
 import scala.collection.immutable.ListMap
 
-import org.fs.chm.dao._
+import org.fs.chm.dao.EagerChatHistoryDao
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.PbUuid
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.PerfUtils._
 import org.fs.utility.Imports._
 import org.json4s._
@@ -28,7 +30,7 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
         throw new FileNotFoundException("result.json not found in " + rootFile.getAbsolutePath)
       }
 
-      val dataset = Dataset.createDefault("Telegram", "telegram")
+      val dataset = createDataset("Telegram", "telegram")
 
       val parsed = JsonMethods.parse(resultJsonFile)
 
@@ -66,7 +68,7 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
   // Parsers
   //
 
-  private def parseMyself(jv: JValue, dsUuid: UUID): User = {
+  private def parseMyself(jv: JValue, dsUuid: PbUuid): User = {
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("bio") // Ignoring bio
     tracker.ensuringUsage(jv) {
@@ -81,7 +83,7 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
     }
   }
 
-  private def parseUser(jv: JValue, dsUuid: UUID): User = {
+  private def parseUser(jv: JValue, dsUuid: PbUuid): User = {
     implicit val tracker = new FieldUsageTracker
     tracker.markUsed("date") // Ignoring last seen time
     // Before 2021-05, Telegram has "user_id" field that was largely rudimentary - it was always 0
@@ -102,7 +104,7 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
    * Parse users from contact list and chat messages and combine them to get as much info as possible.
    * Returns `(myself, users)`
    */
-  private def parseAndCombineUsers(parsed: JValue, dsUuid: UUID): (User, Seq[User]) = {
+  private def parseAndCombineUsers(parsed: JValue, dsUuid: PbUuid): (User, Seq[User]) = {
     implicit val dummyTracker = new FieldUsageTracker
 
     val myself = parseMyself(getRawField(parsed, "personal_information", true), dsUuid)

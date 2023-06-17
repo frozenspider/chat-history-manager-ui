@@ -6,10 +6,10 @@ import scala.swing.Alignment
 import scala.swing.GridBagPanel
 import scala.swing.Label
 import scala.swing.Panel
-
 import javax.swing.border.MatteBorder
+
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.Dataset
+import org.fs.chm.protobuf.Dataset
 import org.fs.chm.ui.swing.general.SwingUtils._
 
 class DaoItem[I <: Panel](

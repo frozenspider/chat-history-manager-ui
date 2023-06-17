@@ -1,16 +1,15 @@
 package org.fs.chm.dao
 
-import java.io.File
+import java.io.{File => JFile}
 import java.nio.file.Files
 import java.nio.file.attribute.FileTime
 import java.sql.Timestamp
-import java.util.UUID
 
-import scala.annotation.tailrec
 import scala.collection.parallel.CollectionConverters._
 
 import cats.effect._
 import cats.effect.unsafe.implicits.global
+import cats.free.Free
 import cats.implicits._
 import com.github.nscala_time.time.Imports._
 import doobie.ConnectionIO
@@ -19,15 +18,16 @@ import doobie.free.connection
 import doobie.free.connection.ConnectionOp
 import doobie.h2.implicits._
 import doobie.implicits._
-import org.fs.chm.utility.EntityUtils._
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf._
 import org.fs.chm.utility.IoUtils
+import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.Logging
 import org.fs.chm.utility.PerfUtils._
-import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
 
 class H2ChatHistoryDao(
-    dataPathRoot: File,
+    dataPathRoot: JFile,
     txctr: Transactor.Aux[IO, _],
     closeTransactor: () => Unit
 ) extends MutableChatHistoryDao
@@ -37,7 +37,7 @@ class H2ChatHistoryDao(
 
   private val Lock = new Object
 
-  private var _usersCacheOption: Option[Map[UUID, (Option[User], Seq[User])]] = None
+  private var _usersCacheOption: Option[Map[PbUuid, (Option[User], Seq[User])]] = None
   private var _backupsEnabled = true
   private var _closed = false
 
@@ -51,15 +51,15 @@ class H2ChatHistoryDao(
     queries.datasets.selectAll.transact(txctr).unsafeRunSync()
   }
 
-  override def datasetRoot(dsUuid: UUID): File = {
-    new File(dataPathRoot, dsUuid.toString.toLowerCase).getAbsoluteFile
+  override def datasetRoot(dsUuid: PbUuid): DatasetRoot = {
+    new JFile(dataPathRoot, dsUuid.value.toLowerCase).getAbsoluteFile.asInstanceOf[DatasetRoot]
   }
 
-  override def datasetFiles(dsUuid: UUID): Set[File] = {
-    queries.selectAllPaths(dsUuid).transact(txctr).unsafeRunSync() map (_.toFile(dsUuid))
+  override def datasetFiles(dsUuid: PbUuid): Set[JFile] = {
+    queries.selectAllPaths(dsUuid).transact(txctr).unsafeRunSync() map (_.toFile(datasetRoot(dsUuid)))
   }
 
-  private def usersCache: Map[UUID, (Option[User], Seq[User])] =
+  private def usersCache: Map[PbUuid, (Option[User], Seq[User])] =
     Lock.synchronized {
       if (_usersCacheOption.isEmpty) {
         _usersCacheOption = Some((for {
@@ -81,16 +81,16 @@ class H2ChatHistoryDao(
       _usersCacheOption.get
     }
 
-  override def myself(dsUuid: UUID): User = {
+  override def myself(dsUuid: PbUuid): User = {
     usersCache(dsUuid)._1.getOrElse(throw new IllegalStateException(s"Dataset ${dsUuid} has no self user!"))
   }
 
   /** Contains myself as the first element */
-  override def users(dsUuid: UUID): Seq[User] = {
+  override def users(dsUuid: PbUuid): Seq[User] = {
     usersCache(dsUuid)._2
   } ensuring (us => us.head == myself(dsUuid))
 
-  def userOption(dsUuid: UUID, id: Long): Option[User] = {
+  def userOption(dsUuid: PbUuid, id: Long): Option[User] = {
     usersCache(dsUuid)._2.find(_.id == id)
   }
 
@@ -104,21 +104,21 @@ class H2ChatHistoryDao(
       .sortBy(_.id))
   }
 
-  private def addChatsDetails(dsUuid: UUID, chatQuery: ConnectionIO[Seq[Chat]]):  ConnectionIO[Seq[ChatWithDetails]] = {
+  private def addChatsDetails(dsUuid: PbUuid, chatQuery: ConnectionIO[Seq[Chat]]):  ConnectionIO[Seq[ChatWithDetails]] = {
     for {
       chats <- chatQuery
       lasts <- materializeMessagesQuery(dsUuid, queries.rawMessages.selectLastForChats(dsUuid, chats))
     } yield chats map (c => ChatWithDetails(c, lasts.find(_._1 == c.id).map(_._2), chatMembers(c)))
   }
 
-  override def chats(dsUuid: UUID): Seq[ChatWithDetails] = {
+  override def chats(dsUuid: PbUuid): Seq[ChatWithDetails] = {
     // FIXME: Double-call when loading a DB!
     logPerformance {
-      addChatsDetails(dsUuid, queries.chats.selectAll(dsUuid)).transact(txctr).unsafeRunSync().sortBy(_.lastMsgOption.map(_.time)).reverse
+      addChatsDetails(dsUuid, queries.chats.selectAll(dsUuid)).transact(txctr).unsafeRunSync().sortBy(_.lastMsgOption.map(_.timestamp)).reverse
     }((res, ms) => s"${res.size} chats fetched in ${ms} ms")
   }
 
-  override def chatOption(dsUuid: UUID, id: ChatId): Option[ChatWithDetails] = {
+  override def chatOption(dsUuid: PbUuid, id: ChatId): Option[ChatWithDetails] = {
     addChatsDetails(dsUuid, queries.chats.select(dsUuid, id).map(_.toSeq)).transact(txctr).unsafeRunSync().headOption
   }
 
@@ -127,7 +127,7 @@ class H2ChatHistoryDao(
    * Tries to do so efficiently.
    */
   private def materializeMessagesQuery(
-      dsUuid: UUID,
+      dsUuid: PbUuid,
       msgsQuery: ConnectionIO[IndexedSeq[RawMessage]]
   ): ConnectionIO[IndexedSeq[(ChatId, Message)]] = {
     for {
@@ -139,7 +139,7 @@ class H2ChatHistoryDao(
     } yield {
       val richTextsMap = rawTextElements
         .groupBy(_.messageInternalId)
-        .view.mapValues(els => RichText(components = els map Raws.toRichTextElement)).toMap
+        .view.mapValues(_ map Raws.toRichTextElement).toMap
       val contentMap = rawContents
         .map(rc => (rc.messageInternalId -> Raws.toContent(dsUuid, rc)))
         .toMap
@@ -174,7 +174,10 @@ class H2ChatHistoryDao(
         .reverse
         .map(_._2)
     }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesBeforeImpl]")
-  } ensuring (seq => seq.nonEmpty && seq.last =~= msg)
+  } ensuring (seq => seq.nonEmpty && {
+    val root = datasetRoot(chat.dsUuid)
+    (seq.last, root) =~= (msg, root)
+  })
 
   override def messagesAfterImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
     logPerformance {
@@ -196,7 +199,7 @@ class H2ChatHistoryDao(
 
   override def countMessagesBetween(chat: Chat, msg1: Message, msg2: Message): Int = {
     logPerformance {
-      require(msg1.time <= msg2.time)
+      require(msg1.timestamp <= msg2.timestamp)
       queries.rawMessages.countBetweenExc(chat, msg1, msg2).transact(txctr).unsafeRunSync()
     }((res, ms) => s"${res} messages counted in ${ms} ms [countMessagesBetween]")
   }
@@ -205,7 +208,7 @@ class H2ChatHistoryDao(
     ???
   }
 
-  override def messageOption(chat: Chat, id: Message.SourceId): Option[Message] = {
+  override def messageOption(chat: Chat, id: MessageSourceId): Option[Message] = {
     logPerformance {
       materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectOptionBySourceId(chat, id).map(_.toIndexedSeq))
         .transact(txctr)
@@ -215,7 +218,7 @@ class H2ChatHistoryDao(
     }((res, ms) => s"Message fetched in ${ms} ms [messageOption]")
   }
 
-  override def messageOptionByInternalId(chat: Chat, id: Message.InternalId): Option[Message] =
+  override def messageOptionByInternalId(chat: Chat, id: MessageInternalId): Option[Message] =
     logPerformance {
       materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectOption(chat, id).map(_.toIndexedSeq))
         .transact(txctr)
@@ -267,13 +270,14 @@ class H2ChatHistoryDao(
           query.transact(txctr).unsafeRunSync()
         }((_, t) => log.info(s"Dataset inserted in $t ms"))
 
-        // Copying files
+        // Copying JFiles
+        val fromRoot      = dao.datasetRoot(ds.uuid)
         val fromFiles     = dao.datasetFiles(ds.uuid)
         val fromPrefixLen = dsRoot.getAbsolutePath.length
         val toRoot        = datasetRoot(ds.uuid)
-        val filesMap = fromFiles.map { fromFile =>
-          val relPath  = fromFile.getAbsolutePath.drop(fromPrefixLen)
-          (fromFile, new File(toRoot, relPath))
+        val filesMap      = fromFiles.map { fromFile =>
+          val relPath     = fromFile.getAbsolutePath.drop(fromPrefixLen)
+          (fromFile, new JFile(toRoot, relPath))
         }.toMap
         val (notFound, _) = StopWatch.measureAndCall(IoUtils.copyAll(filesMap))((_, t) => log.info(s"Copied in $t ms"))
         notFound.foreach(nf => log.info(s"Not found: ${nf.getAbsolutePath}"))
@@ -302,7 +306,7 @@ class H2ChatHistoryDao(
                 messages1.size == messages1.size,
                 s"Messages size for chat $c1 (#$i) differs:\nWas    ${messages1.size}\nBecame ${messages2.size}")
               for (((m1, m2), j) <- messages1.zip(messages2).zipWithIndex) {
-                assert(m1 =~= m2, s"Message #$j for chat $c1 (#$i) differs:\nWas    $m1\nBecame $m2")
+                assert((m1, fromRoot) =~= (m2, toRoot), s"Message #$j for chat $c1 (#$i) differs:\nWas    $m1\nBecame $m2")
               }
             }((_, t) => log.info(s"Chat checked in $t ms"))
           }
@@ -321,13 +325,13 @@ class H2ChatHistoryDao(
     }
   }
 
-  override def renameDataset(dsUuid: UUID, newName: String): Dataset = {
+  override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = {
     backup()
     queries.datasets.rename(dsUuid, newName).transact(txctr).unsafeRunSync()
     datasets.find(_.uuid == dsUuid).get
   }
 
-  override def deleteDataset(dsUuid: UUID): Unit = {
+  override def deleteDataset(dsUuid: PbUuid): Unit = {
     backup()
     StopWatch.measureAndCall {
       val query = for {
@@ -342,13 +346,13 @@ class H2ChatHistoryDao(
       query.transact(txctr).unsafeRunSync()
       val srcDataPath = datasetRoot(dsUuid)
       if (srcDataPath.exists()) {
-        val dstDataPath = new File(getBackupPath(), srcDataPath.getName)
+        val dstDataPath = new JFile(getBackupPath(), srcDataPath.getName)
         Files.move(srcDataPath.toPath, dstDataPath.toPath)
       }
     }((_, t) => log.info(s"Dataset ${dsUuid} deleted in $t ms"))
   }
 
-  override def shiftDatasetTime(dsUuid: UUID, hrs: Int): Unit = {
+  override def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): Unit = {
     backup()
     require(hrs >= -12 && hrs <= 12, "Hours are out of bounds! Expected [-12, 12]")
     StopWatch.measureAndCall {
@@ -408,7 +412,7 @@ class H2ChatHistoryDao(
     }
   }
 
-  override def insertChat(dsRoot: File, chat: Chat): Unit = {
+  override def insertChat(dsRoot: JFile, chat: Chat): Unit = {
     require(chat.id > 0, "ID should be positive!")
     require(chat.memberIds.nonEmpty, "Chat should have more than one member!")
     val me = myself(chat.dsUuid)
@@ -442,7 +446,7 @@ class H2ChatHistoryDao(
     }((_, t) => log.info(s"Chat ${chat.nameOption.getOrElse("#" + chat.id)} deleted in $t ms"))
   }
 
-  override def insertMessages(dsRoot: File, chat: Chat, msgs: Seq[Message]): Unit = {
+  override def insertMessages(dsRoot: JFile, chat: Chat, msgs: Seq[Message]): Unit = {
     if (msgs.nonEmpty) {
       val query = msgs
         .map(msg => queries.messages.insert(chat.dsUuid, dsRoot, chat.id, msg))
@@ -464,8 +468,8 @@ class H2ChatHistoryDao(
     }
   }
 
-  protected[dao] def getBackupPath(): File = {
-    val backupDir = new File(dataPathRoot, H2ChatHistoryDao.BackupsDir)
+  protected[dao] def getBackupPath(): JFile = {
+    val backupDir = new JFile(dataPathRoot, H2ChatHistoryDao.BackupsDir)
     backupDir.mkdir()
     backupDir
   }
@@ -481,7 +485,7 @@ class H2ChatHistoryDao(
       val newBackupName = "backup_" + DateTime.now.toString("yyyy-MM-dd_HH-mm-ss") + ".zip"
       StopWatch.measureAndCall {
         queries
-          .backup(new File(backupDir, newBackupName).getAbsolutePath.replace("\\", "/"))
+          .backup(new JFile(backupDir, newBackupName).getAbsolutePath.replace("\\", "/"))
           .transact(txctr)
           .unsafeRunSync()
       }((_, t) => log.info(s"Backup ${newBackupName} done in $t ms"))
@@ -499,16 +503,16 @@ class H2ChatHistoryDao(
       }
     }
 
-  override def isLoaded(dataPathRoot: File): Boolean = {
+  override def isLoaded(dataPathRoot: JFile): Boolean = {
     dataPathRoot != null && this.dataPathRoot == dataPathRoot
   }
 
   object queries {
-    val pure0 = pure[Int](0)
+    val pure0: Free[ConnectionOp, Int] = pure[Int](0)
 
-    def pure[T](v: T) = cats.free.Free.pure[ConnectionOp, T](v)
+    def pure[T](v: T): Free[ConnectionOp, T] = cats.free.Free.pure[ConnectionOp, T](v)
 
-    val noop = sql"SELECT 1".query[Int].unique
+    val noop: doobie.ConnectionIO[Int] = sql"SELECT 1".query[Int].unique
 
     def setRefIntegrity(enabled: Boolean): ConnectionIO[Int] =
       Fragment.const(s"SET REFERENTIAL_INTEGRITY ${if (enabled) "TRUE" else "FALSE"}").update.run
@@ -528,26 +532,26 @@ class H2ChatHistoryDao(
       def insert(ds: Dataset): ConnectionIO[Int] =
         (fr"INSERT INTO datasets (" ++ colsFr ++ fr") VALUES (${ds.uuid}, ${ds.alias}, ${ds.sourceType})").update.run
 
-      def rename(dsUuid: UUID, newName: String): ConnectionIO[Int] =
+      def rename(dsUuid: PbUuid, newName: String): ConnectionIO[Int] =
         sql"UPDATE datasets SET alias = ${newName} WHERE uuid = ${dsUuid}".update.run
 
-      def delete(dsUuid: UUID): ConnectionIO[Int] =
+      def delete(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM datasets WHERE uuid = ${dsUuid}".update.run
     }
 
     object users {
-      private val colsFr                 = fr"ds_uuid, id, first_name, last_name, username, phone_number"
-      private val selectAllFr            = fr"SELECT" ++ colsFr ++ fr"FROM users"
-      private def selectFr(dsUuid: UUID) = selectAllFr ++ fr"WHERE ds_uuid = $dsUuid"
-      private val defaultOrder           = fr"ORDER BY id, first_name, last_name, username, phone_number"
+      private val colsFr                   = fr"ds_uuid, id, first_name, last_name, username, phone_number"
+      private val selectAllFr              = fr"SELECT" ++ colsFr ++ fr"FROM users"
+      private def selectFr(dsUuid: PbUuid) = selectAllFr ++ fr"WHERE ds_uuid = $dsUuid"
+      private val defaultOrder             = fr"ORDER BY id, first_name, last_name, username, phone_number"
 
-      def selectAll(dsUuid: UUID) =
+      def selectAll(dsUuid: PbUuid) =
         (selectFr(dsUuid) ++ defaultOrder).query[User].to[Seq]
 
-      def selectMyself(dsUuid: UUID) =
+      def selectMyself(dsUuid: PbUuid) =
         (selectFr(dsUuid) ++ fr"AND is_myself = true").query[User].option
 
-      def select(dsUuid: UUID, id: Long) =
+      def select(dsUuid: PbUuid, id: Long) =
         (selectFr(dsUuid) ++ fr"AND id = $id").query[User].option
 
       def insert(u: User, isMyself: Boolean) =
@@ -568,11 +572,11 @@ class H2ChatHistoryDao(
            """.update.run
 
       /** Delete all users from the given dataset (other than self) that have no messages in any chat */
-      def delete(dsUuid: UUID, id: Long): ConnectionIO[Int] =
+      def delete(dsUuid: PbUuid, id: Long): ConnectionIO[Int] =
         sql"DELETE FROM users u WHERE u.id = ${id}".update.run
 
       /** Delete all users from the given dataset (other than self) that aren't associated any chat */
-      def deleteOrphans(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteOrphans(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"""
             DELETE FROM users u
             WHERE u.ds_uuid = $dsUuid AND u.id IN (
@@ -588,14 +592,14 @@ class H2ChatHistoryDao(
             )
            """.update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM users WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     object chats {
       private val colsFr     = fr"ds_uuid, id, name, type, img_path"
 
-      private def selectFr(dsUuid: UUID) =
+      private def selectFr(dsUuid: PbUuid) =
         (fr"SELECT" ++ colsFr ++ fr","
           ++ fr"(SELECT ARRAY_AGG(u.id) FROM users u"
           ++ fr"  INNER JOIN chat_members cm ON cm.ds_uuid = c.ds_uuid AND cm.user_id = u.id"
@@ -609,10 +613,10 @@ class H2ChatHistoryDao(
         (fr"EXISTS (SELECT m.from_id FROM messages m"
           ++ fr"WHERE m.ds_uuid = c.ds_uuid AND m.chat_id = c.id AND m.from_id = ${userId})")
 
-      def selectAll(dsUuid: UUID): ConnectionIO[Seq[Chat]] =
+      def selectAll(dsUuid: PbUuid): ConnectionIO[Seq[Chat]] =
         selectFr(dsUuid).query[RawChat].to[Seq].map(_ map Raws.toChat)
 
-      def selectAllPersonalChats(dsUuid: UUID, userId: Long): ConnectionIO[Seq[Chat]] =
+      def selectAllPersonalChats(dsUuid: PbUuid, userId: Long): ConnectionIO[Seq[Chat]] =
         if (myself(dsUuid).id == userId) {
           cats.free.Free.pure(Seq.empty)
         } else {
@@ -622,10 +626,10 @@ class H2ChatHistoryDao(
              """).query[RawChat].to[Seq].map(_ map Raws.toChat)
         }
 
-      def select(dsUuid: UUID, id: ChatId): ConnectionIO[Option[Chat]] =
+      def select(dsUuid: PbUuid, id: ChatId): ConnectionIO[Option[Chat]] =
         (selectFr(dsUuid) ++ fr"AND c.id = ${id}").query[RawChat].option.map(_ map Raws.toChat)
 
-      def insert(dsRoot: File, c: Chat) = {
+      def insert(dsRoot: JFile, c: Chat) = {
         val rc = Raws.fromChat(dsRoot, c)
         (fr"INSERT INTO chats (" ++ colsFr ++ fr") VALUES ("
           ++ fr"${rc.dsUuid}, ${rc.id}, ${rc.nameOption}, ${rc.tpe}, ${rc.imgPathOption}"
@@ -650,35 +654,35 @@ class H2ChatHistoryDao(
         }
       }
 
-      def delete(dsUuid: UUID, id: ChatId): ConnectionIO[Int] =
+      def delete(dsUuid: PbUuid, id: ChatId): ConnectionIO[Int] =
         sql"DELETE FROM chats WHERE ds_uuid = ${dsUuid} AND id = ${id}".update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM chats WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     object chatMembers {
-      def insert(dsUuid: UUID, chatId: ChatId, userId: Long) =
+      def insert(dsUuid: PbUuid, chatId: ChatId, userId: Long) =
         sql"INSERT INTO chat_members (ds_uuid, chat_id, user_id) VALUES ($dsUuid, $chatId, $userId)".update.run
 
-      def updateUser(dsUuid: UUID, fromUserId: Long, toUserId: Long): ConnectionIO[Int] =
+      def updateUser(dsUuid: PbUuid, fromUserId: Long, toUserId: Long): ConnectionIO[Int] =
         sql"UPDATE chat_members SET user_id = $toUserId WHERE ds_uuid = $dsUuid AND user_id = $fromUserId".update.run
 
-      def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
+      def deleteByChat(dsUuid: PbUuid, chatId: ChatId): ConnectionIO[Int] =
         sql"DELETE FROM chat_members WHERE ds_uuid = ${dsUuid} AND chat_id = ${chatId}".update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM chat_members WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     object messages {
       /** Inserts a message, overriding it's internal ID. */
       def insert(
-          dsUuid: UUID,
-          dsRoot: File,
+          dsUuid: PbUuid,
+          dsRoot: JFile,
           chatId: Long,
           msg: Message,
-      ): ConnectionIO[Message.InternalId] = {
+      ): ConnectionIO[MessageInternalId] = {
         val (rm, rcOption, rrtEls) = Raws.fromMessage(dsUuid, dsRoot, chatId, msg)
 
         for {
@@ -725,17 +729,17 @@ class H2ChatHistoryDao(
       private val orderAsc    = fr"ORDER BY m.time, m.source_id, m.internal_id"
       private val orderDesc   = fr"ORDER BY m.time DESC, m.source_id DESC, m.internal_id DESC"
 
-      private def whereDsAndChatFr(dsUuid: UUID, chatId: Long): Fragment =
+      private def whereDsAndChatFr(dsUuid: PbUuid, chatId: Long): Fragment =
         fr"WHERE m.ds_uuid = $dsUuid AND m.chat_id = $chatId"
 
-      private def selectAllByChatFr(dsUuid: UUID, chatId: Long): Fragment =
+      private def selectAllByChatFr(dsUuid: PbUuid, chatId: Long): Fragment =
         selectAllFr ++ whereDsAndChatFr(dsUuid, chatId)
 
 
-      def selectOption(chat: Chat, id: Message.InternalId): ConnectionIO[Option[RawMessage]] =
+      def selectOption(chat: Chat, id: MessageInternalId): ConnectionIO[Option[RawMessage]] =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND m.internal_id = ${id}").query[RawMessage].option
 
-      def selectOptionBySourceId(chat: Chat, id: Message.SourceId): ConnectionIO[Option[RawMessage]] =
+      def selectOptionBySourceId(chat: Chat, id: MessageSourceId): ConnectionIO[Option[RawMessage]] =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ fr"AND m.source_id = ${id}").query[RawMessage].option
 
       def selectSlice(chat: Chat, offset: Int, limit: Int): ConnectionIO[IndexedSeq[RawMessage]] =
@@ -743,7 +747,7 @@ class H2ChatHistoryDao(
           ++ orderAsc ++ withLimit(limit)
           ++ fr"OFFSET $offset").query[RawMessage].to[IndexedSeq]
 
-      def selectLastForChats(dsUuid: UUID, chats: Seq[Chat]): ConnectionIO[IndexedSeq[RawMessage]] =
+      def selectLastForChats(dsUuid: PbUuid, chats: Seq[Chat]): ConnectionIO[IndexedSeq[RawMessage]] =
         (selectAllFr
           ++ fr"WHERE m.ds_uuid = $dsUuid"
           ++ fr"AND m.internal_id IN (SELECT MAX(m2.internal_id) FROM messages m2 WHERE m2.ds_uuid = $dsUuid AND m2.chat_id IN ("
@@ -777,44 +781,44 @@ class H2ChatHistoryDao(
           AND (m.time < ${msg2.time} OR (m.time = ${msg2.time} AND m.internal_id < ${msg2.internalId}))
         """).query[Int].unique
 
-      def insert(m: RawMessage): ConnectionIO[Message.InternalId] =
+      def insert(m: RawMessage): ConnectionIO[MessageInternalId] =
         (fr"INSERT INTO messages (" ++ colsPureFr ++ fr") VALUES ("
           ++ fr"${m.dsUuid}, ${m.chatId}, default, ${m.sourceIdOption}, ${m.messageType},"
           ++ fr"${m.time}, ${m.editTimeOption},"
           ++ fr"${m.fromId}, ${m.forwardFromNameOption}, ${m.replyToMessageIdOption},"
           ++ fr"${m.titleOption}, ${m.members}, ${m.durationSecOption}, ${m.discardReasonOption},"
           ++ fr"${m.pinnedMessageIdOption}, ${m.pathOption}, ${m.widthOption}, ${m.heightOption}"
-          ++ fr")").update.withUniqueGeneratedKeys[Message.InternalId]("internal_id")
+          ++ fr")").update.withUniqueGeneratedKeys[MessageInternalId]("internal_id")
 
-      def removeSourceIds(dsUuid: UUID, fromChatId: Long): ConnectionIO[Int] =
+      def removeSourceIds(dsUuid: PbUuid, fromChatId: Long): ConnectionIO[Int] =
         sql"""
             UPDATE messages m SET m.source_id = NULL
             WHERE m.chat_id = ${fromChatId} AND m.ds_uuid = ${dsUuid}
            """.update.run
 
-      def updateUser(dsUuid: UUID, fromUserId: Long, toUserId: Long): ConnectionIO[Int] =
+      def updateUser(dsUuid: PbUuid, fromUserId: Long, toUserId: Long): ConnectionIO[Int] =
         sql"""
             UPDATE messages m SET m.from_id = ${toUserId}
             WHERE m.from_id = ${fromUserId} AND m.ds_uuid = ${dsUuid}
            """.update.run
 
-      def updateChat(dsUuid: UUID, fromChatId: Long, toChatId: Long): ConnectionIO[Int] =
+      def updateChat(dsUuid: PbUuid, fromChatId: Long, toChatId: Long): ConnectionIO[Int] =
         sql"""
             UPDATE messages m SET m.chat_id = ${toChatId}
             WHERE m.chat_id = ${fromChatId} AND m.ds_uuid = ${dsUuid}
            """.update.run
 
-      def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
+      def deleteByChat(dsUuid: PbUuid, chatId: ChatId): ConnectionIO[Int] =
         (fr"DELETE FROM messages m WHERE m.ds_uuid = ${dsUuid} AND m.chat_id = ${chatId}").update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM messages m WHERE m.ds_uuid = ${dsUuid}".update.run
     }
 
     object rawRichTextElements {
       private val colsNoKeysFr = fr"message_internal_id, element_type, text, href, hidden, language"
 
-      def selectAllForMultiple(dsUuid: UUID, msgIds: Seq[Message.InternalId]): ConnectionIO[Seq[RawRichTextElement]] =
+      def selectAllForMultiple(dsUuid: PbUuid, msgIds: Seq[MessageInternalId]): ConnectionIO[Seq[RawRichTextElement]] =
         if (msgIds.isEmpty)
           pure(Seq.empty)
         else
@@ -822,13 +826,13 @@ class H2ChatHistoryDao(
             ++ fr"WHERE ds_uuid = ${dsUuid} AND message_internal_id IN (" ++ Fragment.const(msgIds.mkString(",")) ++ fr")"
             ++ fr"ORDER BY id").query[RawRichTextElement].to[Seq]
 
-      def insert(rrte: RawRichTextElement, dsUuid: UUID) =
+      def insert(rrte: RawRichTextElement, dsUuid: PbUuid) =
         (fr"INSERT INTO messages_text_elements(ds_uuid, " ++ colsNoKeysFr ++ fr") VALUES ("
           ++ fr"${dsUuid}, ${rrte.messageInternalId}, ${rrte.elementType}, ${rrte.text},"
           ++ fr"${rrte.hrefOption}, ${rrte.hiddenOption}, ${rrte.languageOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
 
-      def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
+      def deleteByChat(dsUuid: PbUuid, chatId: ChatId): ConnectionIO[Int] =
         sql"""
             DELETE FROM messages_text_elements
             WHERE ds_uuid = ${dsUuid} AND message_internal_id IN (
@@ -837,7 +841,7 @@ class H2ChatHistoryDao(
             )
            """.update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM messages_text_elements WHERE ds_uuid = ${dsUuid}".update.run
     }
 
@@ -847,7 +851,7 @@ class H2ChatHistoryDao(
           s"""|message_internal_id, element_type, path, thumbnail_path, emoji, width, height, mime_type, title, performer, address,
               |lat, lon, duration_sec, poll_question, first_name, last_name, phone_number, vcard_path""".stripMargin)
 
-      def selectMultiple(dsUuid: UUID, msgIds: Seq[Message.InternalId]): ConnectionIO[Seq[RawContent]] =
+      def selectMultiple(dsUuid: PbUuid, msgIds: Seq[MessageInternalId]): ConnectionIO[Seq[RawContent]] =
         if (msgIds.isEmpty)
           pure(Seq.empty)
         else
@@ -856,7 +860,7 @@ class H2ChatHistoryDao(
             .query[RawContent]
             .to[Seq]
 
-      def insert(rc: RawContent, dsUuid: UUID): ConnectionIO[Long] =
+      def insert(rc: RawContent, dsUuid: PbUuid): ConnectionIO[Long] =
         (fr"INSERT INTO messages_content(ds_uuid, " ++ colsNoIdentityFr ++ fr") VALUES ("
           ++ fr"${dsUuid}, ${rc.messageInternalId},"
           ++ fr"${rc.elementType}, ${rc.pathOption}, ${rc.thumbnailPathOption}, ${rc.emojiOption}, ${rc.widthOption}, "
@@ -865,7 +869,7 @@ class H2ChatHistoryDao(
           ++ fr" ${rc.lastNameOption}, ${rc.phoneNumberOption}, ${rc.vcardPathOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
 
-      def deleteByChat(dsUuid: UUID, chatId: ChatId): ConnectionIO[Int] =
+      def deleteByChat(dsUuid: PbUuid, chatId: ChatId): ConnectionIO[Int] =
         sql"""
             DELETE FROM messages_content
             WHERE ds_uuid = ${dsUuid} AND message_internal_id IN (
@@ -874,12 +878,12 @@ class H2ChatHistoryDao(
             )
            """.update.run
 
-      def deleteByDataset(dsUuid: UUID): ConnectionIO[Int] =
+      def deleteByDataset(dsUuid: PbUuid): ConnectionIO[Int] =
         sql"DELETE FROM messages_content WHERE ds_uuid = ${dsUuid}".update.run
     }
 
     /** Merge all messages from all personal chats with this user into the first one and delete the rest */
-    def mergePersonalChats(dsUuid: UUID, userId: Long): ConnectionIO[Int] = {
+    def mergePersonalChats(dsUuid: PbUuid, userId: Long): ConnectionIO[Int] = {
       // TODO: This looks really inefficient
       for {
         pcs <- queries.chats.selectAllPersonalChats(dsUuid, userId)
@@ -904,8 +908,8 @@ class H2ChatHistoryDao(
       } yield v0
     }
 
-    /** Select all non-null filesystem paths from all tables for the specific dataset */
-    def selectAllPaths(dsUuid: UUID): ConnectionIO[Set[String]] = {
+    /** Select all non-null JFilesystem paths from all tables for the specific dataset */
+    def selectAllPaths(dsUuid: PbUuid): ConnectionIO[Set[String]] = {
       def q(col: String, table: String) = {
         val whereFr = Fragments.whereAnd(
           fr"ds_uuid = ${dsUuid}",
@@ -922,7 +926,7 @@ class H2ChatHistoryDao(
       } yield chatImgPaths ++ msgPaths ++ msgCPaths ++ msgCThumbPaths ++ msgCVcardPaths
     } map (_.toSet)
 
-    def shiftDatasetTime(dsUuid: UUID, hrs: Int): ConnectionIO[Int] = {
+    def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): ConnectionIO[Int] = {
       sql"""
         UPDATE messages SET
           time      = DATEADD(HOUR, $hrs, time),
@@ -937,251 +941,207 @@ class H2ChatHistoryDao(
       Chat(
         dsUuid        = rc.dsUuid,
         id            = rc.id,
-        nameOption    = rc.nameOption,
+        nameOption     = rc.nameOption,
         tpe           = rc.tpe,
-        imgPathOption = rc.imgPathOption map (_.toFile(rc.dsUuid)),
-        memberIds     = rc.memberIdsOption map (_.toSet) getOrElse Set.empty,
+        imgPathOption = rc.imgPathOption map (_.makeRelativePath),
+        memberIds     = rc.memberIdsOption map (_.toSeq) getOrElse Seq.empty,
         msgCount      = rc.msgCount
       )
     }
 
-    def toMessage(rm: RawMessage, richTexts: Map[Message.InternalId, RichText], contents: Map[Message.InternalId, Content]) = {
-      val textOption = richTexts.get(rm.internalId)
-      rm.messageType match {
+    def toMessage(rm: RawMessage,
+                  richTexts: Map[MessageInternalId, Seq[RichTextElement]],
+                  contents: Map[MessageInternalId, Content]): Message = {
+      val typed: Message.Typed = rm.messageType match {
         case "regular" =>
-          Message.Regular(
-            internalId             = rm.internalId,
-            sourceIdOption         = rm.sourceIdOption,
-            time                   = rm.time,
-            editTimeOption         = rm.editTimeOption,
-            fromId                 = rm.fromId,
+          Message.Typed.Regular(MessageRegular(
+            editTimestampOption    = rm.editTimeOption map (_.unixTimestamp),
             forwardFromNameOption  = rm.forwardFromNameOption,
             replyToMessageIdOption = rm.replyToMessageIdOption,
-            textOption             = textOption,
             contentOption          = contents.get(rm.internalId)
-          )
+          ))
         case "service_phone_call" =>
-          Message.Service.PhoneCall(
-            internalId          = rm.internalId,
-            sourceIdOption      = rm.sourceIdOption,
-            time                = rm.time,
-            fromId              = rm.fromId,
-            textOption          = textOption,
+          Message.Typed.Service(MessageService(MessageService.Val.PhoneCall(MessageServicePhoneCall(
             durationSecOption   = rm.durationSecOption,
             discardReasonOption = rm.discardReasonOption
-          )
+          ))))
         case "service_pin_message" =>
-          Message.Service.PinMessage(
-            internalId     = rm.internalId,
-            sourceIdOption = rm.sourceIdOption,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            messageId      = rm.pinnedMessageIdOption.get
-          )
+          Message.Typed.Service(MessageService(MessageService.Val.PinMessage(MessageServicePinMessage(
+            messageId = rm.pinnedMessageIdOption.get
+          ))))
         case "service_clear_history" =>
-          Message.Service.ClearHistory(
-            internalId     = rm.internalId,
-            sourceIdOption = rm.sourceIdOption,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-          )
+          Message.Typed.Service(MessageService(MessageService.Val.ClearHistory(MessageServiceClearHistory())))
         case "service_group_create" =>
-          Message.Service.Group.Create(
-            internalId     = rm.internalId,
-            sourceIdOption = rm.sourceIdOption,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            title          = rm.titleOption.get,
-            members        = rm.members
-          )
+          Message.Typed.Service(MessageService(MessageService.Val.GroupCreate(MessageServiceGroupCreate(
+            title   = rm.titleOption.get,
+            members = rm.members
+          ))))
         case "service_edit_title" =>
-          Message.Service.Group.EditTitle(
-            internalId     = rm.internalId,
-            sourceIdOption = rm.sourceIdOption,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            title          = rm.titleOption.get
-          )
+          Message.Typed.Service(MessageService(MessageService.Val.GroupEditTitle(MessageServiceGroupEditTitle(
+            title = rm.titleOption.get
+          ))))
         case "service_edit_photo" =>
-          Message.Service.Group.EditPhoto(
-            internalId     = rm.internalId,
-            sourceIdOption = rm.sourceIdOption,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            pathOption     = rm.pathOption map (_.toFile(rm.dsUuid)),
-            widthOption    = rm.widthOption,
-            heightOption   = rm.heightOption
-          )
+          Message.Typed.Service(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(
+            ContentPhoto(
+              pathOption = rm.pathOption,
+              width      = rm.widthOption.get,
+              height     = rm.heightOption.get
+            )
+          ))))
         case "service_invite_group_members" =>
-          Message.Service.Group.InviteMembers(
-            internalId     = rm.internalId,
-            sourceIdOption = rm.sourceIdOption,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            members        = rm.members
-          )
+          Message.Typed.Service(MessageService(MessageService.Val.GroupInviteMembers(MessageServiceGroupInviteMembers(
+            members = rm.members
+          ))))
         case "service_group_remove_members" =>
-          Message.Service.Group.RemoveMembers(
-            internalId     = rm.internalId,
-            sourceIdOption = rm.sourceIdOption,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            members        = rm.members
-          )
+          Message.Typed.Service(MessageService(MessageService.Val.GroupRemoveMembers(MessageServiceGroupRemoveMembers(
+            members = rm.members
+          ))))
         case "service_group_migrate_from" =>
-          Message.Service.Group.MigrateFrom(
-            internalId     = rm.internalId,
-            sourceIdOption = rm.sourceIdOption,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            titleOption    = rm.titleOption,
-            textOption     = textOption
-          )
+          Message.Typed.Service(MessageService(MessageService.Val.GroupMigrateFrom(MessageServiceGroupMigrateFrom(
+            title = rm.titleOption.get
+          ))))
         case "service_group_migrate_to" =>
-          Message.Service.Group.MigrateTo(
-            internalId     = rm.internalId,
-            sourceIdOption = rm.sourceIdOption,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption
-          )
+          Message.Typed.Service(MessageService(MessageService.Val.GroupMigrateTo(MessageServiceGroupMigrateTo())))
         case "service_group_call" =>
-          Message.Service.Group.Call(
-            internalId     = rm.internalId,
-            sourceIdOption = rm.sourceIdOption,
-            time           = rm.time,
-            fromId         = rm.fromId,
-            textOption     = textOption,
-            members        = rm.members
-          )
+          Message.Typed.Service(MessageService(MessageService.Val.GroupCall(MessageServiceGroupCall(
+            members = rm.members
+          ))))
       }
+      val text = richTexts.getOrElse(rm.internalId, Seq.empty)
+      Message(
+        internalId             = rm.internalId,
+        sourceIdOption         = rm.sourceIdOption,
+        timestamp              = rm.time.unixTimestamp,
+        fromId                 = rm.fromId,
+        text                   = text,
+        searchableString       = Some(makeSearchableString(text, typed)),
+        typed                  = typed,
+      )
     }
 
-    def toRichTextElement(r: RawRichTextElement): RichText.Element = {
+    def toRichTextElement(r: RawRichTextElement): RichTextElement = {
       r.elementType match {
         case "plain" =>
-          RichText.Plain(text = r.text)
+          RichText.makePlain(r.text)
         case "bold" =>
-          RichText.Bold(text = r.text)
+          RichText.makeBold(r.text)
         case "italic" =>
-          RichText.Italic(text = r.text)
+          RichText.makeItalic(text = r.text)
         case "underline" =>
-          RichText.Underline(text = r.text)
+          RichText.makeUnderline(text = r.text)
         case "strikethrough" =>
-          RichText.Strikethrough(text = r.text)
+          RichText.makeStrikethrough(text = r.text)
         case "link" =>
-          RichText.Link(text = r.text, href = r.hrefOption.get, hidden = r.hiddenOption.get)
+          RichText.makeLink(
+            textOption = r.textOption,
+            href       = r.hrefOption.get,
+            hidden     = r.hiddenOption.get
+          )
         case "prefmt_inline" =>
-          RichText.PrefmtInline(text = r.text)
+          RichText.makePrefmtInline(text = r.text)
         case "prefmt_block" =>
-          RichText.PrefmtBlock(text = r.text, languageOption = r.languageOption)
+          RichText.makePrefmtBlock(text = r.text, languageOption = r.languageOption)
       }
     }
 
-    def toContent(dsUuid: UUID, rc: RawContent): Content = {
-      rc.elementType match {
+    def toContent(dsUuid: PbUuid, rc: RawContent): Content = {
+      Content(rc.elementType match {
         case "sticker" =>
-          Content.Sticker(
-            pathOption          = rc.pathOption map (_.toFile(dsUuid)),
-            thumbnailPathOption = rc.thumbnailPathOption map (_.toFile(dsUuid)),
+          Content.Val.Sticker(ContentSticker(
+            pathOption          = rc.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
             emojiOption         = rc.emojiOption,
-            widthOption         = rc.widthOption,
-            heightOption        = rc.heightOption
-          )
+            width               = rc.widthOption.get,
+            height              = rc.heightOption.get
+          ))
         case "photo" =>
-          Content.Photo(
-            pathOption = rc.pathOption map (_.toFile(dsUuid)),
+          Content.Val.Photo(ContentPhoto(
+            pathOption = rc.pathOption map (_.makeRelativePath),
             width      = rc.widthOption.get,
             height     = rc.heightOption.get,
-          )
+          ))
         case "voice_message" =>
-          Content.VoiceMsg(
-            pathOption        = rc.pathOption map (_.toFile(dsUuid)),
-            mimeTypeOption    = rc.mimeTypeOption,
+          Content.Val.VoiceMsg(ContentVoiceMsg(
+            pathOption        = rc.pathOption map (_.makeRelativePath),
+            mimeType          = rc.mimeTypeOption.get,
             durationSecOption = rc.durationSecOption
-          )
+          ))
         case "video_message" =>
-          Content.VideoMsg(
-            pathOption          = rc.pathOption map (_.toFile(dsUuid)),
-            thumbnailPathOption = rc.thumbnailPathOption map (_.toFile(dsUuid)),
-            mimeTypeOption      = rc.mimeTypeOption,
+          Content.Val.VideoMsg(ContentVideoMsg(
+            pathOption          = rc.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
+            mimeType            = rc.mimeTypeOption.get,
             durationSecOption   = rc.durationSecOption,
             width               = rc.widthOption.get,
             height              = rc.heightOption.get
-          )
+          ))
         case "animation" =>
-          Content.Animation(
-            pathOption          = rc.pathOption map (_.toFile(dsUuid)),
-            thumbnailPathOption = rc.thumbnailPathOption map (_.toFile(dsUuid)),
-            mimeTypeOption      = rc.mimeTypeOption,
+          Content.Val.Animation(ContentAnimation(
+            pathOption          = rc.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
+            mimeType            = rc.mimeTypeOption.get,
             durationSecOption   = rc.durationSecOption,
             width               = rc.widthOption.get,
             height              = rc.heightOption.get
-          )
+          ))
         case "file" =>
-          Content.File(
-            pathOption          = rc.pathOption map (_.toFile(dsUuid)),
-            thumbnailPathOption = rc.thumbnailPathOption map (_.toFile(dsUuid)),
+          Content.Val.File(ContentFile(
+            pathOption          = rc.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
             mimeTypeOption      = rc.mimeTypeOption,
-            titleOption         = rc.titleOption,
+            title               = rc.titleOption.getOrElse("<File>"),
             performerOption     = rc.performerOption,
             durationSecOption   = rc.durationSecOption,
             widthOption         = rc.widthOption,
             heightOption        = rc.heightOption
-          )
+          ))
         case "location" =>
-          Content.Location(
+          Content.Val.Location(ContentLocation(
             titleOption       = rc.titleOption,
             addressOption     = rc.addressOption,
-            lat               = rc.latOption.get,
-            lon               = rc.lonOption.get,
+            latStr            = rc.latOption.get.toString,
+            lonStr            = rc.lonOption.get.toString,
             durationSecOption = rc.durationSecOption
-          )
+          ))
         case "poll" =>
-          Content.Poll(
+          Content.Val.Poll(ContentPoll(
             question = rc.pollQuestionOption.get
-          )
+          ))
         case "shared_contact" =>
-          Content.SharedContact(
+          Content.Val.SharedContact(ContentSharedContact(
             firstNameOption   = rc.firstNameOption,
             lastNameOption    = rc.lastNameOption,
             phoneNumberOption = rc.phoneNumberOption,
-            vcardPathOption   = rc.vcardPathOption map (_.toFile(dsUuid))
-          )
-      }
+            vcardPathOption   = rc.vcardPathOption map (_.makeRelativePath),
+          ))
+      })
     }
 
-    def fromChat(dsRoot: File, c: Chat): RawChat = {
+    def fromChat(dsRoot: JFile, c: Chat): RawChat = {
       RawChat(
         dsUuid          = c.dsUuid,
         id              = c.id,
         nameOption      = c.nameOption,
         tpe             = c.tpe,
-        imgPathOption   = c.imgPathOption map (_.toRelativePath(dsRoot)),
+        imgPathOption   = c.imgPathOption map (_.makeRelativePath),
         memberIdsOption = Some(c.memberIds.toList),
         msgCount        = c.msgCount
       )
     }
 
     def fromMessage(
-        dsUuid: UUID,
-        dsRoot: File,
+        dsUuid: PbUuid,
+        dsRoot: JFile,
         chatId: Long,
         msg: Message
     ): (RawMessage, Option[RawContent], Seq[RawRichTextElement]) = {
-      val rawRichTextEls = msg.textOption map fromRichText(msg.internalId) getOrElse Seq.empty
+      val rawRichTextEls: Seq[RawRichTextElement] =
+        msg.text map fromRichText(msg.internalIdTyped)
       val template = RawMessage(
         dsUuid                 = dsUuid,
         chatId                 = chatId,
-        internalId             = msg.internalId,
-        sourceIdOption         = msg.sourceIdOption,
+        internalId             = msg.internalIdTyped,
+        sourceIdOption         = msg.sourceIdTypedOption,
         messageType            = "",
         time                   = msg.time,
         editTimeOption         = None,
@@ -1198,110 +1158,110 @@ class H2ChatHistoryDao(
         heightOption           = None
       )
 
-      val (rawMessage: RawMessage, rawContentOption: Option[RawContent]) = msg match {
-        case msg: Message.Regular =>
-          val rawContentOption = msg.contentOption map fromContent(dsUuid, dsRoot, msg.internalId)
+      val (rawMessage: RawMessage, rawContentOption: Option[RawContent]) = msg.typed.value match {
+        case m: MessageRegular =>
+          val rawContentOption = m.contentOption map fromContent(dsUuid, dsRoot, msg.internalIdTyped)
           template.copy(
             messageType            = "regular",
-            editTimeOption         = msg.editTimeOption,
-            forwardFromNameOption  = msg.forwardFromNameOption,
-            replyToMessageIdOption = msg.replyToMessageIdOption
+            editTimeOption         = m.editTimeOption,
+            forwardFromNameOption  = m.forwardFromNameOption,
+            replyToMessageIdOption = m.replyToMessageIdTypedOption
           ) -> rawContentOption
-        case msg: Message.Service.PhoneCall =>
+        case MessageService(MessageService.Val.PhoneCall(m), _) =>
           template.copy(
             messageType         = "service_phone_call",
-            durationSecOption   = msg.durationSecOption,
-            discardReasonOption = msg.discardReasonOption
+            durationSecOption   = m.durationSecOption,
+            discardReasonOption = m.discardReasonOption
           ) -> None
-        case msg: Message.Service.PinMessage =>
+        case MessageService(MessageService.Val.PinMessage(m), _) =>
           template.copy(
             messageType           = "service_pin_message",
-            pinnedMessageIdOption = Some(msg.messageId),
+            pinnedMessageIdOption = Some(m.messageIdTyped),
           ) -> None
-        case msg: Message.Service.ClearHistory =>
+        case MessageService(MessageService.Val.ClearHistory(_), _) =>
           template.copy(
             messageType = "service_clear_history",
           ) -> None
-        case msg: Message.Service.Group.Create =>
+        case MessageService(MessageService.Val.GroupCreate(m), _) =>
           template.copy(
             messageType = "service_group_create",
-            titleOption = Some(msg.title),
-            members     = msg.members
+            titleOption = Some(m.title),
+            members     = m.members
           ) -> None
-        case msg: Message.Service.Group.EditTitle =>
+        case MessageService(MessageService.Val.GroupEditTitle(m), _) =>
           template.copy(
             messageType = "service_edit_title",
-            titleOption = Some(msg.title)
+            titleOption = Some(m.title)
           ) -> None
-        case msg: Message.Service.Group.EditPhoto =>
+        case MessageService(MessageService.Val.GroupEditPhoto(m), _) =>
+          val photo = m.photo
           template.copy(
             messageType  = "service_edit_photo",
-            pathOption   = msg.pathOption map (_.toRelativePath(dsRoot)),
-            widthOption  = msg.widthOption,
-            heightOption = msg.heightOption
+            pathOption   = photo.pathOption map (_.makeRelativePath),
+            widthOption  = Some(photo.width),
+            heightOption = Some(photo.height)
           ) -> None
-        case msg: Message.Service.Group.InviteMembers =>
+        case MessageService(MessageService.Val.GroupInviteMembers(m), _) =>
           template.copy(
             messageType = "service_invite_group_members",
-            members     = msg.members
+            members     = m.members
           ) -> None
-        case msg: Message.Service.Group.RemoveMembers =>
+        case MessageService(MessageService.Val.GroupRemoveMembers(m), _) =>
           template.copy(
             messageType = "service_group_remove_members",
-            members     = msg.members
+            members     = m.members
           ) -> None
-        case msg: Message.Service.Group.MigrateFrom =>
+        case MessageService(MessageService.Val.GroupMigrateFrom(m), _) =>
           template.copy(
             messageType = "service_group_migrate_from",
-            titleOption = msg.titleOption
+            titleOption = Some(m.title)
           ) -> None
-        case msg: Message.Service.Group.MigrateTo =>
+        case MessageService(MessageService.Val.GroupMigrateTo(_), _) =>
           template.copy(
             messageType = "service_group_migrate_to",
           ) -> None
-        case msg: Message.Service.Group.Call =>
+        case MessageService(MessageService.Val.GroupCall(m), _) =>
           template.copy(
             messageType = "service_group_call",
-            members     = msg.members
+            members     = m.members
           ) -> None
       }
       (rawMessage, rawContentOption, rawRichTextEls)
     }
 
-    def fromRichText(msgId: Message.InternalId)(t: RichText): Seq[RawRichTextElement] = {
-      val rawEls: Seq[RawRichTextElement] = t.components.map { el =>
-        val template = RawRichTextElement(
-          messageInternalId = msgId,
-          elementType       = "",
-          text              = el.text,
-          hrefOption        = None,
-          hiddenOption      = None,
-          languageOption    = None
-        )
-        el match {
-          case el: RichText.Plain         => template.copy(elementType = "plain")
-          case el: RichText.Bold          => template.copy(elementType = "bold")
-          case el: RichText.Italic        => template.copy(elementType = "italic")
-          case el: RichText.Underline     => template.copy(elementType = "underline")
-          case el: RichText.Strikethrough => template.copy(elementType = "strikethrough")
-          case el: RichText.Link =>
-            template.copy(
-              elementType  = "link",
-              hrefOption   = Some(el.href),
-              hiddenOption = Some(el.hidden)
-            )
-          case el: RichText.PrefmtInline => template.copy(elementType = "prefmt_inline")
-          case el: RichText.PrefmtBlock =>
-            template.copy(
-              elementType    = "prefmt_block",
-              languageOption = el.languageOption
-            )
-        }
+    def fromRichText(msgId: MessageInternalId)(rte: RichTextElement): RawRichTextElement = {
+      val template = RawRichTextElement(
+        messageInternalId = msgId,
+        elementType       = "",
+        text              = rte.textOrEmptyString,
+        hrefOption        = None,
+        hiddenOption      = None,
+        languageOption    = None
+      )
+      if (rte.`val`.isEmpty) {
+        template.copy(elementType = "empty")
+      } else rte.`val`.value match {
+        case _: RtePlain         => template.copy(elementType = "plain")
+        case _: RteBold          => template.copy(elementType = "bold")
+        case _: RteItalic        => template.copy(elementType = "italic")
+        case _: RteUnderline     => template.copy(elementType = "underline")
+        case _: RteStrikethrough => template.copy(elementType = "strikethrough")
+        case link: RteLink =>
+          template.copy(
+            elementType  = "link",
+            hrefOption   = Some(link.href),
+            hiddenOption = Some(link.hidden)
+          )
+        case _: RtePrefmtInline => template.copy(elementType = "prefmt_inline")
+        case el: RtePrefmtBlock =>
+          template.copy(
+            elementType    = "prefmt_block",
+            languageOption = el.languageOption
+          )
       }
-      rawEls
     }
 
-    def fromContent(dsUuid: UUID, dsRoot: File, msgId: Message.InternalId)(c: Content): RawContent = {
+    def fromContent(dsUuid: PbUuid, dsRoot: JFile, msgId: MessageInternalId)(c: Content): RawContent = {
       val template = RawContent(
         messageInternalId   = msgId,
         elementType         = "",
@@ -1323,63 +1283,63 @@ class H2ChatHistoryDao(
         phoneNumberOption   = None,
         vcardPathOption     = None
       )
-      c match {
-        case c: Content.Sticker =>
+      c.`val` match {
+        case Content.Val.Sticker(c) =>
           template.copy(
             elementType         = "sticker",
-            pathOption          = c.pathOption map (_.toRelativePath(dsRoot)),
-            thumbnailPathOption = c.thumbnailPathOption map (_.toRelativePath(dsRoot)),
+            pathOption          = c.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = c.thumbnailPathOption map (_.makeRelativePath),
             emojiOption         = c.emojiOption,
-            widthOption         = c.widthOption,
-            heightOption        = c.heightOption
+            widthOption         = Some(c.width),
+            heightOption        = Some(c.height)
           )
-        case c: Content.Photo =>
+        case Content.Val.Photo(c) =>
           template.copy(
             elementType  = "photo",
-            pathOption   = c.pathOption map (_.toRelativePath(dsRoot)),
+            pathOption   = c.pathOption map (_.makeRelativePath),
             widthOption  = Some(c.width),
             heightOption = Some(c.height)
           )
-        case c: Content.VoiceMsg =>
+        case Content.Val.VoiceMsg(c) =>
           template.copy(
             elementType       = "voice_message",
-            pathOption        = c.pathOption map (_.toRelativePath(dsRoot)),
-            mimeTypeOption    = c.mimeTypeOption,
+            pathOption        = c.pathOption map (_.makeRelativePath),
+            mimeTypeOption    = Some(c.mimeType),
             durationSecOption = c.durationSecOption
           )
-        case c: Content.VideoMsg =>
+        case Content.Val.VideoMsg(c) =>
           template.copy(
             elementType         = "video_message",
-            pathOption          = c.pathOption map (_.toRelativePath(dsRoot)),
-            thumbnailPathOption = c.thumbnailPathOption map (_.toRelativePath(dsRoot)),
-            mimeTypeOption      = c.mimeTypeOption,
+            pathOption          = c.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = c.thumbnailPathOption map (_.makeRelativePath),
+            mimeTypeOption      = Some(c.mimeType),
             durationSecOption   = c.durationSecOption,
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
-        case c: Content.Animation =>
+        case Content.Val.Animation(c) =>
           template.copy(
             elementType         = "animation",
-            pathOption          = c.pathOption map (_.toRelativePath(dsRoot)),
-            thumbnailPathOption = c.thumbnailPathOption map (_.toRelativePath(dsRoot)),
-            mimeTypeOption      = c.mimeTypeOption,
+            pathOption          = c.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = c.thumbnailPathOption map (_.makeRelativePath),
+            mimeTypeOption      = Some(c.mimeType),
             durationSecOption   = c.durationSecOption,
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
-        case c: Content.File =>
+        case Content.Val.File(c) =>
           template.copy(
             elementType         = "file",
-            pathOption          = c.pathOption map (_.toRelativePath(dsRoot)),
-            thumbnailPathOption = c.thumbnailPathOption map (_.toRelativePath(dsRoot)),
+            pathOption          = c.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = c.thumbnailPathOption map (_.makeRelativePath),
             mimeTypeOption      = c.mimeTypeOption,
-            titleOption         = c.titleOption,
+            titleOption         = Some(c.title),
             performerOption     = c.performerOption,
             durationSecOption   = c.durationSecOption,
             widthOption         = c.widthOption,
             heightOption        = c.heightOption
           )
-        case c: Content.Location =>
+        case Content.Val.Location(c) =>
           template.copy(
             elementType       = "location",
             titleOption       = c.titleOption,
@@ -1388,19 +1348,21 @@ class H2ChatHistoryDao(
             lonOption         = Some(c.lon),
             durationSecOption = c.durationSecOption
           )
-        case c: Content.Poll =>
+        case Content.Val.Poll(c) =>
           template.copy(
             elementType        = "poll",
             pollQuestionOption = Some(c.question)
           )
-        case c: Content.SharedContact =>
+        case Content.Val.SharedContact(c) =>
           template.copy(
             elementType       = "shared_contact",
             firstNameOption   = c.firstNameOption,
             lastNameOption    = c.lastNameOption,
             phoneNumberOption = c.phoneNumberOption,
-            vcardPathOption   = c.vcardPathOption map (_.toRelativePath(dsRoot))
+            vcardPathOption   = c.vcardPathOption map (_.makeRelativePath)
           )
+        case Content.Val.Empty =>
+          throw new IllegalArgumentException("Empty content!")
       }
     }
   }
@@ -1411,28 +1373,6 @@ class H2ChatHistoryDao(
   }
 
   override def hashCode: Int = this.name.hashCode + 17 * this.dataPathRoot.hashCode
-
-  private implicit class RichString(s: String) {
-    def toFile(dsUuid: UUID): File = new File(datasetRoot(dsUuid), s.replace('\\','/')).getAbsoluteFile
-  }
-
-  private implicit class RichFile(f: File) {
-    def toRelativePath(rootFile: File): String = {
-      val dpp = rootFile.getAbsolutePath
-      val fp = f.getAbsolutePath
-      assert(fp startsWith dpp, s"Expected ${fp} to start with ${dpp}")
-      fp.drop(dpp.length)
-    }
-
-    @tailrec
-    protected final def isChildOf(parent: File): Boolean = {
-      f.getParentFile match {
-        case null               => false
-        case f2 if f2 == parent => true
-        case f2                 => f2.isChildOf(parent)
-      }
-    }
-  }
 }
 
 object H2ChatHistoryDao {
@@ -1447,7 +1387,7 @@ object H2ChatHistoryDao {
   //
 
   case class RawChat(
-      dsUuid: UUID,
+      dsUuid: PbUuid,
       id: Long,
       nameOption: Option[String],
       tpe: ChatType,
@@ -1458,22 +1398,22 @@ object H2ChatHistoryDao {
 
   /** [[Message]] class with all the inlined fields, whose type is determined by `messageType` */
   case class RawMessage(
-      dsUuid: UUID,
+      dsUuid: PbUuid,
       chatId: ChatId,
       /** Not assigned (set to -1) before insert! */
-      internalId: Message.InternalId,
-      sourceIdOption: Option[Message.SourceId],
+      internalId: MessageInternalId,
+      sourceIdOption: Option[MessageSourceId],
       messageType: String,
       time: DateTime,
       editTimeOption: Option[DateTime],
       fromId: Long,
       forwardFromNameOption: Option[String],
-      replyToMessageIdOption: Option[Message.SourceId],
+      replyToMessageIdOption: Option[MessageSourceId],
       titleOption: Option[String],
       members: Seq[String],
       durationSecOption: Option[Int],
       discardReasonOption: Option[String],
-      pinnedMessageIdOption: Option[Message.SourceId],
+      pinnedMessageIdOption: Option[MessageSourceId],
       pathOption: Option[String],
       widthOption: Option[Int],
       heightOption: Option[Int]
@@ -1483,17 +1423,20 @@ object H2ChatHistoryDao {
   }
 
   case class RawRichTextElement(
-      messageInternalId: Message.InternalId,
+      messageInternalId: MessageInternalId,
       elementType: String,
+      // Can be empty string!
       text: String,
       hrefOption: Option[String],
       hiddenOption: Option[Boolean],
       languageOption: Option[String]
-  )
+  ) {
+    def textOption: Option[String] = text.toOption
+  }
 
   /** Could hold any kind of content, distinguished by elementType. */
   case class RawContent(
-      messageInternalId: Message.InternalId,
+      messageInternalId: MessageInternalId,
       elementType: String,
       pathOption: Option[String],
       thumbnailPathOption: Option[String],
@@ -1522,17 +1465,78 @@ object H2ChatHistoryDao {
   implicit protected val dateTimeMeta: Meta[DateTime] =
     Meta[Timestamp].imap(ts => new DateTime(ts.getTime))(dt => new Timestamp(dt.getMillis))
 
-  implicit protected val msgInternalIdMeta: Meta[Message.InternalId] =
-    implicitly[Meta[Long]].asInstanceOf[Meta[Message.InternalId]]
+  implicit protected val msgInternalIdMeta: Meta[MessageInternalId] =
+    implicitly[Meta[Long]].asInstanceOf[Meta[MessageInternalId]]
 
-  implicit protected val msgSourceIdMeta: Meta[Message.SourceId] =
-    implicitly[Meta[Long]].asInstanceOf[Meta[Message.SourceId]]
+  implicit protected val msgSourceIdMeta: Meta[MessageSourceId] =
+    implicitly[Meta[Long]].asInstanceOf[Meta[MessageSourceId]]
 
   implicit val chatTypeFromString: Get[ChatType] = Get[String].tmap {
-    case x if x == ChatType.Personal.name     => ChatType.Personal
-    case x if x == ChatType.PrivateGroup.name => ChatType.PrivateGroup
+    case "personal"      => ChatType.Personal
+    case "private_group" => ChatType.PrivateGroup
   }
-  implicit val chatTypeToString: Put[ChatType] = Put[String].tcontramap(_.name)
+
+  implicit val chatTypeToString: Put[ChatType] = Put[String].tcontramap {
+    case ChatType.Personal => "personal"
+    case ChatType.PrivateGroup => "private_group"
+  }
+
+  implicit val pbUuidFromString: Get[PbUuid] = Get[String].tmap(s => fromJavaUuid(java.util.UUID.fromString(s)))
+
+  implicit val pbUuidToString: Put[PbUuid] = Put[String].tcontramap(pb => pb.value.toLowerCase)
+
+  private case class UserMapping(
+    dsUuid           : PbUuid,
+    id               : Long,
+    firstNameOption  : Option[String],
+    lastNameOption   : Option[String],
+    usernameOption   : Option[String],
+    phoneNumberOption: Option[String]
+  )
+
+  implicit val userRead: Read[User] = Read[UserMapping].map { um =>
+    User(
+      dsUuid            = um.dsUuid,
+      id                = um.id,
+      firstNameOption   = um.firstNameOption,
+      lastNameOption    = um.lastNameOption,
+      usernameOption    = um.usernameOption,
+      phoneNumberOption = um.phoneNumberOption
+    )
+  }
+
+  implicit val userWrite: Write[User] = Write[UserMapping].contramap { u =>
+    UserMapping(
+      dsUuid            = u.dsUuid,
+      id                = u.id,
+      firstNameOption   = u.firstNameOption,
+      lastNameOption    = u.lastNameOption,
+      usernameOption    = u.usernameOption,
+      phoneNumberOption = u.phoneNumberOption
+    )
+  }
+
+  private case class DatasetMapping(
+    uuid      : PbUuid,
+    alias     : String,
+    sourceType: String
+  )
+
+  implicit val datasetRead: Read[Dataset] = Read[DatasetMapping].map { dm =>
+    Dataset(
+      uuid       = dm.uuid,
+      alias      = dm.alias,
+      sourceType = dm.sourceType,
+    )
+  }
+
+  implicit val datasetWrite: Write[Dataset] = Write[DatasetMapping].contramap { d =>
+    DatasetMapping(
+      uuid       = d.uuid,
+      alias      = d.alias,
+      sourceType = d.sourceType,
+    )
+  }
 
   private val ArraySeparator = ";;;"
   implicit val stringSeqFromString: Get[Seq[String]] = Get[String].tmap(s => s.split(ArraySeparator))

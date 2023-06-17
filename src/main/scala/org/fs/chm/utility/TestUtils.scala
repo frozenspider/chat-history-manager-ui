@@ -2,26 +2,27 @@ package org.fs.chm.utility
 
 import java.io.File
 import java.nio.file.Files
-import java.util.UUID
 
-import scala.collection.Iterable
 import scala.collection.immutable.ListMap
 import scala.util.Random
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao._
+import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger.TaggedMessage
+import org.fs.chm.protobuf._
+import org.fs.chm.utility.LangUtils._
 
 /**
  * Utility stuff used for testing, both automatically and manually
  */
 object TestUtils {
 
-  val noUuid   = UUID.fromString("00000000-0000-0000-0000-000000000000")
+  val noUuid   = PbUuid("00000000-0000-0000-0000-000000000000")
   val baseDate = DateTime.parse("2019-01-02T11:15:21")
   val rnd      = new Random()
 
-  def createUser(dsUuid: UUID, idx: Int): User =
+  def createUser(dsUuid: PbUuid, idx: Int): User =
     User(
       dsUuid            = dsUuid,
       id                = idx,
@@ -31,7 +32,7 @@ object TestUtils {
       phoneNumberOption = Some("xxx xx xx".replaceAll("x", idx.toString))
     )
 
-  def createGroupChat(dsUuid: UUID, idx: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat = {
+  def createGroupChat(dsUuid: PbUuid, idx: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat = {
     require(memberIds.size >= 2)
     Chat(
       dsUuid        = dsUuid,
@@ -39,12 +40,12 @@ object TestUtils {
       nameOption    = Some("Chat " + nameSuffix),
       tpe           = ChatType.PrivateGroup,
       imgPathOption = None,
-      memberIds     = memberIds.toSet,
+      memberIds     = memberIds.toSeq,
       msgCount      = messagesSize
     )
   }
 
-  def createPersonalChat(dsUuid: UUID, idx: Int, user: User, memberIds: Iterable[Long], messagesSize: Int): Chat = {
+  def createPersonalChat(dsUuid: PbUuid, idx: Int, user: User, memberIds: Iterable[Long], messagesSize: Int): Chat = {
     require(memberIds.size == 2)
     Chat(
       dsUuid        = dsUuid,
@@ -52,7 +53,7 @@ object TestUtils {
       nameOption    = user.prettyNameOption,
       tpe           = ChatType.Personal,
       imgPathOption = None,
-      memberIds     = memberIds.toSet,
+      memberIds     = memberIds.toSeq,
       msgCount      = messagesSize
     )
   }
@@ -60,18 +61,23 @@ object TestUtils {
   def createRegularMessage(idx: Int, userId: Int): Message = {
     // Any previous message
     val replyToMessageIdOption =
-      if (idx > 0) Some(rnd.nextInt(idx).toLong.asInstanceOf[Message.SourceId]) else None
+      if (idx > 0) Some(rnd.nextInt(idx).toLong.asInstanceOf[MessageSourceId]) else None
 
-    Message.Regular(
-      internalId             = Message.NoInternalId,
-      sourceIdOption         = Some(idx.toLong.asInstanceOf[Message.SourceId]),
-      time                   = baseDate.plusMinutes(idx),
-      editTimeOption         = Some(baseDate.plusMinutes(idx).plusSeconds(5)),
-      fromId                 = userId,
-      forwardFromNameOption  = Some("u" + userId),
+    val typed = Message.Typed.Regular(MessageRegular(
+      editTimestampOption    = Some(baseDate.plusMinutes(idx).plusSeconds(5).unixTimestamp),
       replyToMessageIdOption = replyToMessageIdOption,
-      textOption             = Some(RichText(Seq(RichText.Plain(s"Hello there, ${idx}!")))),
-      contentOption          = Some(Content.Poll(s"Hey, ${idx}!"))
+      forwardFromNameOption  = Some("u" + userId),
+      contentOption          = Some(Content(Content.Val.Poll(ContentPoll(question = s"Hey, ${idx}!"))))
+    ))
+    val text = Seq(RichText.makePlain(s"Hello there, ${idx}!"))
+    Message(
+      internalId       = NoInternalId,
+      sourceIdOption   = Some(idx.toLong.asInstanceOf[MessageSourceId]),
+      timestamp        = baseDate.plusMinutes(idx).unixTimestamp,
+      fromId           = userId,
+      searchableString = Some(makeSearchableString(text, typed)),
+      text             = text,
+      typed            = typed
     )
   }
 
@@ -92,7 +98,7 @@ object TestUtils {
       chatsWithMsgs.values.flatten.forall(userIds contains _.fromId)
     }, "All messages should have valid user IDs!")
     val ds = Dataset(
-      uuid       = UUID.randomUUID(),
+      uuid       = randomUuid,
       alias      = "Dataset " + nameSuffix,
       sourceType = "test source"
     )
@@ -101,23 +107,24 @@ object TestUtils {
     dataPathRoot.deleteOnExit()
     val amend2 = amendMessage.curried(dataPathRoot)
     new EagerChatHistoryDao(
-      name         = "Dao " + nameSuffix,
-      _dataRootFile = dataPathRoot,
-      dataset      = ds,
-      myself1      = users1.head,
-      users1       = users1,
+      name               = "Dao " + nameSuffix,
+      _dataRootFile      = dataPathRoot,
+      dataset            = ds,
+      myself1            = users1.head,
+      users1             = users1,
       _chatsWithMessages = chatsWithMsgs.map {
         case (c, ms) => (c.copy(dsUuid = ds.uuid) -> ms.map(amend2).toIndexedSeq)
       }
     ) with EagerMutableDaoTrait
   }
 
-  def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, Seq[User], ChatWithDetails, Seq[Message]) = {
-    val ds    = dao.datasets.head
-    val users = dao.users(ds.uuid)
-    val cwd   = dao.chats(ds.uuid).head
-    val msgs  = dao.firstMessages(cwd.chat, Int.MaxValue)
-    (ds, users, cwd, msgs)
+  def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, DatasetRoot, Seq[User], ChatWithDetails, Seq[Message]) = {
+    val ds     = dao.datasets.head
+    val dsRoot = dao.datasetRoot(ds.uuid)
+    val users  = dao.users(ds.uuid)
+    val cwd    = dao.chats(ds.uuid).head
+    val msgs   = dao.firstMessages(cwd.chat, Int.MaxValue)
+    (ds, dsRoot, users, cwd, msgs)
   }
 
   implicit class RichUserSeq(users: Seq[User]) {
@@ -127,7 +134,7 @@ object TestUtils {
 
   implicit class RichMsgSeq(msgs: Seq[Message]) {
     def bySrcId[TM <: Message with TaggedMessage](id: Long): TM =
-      tag(msgs.find(_.sourceIdOption.get == id).get)
+      tag(msgs.find(_.sourceIdTypedOption.get == id).get)
   }
 
   def tag[TM <: Message with TaggedMessage](m: Message): TM = m.asInstanceOf[TM]
@@ -138,11 +145,11 @@ object TestUtils {
   trait EagerMutableDaoTrait extends MutableChatHistoryDao {
     override def insertDataset(ds: Dataset): Unit = ???
 
-    override def renameDataset(dsUuid: UUID, newName: String): Dataset = ???
+    override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = ???
 
-    override def deleteDataset(dsUuid: UUID): Unit = ???
+    override def deleteDataset(dsUuid: PbUuid): Unit = ???
 
-    override def shiftDatasetTime(dsUuid: UUID, hrs: Int): Unit = ???
+    override def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): Unit = ???
 
     override def insertUser(user: User, isMyself: Boolean): Unit = ???
 

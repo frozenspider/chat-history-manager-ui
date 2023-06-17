@@ -25,6 +25,8 @@ project/target/
 # Application
 /log
 application.conf
+# This file is symlinked from rust subproject
+src/main/protobuf/history.proto
 
 *.class
 *.log

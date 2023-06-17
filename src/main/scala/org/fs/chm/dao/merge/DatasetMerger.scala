@@ -1,13 +1,20 @@
 package org.fs.chm.dao.merge
 
 import java.io.File
-import java.util.UUID
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
-import org.fs.chm.dao._
+import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.Entities._
+import org.fs.chm.dao.MutableChatHistoryDao
+import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.ChatType
+import org.fs.chm.protobuf.Dataset
+import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.IoUtils
+import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
@@ -19,6 +26,9 @@ class DatasetMerger(
     val slaveDs: Dataset
 ) extends Logging {
   import DatasetMerger._
+
+  private val masterRoot = masterDao.datasetRoot(masterDs.uuid)
+  private val slaveRoot  = masterDao.datasetRoot(slaveDs.uuid)
 
   /**
    * Analyze dataset mergeability, amending `ChatMergeOption.Combine` with mismatches in order.
@@ -134,10 +144,13 @@ class DatasetMerger(
         // Matching subsequence starts
         val state2 = MatchInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
         iterate(cxt.advanceBoth(), state2, onMismatch)
-      case (Some(mm: Message.Service.Group.MigrateFrom), Some(sm: Message.Service.Group.MigrateFrom), NoState)
-          if mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption &&
-            mm.fromId < 0x100000000L && sm.fromId > 0x100000000L &&
-            mm.copy(fromId = sm.fromId) =~= sm =>
+      case (Some(mm), Some(sm), NoState)
+        if mm.typed.service.flatMap(_.`val`.groupMigrateFrom).isDefined &&
+           sm.typed.service.flatMap(_.`val`.groupMigrateFrom).isDefined &&
+           mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption &&
+           mm.fromId < 0x100000000L && sm.fromId > 0x100000000L &&
+           (mm.copy(fromId = sm.fromId), masterRoot) =~= (sm, slaveRoot) =>
+
         // FIXME: Why does compiler report this as unreachable?!
         // Special handling for a service message mismatch which is expected when merging Telegram after 2020-10
         // We register this one conflict and proceed in clean state.
@@ -178,6 +191,7 @@ class DatasetMerger(
 
       case (Some(mm), Some(sm), state: MatchInProgress) if matchesDisregardingContent(mm, sm) =>
         // Matching subsequence continues
+        matchesDisregardingContent(mm, sm)
         iterate(cxt.advanceBoth(), state, onMismatch)
       case (_, _, state: MatchInProgress) =>
         // Matching subsequence ends
@@ -201,7 +215,7 @@ class DatasetMerger(
       // ConflictInProgress
       //
 
-      case (Some(mm), Some(sm), state: ConflictInProgress) if mm !=~= sm =>
+      case (Some(mm), Some(sm), state: ConflictInProgress) if (mm.asInstanceOf[Message], masterRoot) !=~= (sm, slaveRoot) =>
         // Conflict continues
         iterate(cxt.advanceBoth(), state, onMismatch)
       case (_, _, state: ConflictInProgress) =>
@@ -220,8 +234,8 @@ class DatasetMerger(
         masterDao.backup()
         masterDao.disableBackups()
         val newDs = Dataset(
-          uuid = UUID.randomUUID(),
-          alias = masterDs.alias + " (merged)",
+          uuid       = randomUuid,
+          alias      = masterDs.alias + " (merged)",
           sourceType = masterDs.sourceType
         )
         masterDao.insertDataset(newDs)
@@ -265,7 +279,7 @@ class DatasetMerger(
           masterDao.insertChat(dsRoot, chat)
 
           // Messages
-          val messageBatches: Stream[(File, IndexedSeq[Message])] = cmo match {
+          val messageBatches: Stream[(DatasetRoot, IndexedSeq[Message])] = cmo match {
             case ChatMergeOption.Keep(mcwd) =>
               messageBatchesStream[TaggedMessage.M](masterDao, mcwd.chat, None)
                 .map(mb => (masterDao.datasetRoot(masterDs.uuid), mb))
@@ -278,11 +292,11 @@ class DatasetMerger(
                 case etc                                  => etc
               }.map {
                 case MessagesMergeOption.Keep(_, _, Some(firstSlaveMsg), Some(lastSlaveMsg)) =>
-                  batchLoadMsgsUntilInc(slaveDao, slaveDs, cmo.slaveCwdOption.get.chat, firstSlaveMsg, lastSlaveMsg)
+                  batchLoadMsgsUntilInc(slaveDao, slaveDs, slaveRoot, cmo.slaveCwdOption.get.chat, firstSlaveMsg, lastSlaveMsg)
                 case MessagesMergeOption.Keep(firstMasterMsg, lastMasterMsg, _, _) =>
-                  batchLoadMsgsUntilInc(masterDao, masterDs, cmo.masterCwdOption.get.chat, firstMasterMsg, lastMasterMsg)
+                  batchLoadMsgsUntilInc(masterDao, masterDs, masterRoot, cmo.masterCwdOption.get.chat, firstMasterMsg, lastMasterMsg)
                 case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
-                  batchLoadMsgsUntilInc(slaveDao, slaveDs, cmo.slaveCwdOption.get.chat, firstSlaveMsg, lastSlaveMsg)
+                  batchLoadMsgsUntilInc(slaveDao, slaveDs, slaveRoot, cmo.slaveCwdOption.get.chat, firstSlaveMsg, lastSlaveMsg)
                 case _ => throw new MatchError("Impossible!")
               }.toStream.flatten
           }
@@ -292,7 +306,7 @@ class DatasetMerger(
             masterDao.insertMessages(srcDsRoot, chat, mb)
 
             // Copying files
-            val files = mb.flatMap(_.files)
+            val files = mb.flatMap(_.files(srcDsRoot))
             if (files.nonEmpty) {
               val fromPrefixLen = srcDsRoot.getAbsolutePath.length
               val filesMap = files.map(f => (f, new File(toRootFile, f.getAbsolutePath.drop(fromPrefixLen)))).toMap
@@ -319,18 +333,20 @@ class DatasetMerger(
    * Needed for matching sequences.
    * */
   private def matchesDisregardingContent(mm: TaggedMessage.M, sm: TaggedMessage.S): Boolean = {
-    (mm, sm) match {
-      case (mm: Message.Regular, sm: Message.Regular) =>
-        (mm.contentOption, sm.contentOption) match {
-          case (Some(mc: Content.WithPath), Some(sc: Content.WithPath))
-              if mc.pathOption.isEmpty && sc.pathOption.isDefined && sc.pathOption.get.exists =>
+    (mm.typed, sm.typed) match {
+      case (mmRegular: Message.Typed.Regular, smRegular: Message.Typed.Regular) =>
+        (mmRegular.value.contentOption, smRegular.value.contentOption) match {
+          case (Some(mc), Some(sc)) if mc.hasPath && sc.hasPath &&
+              mc.pathFileOption(masterRoot).isEmpty && sc.pathFileOption(slaveRoot).isDefined && sc.pathFileOption(slaveRoot).get.exists =>
             // New information available, treat this as a mismatch
             false
           case _ =>
-            mm.copy(contentOption = None) =~= sm.copy(contentOption = None)
+            val mmCmp  = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(contentOption = None)))
+            val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(contentOption = None)))
+            (mmCmp, masterRoot) =~= (smCmp, slaveRoot)
         }
       case _ =>
-        mm =~= sm
+        (mm.asInstanceOf[Message], masterRoot) =~= (sm, slaveRoot)
     }
   }
 
@@ -342,7 +358,7 @@ class DatasetMerger(
           x.time compareTo y.time
         case _ if x.sourceIdOption.isDefined && y.sourceIdOption.isDefined =>
           x.sourceIdOption.get compareTo y.sourceIdOption.get
-        case _ if x.plainSearchableString == y.plainSearchableString =>
+        case _ if x.searchableString == y.searchableString =>
           0
         case _ =>
           throw new IllegalStateException(s"Cannot compare messages $x and $y!")
@@ -419,25 +435,28 @@ class DatasetMerger(
   private def batchLoadMsgsUntilInc[TM <: TaggedMessage](
       dao: ChatHistoryDao,
       ds: Dataset,
+      dsRoot: DatasetRoot,
       chat: Chat,
       firstMsg: TM,
       lastMsg: TM
-  ): Stream[(File, IndexedSeq[Message])] = {
+  ): Stream[(DatasetRoot, IndexedSeq[Message])] = {
     takeMsgsFromBatchUntilInc(
       IndexedSeq(firstMsg) #:: messageBatchesStream(dao, chat, Some(firstMsg)),
-      lastMsg
+      lastMsg,
+      dsRoot
     ) map (mb => (dao.datasetRoot(ds.uuid), mb))
   }
 
   private def takeMsgsFromBatchUntilInc[T <: TaggedMessage](
       stream: Stream[IndexedSeq[Message]],
-      m: Message
+      m: Message,
+      dsRoot: DatasetRoot
   ): Stream[IndexedSeq[Message]] = {
     var lastFound = false
     stream.map { mb =>
       if (!lastFound) {
         mb.takeWhile { m2 =>
-          val isLast = m2 =~= m
+          val isLast = (m2, dsRoot) =~= (m, dsRoot)
           lastFound |= isLast
           isLast || !lastFound
         }

@@ -3,16 +3,16 @@ package org.fs.chm.ui.swing.merge
 import scala.annotation.tailrec
 import scala.swing.GridBagPanel._
 import scala.swing._
-
 import javax.swing.DefaultListSelectionModel
 import javax.swing.ListSelectionModel
 import javax.swing.border.LineBorder
 import javax.swing.table.AbstractTableModel
 import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.TableModel
+
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.Dataset
 import org.fs.chm.dao.MutableChatHistoryDao
+import org.fs.chm.protobuf.Dataset
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 
@@ -140,7 +140,7 @@ private class MergeDatasetCellRenderer extends DefaultTableCellRenderer {
       setFocusable(false)
       setEnabled(false)
     case ds: Dataset =>
-      setText("    " + ds.alias + " (" + ds.uuid.toString.toLowerCase + ")")
+      setText("    " + ds.alias + " (" + ds.uuid.value + ")")
       setFocusable(true)
       setEnabled(true)
   }

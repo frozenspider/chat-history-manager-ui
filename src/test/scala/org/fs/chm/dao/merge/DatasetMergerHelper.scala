@@ -1,6 +1,8 @@
 package org.fs.chm.dao.merge
 
-import org.fs.chm.dao._
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.TestUtils._
 
 object DatasetMergerHelper {
@@ -11,10 +13,11 @@ object DatasetMergerHelper {
 
   def changedMessages(msgs: Seq[Message], idCondition: Long => Boolean): Seq[Message] = {
     msgs.collect {
-      case m: Message.Regular if idCondition(m.sourceIdOption.get) =>
+      case m if m.typed.isRegular && idCondition(m.sourceIdOption.get) =>
+        val text2 = Seq(RichText.makePlain("Different message " + m.sourceIdOption.getOrElse("<no src id>")))
         m.copy(
-          textOption =
-            Some(RichText(Seq(RichText.Plain("Different message " + m.sourceIdOption.getOrElse("<no src id>")))))
+          text = text2,
+          searchableString = Some(makeSearchableString(text2, m.typed))
         )
       case m =>
         m

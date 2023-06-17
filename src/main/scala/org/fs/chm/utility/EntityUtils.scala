@@ -1,19 +1,47 @@
 package org.fs.chm.utility
 
-import org.fs.chm.dao._
-import com.github.nscala_time.time.Imports._
+import scala.swing.Dialog
+import scala.swing.Swing
+import scala.swing.Swing.EmptyIcon
+import javax.swing.JOptionPane
+
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.User
 
 object EntityUtils {
-  private val startOfTime = new DateTime(0L)
-
-  def groupById[E <: WithId](cs: Seq[E]): Map[Long, E] = {
-    cs groupBy (_.id) map { case (k, v) => (k, v.head) }
+  def groupById[T: WithId](cs: Seq[T]): Map[Long, T] = {
+    val withId = implicitly[WithId[T]]
+    cs groupBy (withId.id) map { case (k, v) => (k, v.head) }
   }
 
-  def getOrUnnamed(so: Option[String]): String =
-    so getOrElse ChatHistoryDao.Unnamed
+  sealed trait WithId[T] {
+    def id(t: T): Long
+  }
 
-  def latest(timeOptions: Option[DateTime]*): Option[DateTime] = {
-    timeOptions.maxBy(_ getOrElse startOfTime)
+  implicit object CwmWithId extends WithId[ChatWithDetails] {
+    override def id(cwm: ChatWithDetails): Long = cwm.chat.id
+  }
+
+  implicit object UserWithId extends WithId[User] {
+    override def id(user: User): Long = user.id
+  }
+
+  def chooseMyself(users: Seq[User]): Int = {
+    val options = users map (_.prettyName)
+    val res = JOptionPane.showOptionDialog(
+      null,
+      "Choose yourself",
+      "Which one of them is you?",
+      Dialog.Options.Default.id,
+      Dialog.Message.Question.id,
+      Swing.wrapIcon(EmptyIcon),
+      (options map (_.asInstanceOf[AnyRef])).toArray,
+      options.head
+    )
+    if (res == JOptionPane.CLOSED_OPTION) {
+      throw new IllegalArgumentException("Well, tough luck")
+    } else {
+      res
+    }
   }
 }

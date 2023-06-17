@@ -1,9 +1,9 @@
 package org.fs.chm.dao.merge
 
 import org.fs.chm.TestHelper
-import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger._
-import org.fs.chm.dao.merge.DatasetMerger.{ ChatMergeOption => CMO }
+import org.fs.chm.dao.merge.DatasetMerger.{ChatMergeOption => CMO}
+import org.fs.chm.protobuf.Message
 import org.fs.chm.utility.TestUtils._
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
@@ -174,7 +174,6 @@ class DatasetMergerAnalyzeSpec //
       )
     )
   }
-
 
   test("combine - changed one message in the middle") {
     val msgs     = for (i <- 1 to 3) yield createRegularMessage(i, rndUserId)
@@ -584,16 +583,16 @@ class DatasetMergerAnalyzeSpec //
   //
 
   class MergerHelper(msgs1: Seq[Message], msgs2: Seq[Message]) {
-    val (dao1, d1ds, d1users, d1cwd, d1msgs) = createDaoAndEntities("One", msgs1, maxUserId)
-    val (dao2, d2ds, d2users, d2cwd, d2msgs) = createDaoAndEntities("Two", msgs2, maxUserId)
+    val (dao1, d1ds, d1root, d1users, d1cwd, d1msgs) = createDaoAndEntities("One", msgs1, maxUserId)
+    val (dao2, d2ds, d2root, d2users, d2cwd, d2msgs) = createDaoAndEntities("Two", msgs2, maxUserId)
 
     def merger: DatasetMerger =
       new DatasetMerger(dao1, d1ds, dao2, d2ds)
 
     private def createDaoAndEntities(nameSuffix: String, srcMsgs: Seq[Message], numUsers: Int) = {
       val dao                     = createSimpleDao(nameSuffix, srcMsgs, numUsers)
-      val (ds, users, cwd, msgs) = getSimpleDaoEntities(dao)
-      (dao, ds, users, cwd, msgs)
+      val (ds, root, users, cwd, msgs) = getSimpleDaoEntities(dao)
+      (dao, ds, root, users, cwd, msgs)
     }
   }
 }

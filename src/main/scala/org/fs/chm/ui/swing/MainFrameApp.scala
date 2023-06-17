@@ -4,7 +4,6 @@ import java.awt.Desktop
 import java.awt.Toolkit
 import java.awt.event.AdjustmentEvent
 import java.io.File
-import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.annotation.tailrec
@@ -17,12 +16,18 @@ import scala.swing._
 import com.github.nscala_time.time.Imports._
 import javax.swing.SwingUtilities
 import javax.swing.event.HyperlinkEvent
+
 import org.fs.chm.BuildInfo
-import org.fs.chm.dao._
+import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.loader._
 import org.fs.chm.loader.telegram._
+import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.PbUuid
+import org.fs.chm.protobuf.User
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils
 import org.fs.chm.ui.swing.general.SwingUtils._
@@ -40,10 +45,11 @@ import org.fs.chm.utility.CliUtils
 import org.fs.chm.utility.EntityUtils
 import org.fs.chm.utility.InterruptableFuture._
 import org.fs.chm.utility.IoUtils._
+import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.SimpleConfigAware
 import org.slf4s.Logging
 
-class MainFrameApp //
+class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     extends SimpleSwingApplication
     with SimpleConfigAware
     with Logging
@@ -421,7 +427,7 @@ class MainFrameApp //
           throw new InterruptedException()
         }
         val chat = (cmo.slaveCwdOption orElse cmo.masterCwdOption).get.chat
-        setStatus(s"Analyzing '${EntityUtils.getOrUnnamed(chat.nameOption)}' (${chat.msgCount} messages)...")
+        setStatus(s"Analyzing '${chat.nameOrUnnamed}' (${chat.msgCount} messages)...")
         merger.analyzeChatHistoryMerge(cmo)
       }
     }
@@ -437,7 +443,7 @@ class MainFrameApp //
         case ((res, stop), _) if stop =>
           (res, true)
         case ((res, _), (cmo @ ChatMergeOption.Combine(mcwd, scwd, mismatches))) =>
-          setStatus(s"Combining '${EntityUtils.getOrUnnamed(scwd.chat.nameOption)}' (${scwd.chat.msgCount} messages)...")
+          setStatus(s"Combining '${scwd.chat.nameOrUnnamed}' (${scwd.chat.msgCount} messages)...")
           // Resolve mismatches
           if (mismatches.forall(_.isInstanceOf[MessagesMergeOption.Keep])) {
             // User has no choice - pass them as-is
@@ -504,7 +510,7 @@ class MainFrameApp //
     chatsOuterPanel.repaint()
   }
 
-  override def renameDataset(dao: ChatHistoryDao, dsUuid: UUID, newName: String): Unit = {
+  override def renameDataset(dao: ChatHistoryDao, dsUuid: PbUuid, newName: String): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     freezeTheWorld("Renaming...")
@@ -522,7 +528,7 @@ class MainFrameApp //
     }
   }
 
-  override def deleteDataset(dao: ChatHistoryDao, dsUuid: UUID): Unit = {
+  override def deleteDataset(dao: ChatHistoryDao, dsUuid: PbUuid): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     freezeTheWorld("Deleting...")
@@ -540,7 +546,7 @@ class MainFrameApp //
     }
   }
 
-  override def shiftDatasetTime(dao: ChatHistoryDao, dsUuid: UUID, hrs: Int): Unit = {
+  override def shiftDatasetTime(dao: ChatHistoryDao, dsUuid: PbUuid, hrs: Int): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     freezeTheWorld("Shifting time...")
@@ -829,7 +835,7 @@ class MainFrameApp //
           // Evict chats containing edited user from cache
           val chatsToEvict = for {
             (chat, _) <- loadedDaos(dao)
-            if userIds.toSet.intersect(chat.memberIds).nonEmpty
+            if userIds.toSet.intersect(chat.memberIds.toSet).nonEmpty
           } yield chat
           chatsToEvict foreach (c => evictFromCache(dao, c))
 
@@ -963,18 +969,17 @@ class MainFrameApp //
       if (h2ff.accept(file)) {
         h2.loadData(f)
       } else if (tgFf.accept(file)) {
-        val tgFullError = tgFull.doesLookRight(f)
-        if (tgFullError.isEmpty) {
-          tgFull.loadData(file.getParentFile)
-        } else {
-          val tgSingleError = tgSingle.doesLookRight(f)
-          if (tgSingleError.isEmpty) {
-            tgSingle.loadData(file.getParentFile)
-          } else {
+        val loadersWithErrors =
+          Seq(grpcDataLoader, tgFull, tgSingle).map(l => (l, l.doesLookRight(f)))
+        loadersWithErrors.find(_._2.isEmpty) match {
+          case Some((loader, _)) => loader.loadData(f)
+          case None => {
+            val errors = loadersWithErrors.map(_._1).toIndexedSeq
             throw new IllegalStateException(
               "Not a telegram format: Errors:\n"
-                + s"(as a full history) ${tgFullError.get}\n"
-                + s"(as a single chat) ${tgSingleError.get}")
+                + s"(from gRPC loader) ${errors(0)}\n"
+                + s"(as a full history) ${errors(1)}\n"
+                + s"(as a single chat) ${errors(2)}")
           }
         }
       } else if (gts5610Ff.accept(file)) {

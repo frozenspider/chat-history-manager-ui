@@ -2,8 +2,13 @@ package org.fs.chm.ui.swing.merge
 
 import scala.swing._
 
-import org.fs.chm.dao._
+import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.EagerChatHistoryDao
+import org.fs.chm.dao.Entities._
+import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger.UserMergeOption
+import org.fs.chm.protobuf.Dataset
+import org.fs.chm.protobuf.User
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.user.UserDetailsPane
@@ -128,7 +133,6 @@ class SelectMergeUsersDialog(
 object SelectMergeUsersDialog {
   def main(args: Array[String]): Unit = {
     import java.nio.file.Files
-    import java.util.UUID
 
     import scala.collection.immutable.ListMap
 
@@ -136,8 +140,8 @@ object SelectMergeUsersDialog {
 
     def createMultiUserDao(usersProducer: Dataset => Seq[User]): MutableChatHistoryDao = {
       val ds = Dataset(
-        uuid = UUID.randomUUID(),
-        alias = "Dataset",
+        uuid       = randomUuid,
+        alias      = "Dataset",
         sourceType = "test source"
       )
       val users        = usersProducer(ds)
@@ -145,11 +149,11 @@ object SelectMergeUsersDialog {
       val dataPathRoot = Files.createTempDirectory(null).toFile
       dataPathRoot.deleteOnExit()
       new EagerChatHistoryDao(
-        name = "Dao",
-        _dataRootFile = dataPathRoot,
-        dataset = ds,
-        myself1 = users.head,
-        users1 = users,
+        name               = "Dao",
+        _dataRootFile      = dataPathRoot,
+        dataset            = ds,
+        myself1            = users.head,
+        users1             = users,
         _chatsWithMessages = ListMap(chat -> IndexedSeq.empty)
       ) with EagerMutableDaoTrait
     }
@@ -157,14 +161,14 @@ object SelectMergeUsersDialog {
     val mDao = createMultiUserDao { ds =>
       (1 to 5) map (i => createUser(ds.uuid, i))
     }
-    val (mDs, _, _, _) = getSimpleDaoEntities(mDao)
+    val (mDs, _, _, _, _) = getSimpleDaoEntities(mDao)
     val sDao = createMultiUserDao { ds =>
       (2 to 6 by 2) map { i =>
         val u = createUser(ds.uuid, i)
         if (i == 2) u.copy(firstNameOption = Some("Aha!")) else u
       }
     }
-    val (sDs, _, _, _) = getSimpleDaoEntities(sDao)
+    val (sDs, _, _, _, _) = getSimpleDaoEntities(sDao)
 
     val dialog = new SelectMergeUsersDialog(mDao, mDs, sDao, sDs)
     dialog.visible = true

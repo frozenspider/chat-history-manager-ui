@@ -1,21 +1,23 @@
 package org.fs.chm.ui.swing.list.chat
 
 import java.awt.Color
-import java.awt.{ Container => AwtContainer }
+import java.awt.{Container => AwtContainer}
 
 import scala.swing.BorderPanel.Position._
 import scala.swing._
 import scala.swing.event._
-
 import javax.swing.SwingUtilities
 import javax.swing.border.EmptyBorder
 import javax.swing.border.LineBorder
+
 import org.apache.commons.lang3.StringEscapeUtils
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.ChatType._
-import org.fs.chm.dao.ChatWithDetails
-import org.fs.chm.dao.Content
-import org.fs.chm.dao.Message
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.ChatType
+import org.fs.chm.protobuf.Content
+import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf.MessageRegular
+import org.fs.chm.protobuf.MessageService
 import org.fs.chm.ui.swing.list.DaoItem
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.utility.EntityUtils
@@ -46,7 +48,7 @@ class ChatListItem(
 
     layout(new BorderPanel {
       // Name
-      val nameString = EntityUtils.getOrUnnamed(cwd.chat.nameOption)
+      val nameString = cwd.chat.nameOrUnnamed
       val nameLabel = new Label(
         s"""<html><p style="text-align: left; width: ${labelPreferredWidth}px;">"""
           + StringEscapeUtils.escapeHtml4(nameString)
@@ -71,8 +73,8 @@ class ChatListItem(
 
     // Type
     val tpeString = cwd.chat.tpe match {
-      case Personal     => ""
-      case PrivateGroup => "(" + cwd.members.size + ")"
+      case ChatType.Personal     => ""
+      case ChatType.PrivateGroup => "(" + cwd.members.size + ")"
     }
     val tpeLabel = new Label(tpeString)
     tpeLabel.preferredWidth    = 30
@@ -125,7 +127,7 @@ class ChatListItem(
   private def showDeletePopup(): Unit = {
     Dialog.showConfirmation(
       title   = "Deleting Chat",
-      message = s"Are you sure you want to delete a chat '${EntityUtils.getOrUnnamed(cwd.chat.nameOption)}'?"
+      message = s"Are you sure you want to delete a chat '${cwd.chat.nameOrUnnamed}'?"
     ) match {
       case Dialog.Result.Yes => callbacksOption.get.deleteChat(dao, cwd.chat)
       case _                 => // NOOP
@@ -153,34 +155,36 @@ class ChatListItem(
           (cwd.members find (_.id == msg.fromId))
             .orElse(dao.userOption(cwd.dsUuid, msg.fromId))
             .flatMap(_.prettyNameOption)
-        (EntityUtils.getOrUnnamed(fromNameOption) + ": ")
+        (fromNameOption.getOrElse(Unnamed) + ": ")
       }
-    val text = msg match {
-      case msg: Message.Regular =>
-        (msg.textOption, msg.contentOption) match {
-          case (None, Some(s: Content.Sticker))       => s.emojiOption.map(_ + " ").getOrElse("") + "(sticker)"
-          case (None, Some(_: Content.Photo))         => "(photo)"
-          case (None, Some(_: Content.VoiceMsg))      => "(voice)"
-          case (None, Some(_: Content.VideoMsg))      => "(video)"
-          case (None, Some(_: Content.Animation))     => "(animation)"
-          case (None, Some(_: Content.File))          => "(file)"
-          case (None, Some(_: Content.Location))      => "(location)"
-          case (None, Some(_: Content.Poll))          => "(poll)"
-          case (None, Some(_: Content.SharedContact)) => "(contact)"
-          case (Some(_), _)                           => msg.plainSearchableString
-          case (None, None)                           => "(???)" // We don't really expect this
+    val text: String = msg.typed.value match {
+      case msgRegular: MessageRegular =>
+        msgRegular.contentOption map (_.`val`) match {
+          case None                               => msg.searchableString.get
+          case Some(s: Content.Val.Sticker)       => s.value.emojiOption.map(_ + " ").getOrElse("") + "(sticker)"
+          case Some(_: Content.Val.Photo)         => "(photo)"
+          case Some(_: Content.Val.VoiceMsg)      => "(voice)"
+          case Some(_: Content.Val.VideoMsg)      => "(video)"
+          case Some(_: Content.Val.Animation)     => "(animation)"
+          case Some(_: Content.Val.File)          => "(file)"
+          case Some(_: Content.Val.Location)      => "(location)"
+          case Some(_: Content.Val.Poll)          => "(poll)"
+          case Some(_: Content.Val.SharedContact) => "(contact)"
         }
-      case _: Message.Service.PhoneCall           => "(phone call)"
-      case _: Message.Service.PinMessage          => "(message pinned)"
-      case _: Message.Service.ClearHistory        => "(history cleared)"
-      case _: Message.Service.Group.Create        => "(group created)"
-      case _: Message.Service.Group.EditTitle     => "(title changed)"
-      case _: Message.Service.Group.EditPhoto     => "(photo changed)"
-      case _: Message.Service.Group.InviteMembers => "(invited members)"
-      case _: Message.Service.Group.RemoveMembers => "(removed members)"
-      case _: Message.Service.Group.MigrateFrom   => "(migrated from group)"
-      case _: Message.Service.Group.MigrateTo     => "(migrated to group)"
-      case _: Message.Service.Group.Call          => "(group call)"
+      case MessageService(service, _) =>
+        service match {
+          case _: MessageService.Val.PhoneCall          => "(phone call)"
+          case _: MessageService.Val.PinMessage        => "(message pinned)"
+          case _: MessageService.Val.ClearHistory       => "(history cleared)"
+          case _: MessageService.Val.GroupCreate        => "(group created)"
+          case _: MessageService.Val.GroupEditTitle     => "(title changed)"
+          case _: MessageService.Val.GroupEditPhoto     => "(photo changed)"
+          case _: MessageService.Val.GroupInviteMembers => "(invited members)"
+          case _: MessageService.Val.GroupRemoveMembers => "(removed members)"
+          case _: MessageService.Val.GroupMigrateFrom   => "(migrated from group)"
+          case _: MessageService.Val.GroupMigrateTo     => "(migrated to group)"
+          case _: MessageService.Val.GroupCall          => "(group call)"
+        }
     }
     prefix + text.take(50)
   }

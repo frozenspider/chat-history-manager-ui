@@ -2,8 +2,14 @@ package org.fs.chm.ui.swing.merge
 
 import scala.swing._
 
-import org.fs.chm.dao._
+import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.EagerChatHistoryDao
+import org.fs.chm.dao.Entities._
+import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger._
+import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.Dataset
+import org.fs.chm.protobuf.User
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.list.chat.ChatListItem
@@ -134,7 +140,6 @@ class SelectMergeChatsDialog(
 object SelectMergeChatsDialog {
   def main(args: Array[String]): Unit = {
     import java.nio.file.Files
-    import java.util.UUID
 
     import scala.collection.immutable.ListMap
 
@@ -142,8 +147,8 @@ object SelectMergeChatsDialog {
 
     def createMultiChatDao(chatsProducer: (Dataset, Seq[User]) => Seq[Chat]): MutableChatHistoryDao = {
       val ds = Dataset(
-        uuid = UUID.randomUUID(),
-        alias = "Dataset",
+        uuid       = randomUuid,
+        alias      = "Dataset",
         sourceType = "test source"
       )
       val users        = (1 to 2) map (createUser(ds.uuid, _))
@@ -151,21 +156,21 @@ object SelectMergeChatsDialog {
       val dataPathRoot = Files.createTempDirectory(null).toFile
       dataPathRoot.deleteOnExit()
       new EagerChatHistoryDao(
-        name = "Dao",
-        _dataRootFile = dataPathRoot,
-        dataset = ds,
-        myself1 = users.head,
-        users1 = users,
+        name               = "Dao",
+        _dataRootFile      = dataPathRoot,
+        dataset            = ds,
+        myself1            = users.head,
+        users1             = users,
         _chatsWithMessages = ListMap(chats.map(c => (c, IndexedSeq.empty)): _*)
       ) with EagerMutableDaoTrait
     }
 
     val mDao = createMultiChatDao(
       (ds, us) => for (i <- 1 to 5 if i != 4) yield createGroupChat(ds.uuid, i, i.toString, us.map(_.id), 2))
-    val (mDs, _, _, _) = getSimpleDaoEntities(mDao)
+    val (mDs, _, _, _, _) = getSimpleDaoEntities(mDao)
     val sDao = createMultiChatDao(
       (ds, us) => for (i <- 2 to 6 by 2) yield createGroupChat(ds.uuid, i, i.toString, us.map(_.id), 0))
-    val (sDs, _, _, _) = getSimpleDaoEntities(sDao)
+    val (sDs, _, _, _, _) = getSimpleDaoEntities(sDao)
 
     Swing.onEDTWait {
       val dialog = new SelectMergeChatsDialog(mDao, mDs, sDao, sDs)

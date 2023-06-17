@@ -5,12 +5,16 @@ import scala.swing._
 
 import com.github.nscala_time.time.Imports._
 import javax.swing.text.html.HTMLEditorKit
-import org.fs.chm.dao._
+
+import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger.MessagesMergeOption
+import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.Message
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
-import org.fs.chm.ui.swing.messages.impl.MessagesService
+import org.fs.chm.ui.swing.messages.impl.MessagesDocumentService
 import org.fs.chm.utility.EntityUtils._
 import org.fs.utility.Imports._
 
@@ -37,7 +41,10 @@ class SelectMergeMessagesDialog(
   private lazy val MaxMessageWidth = 500
 
   private lazy val originalTitle =
-    s"Select messages to merge (${masterCwd.chat.nameOption.getOrElse(ChatHistoryDao.Unnamed)})"
+    s"Select messages to merge (${masterCwd.chat.nameOrUnnamed})"
+
+  private val masterRoot = masterDao.datasetRoot(masterCwd.dsUuid)
+  private val slaveRoot  = slaveDao.datasetRoot(slaveCwd.dsUuid)
 
   {
     title = originalTitle
@@ -104,8 +111,8 @@ class SelectMergeMessagesDialog(
             fwdStream.flatMap(_.firstSlaveMsgOption).headOption,
             bckStream.flatMap(_.lastSlaveMsgOption).headOption
           )
-        val masterValue = RenderableMismatch(mismatches, cxtToRaw(masterFetchResult), masterDao, masterCwd)
-        val slaveValue = RenderableMismatch(mismatches, cxtToRaw(slaveFetchResult), slaveDao, slaveCwd)
+        val masterValue = RenderableMismatch(mismatches, cxtToRaw(masterFetchResult), masterDao, masterCwd, masterRoot)
+        val slaveValue = RenderableMismatch(mismatches, cxtToRaw(slaveFetchResult), slaveDao, slaveCwd, slaveRoot)
         mismatches match {
           // Those are keeps
           case xs if xs.tail.nonEmpty                                => RowData.InBoth(masterValue, slaveValue)
@@ -133,12 +140,12 @@ class SelectMergeMessagesDialog(
       }
       val allRendered = for (either <- renderable.v.messageOptions) yield {
         val rendered = either match {
-          case Right(msg) => msgService.renderMessageHtml(renderable.v.dao, renderable.v.cwd, msg)
+          case Right(msg) => msgService.renderMessageHtml(renderable.v.dao, renderable.v.cwd, renderable.v.dsRoot, msg)
           case Left(num)  => s"<hr>${num} messages<hr><p>"
         }
         rendered
       }
-      md.insert(allRendered.mkString.replaceAll("\n", ""), MessagesService.MessageInsertPosition.Trailing)
+      md.insert(allRendered.mkString.replaceAll("\n", ""), MessagesDocumentService.MessageInsertPosition.Trailing)
       msgAreaContainer.render(md, true)
       val ui = msgAreaContainer.textPane.peer.getUI
       val rootView = ui.getRootView(null)
@@ -171,12 +178,12 @@ class SelectMergeMessagesDialog(
     ): Option[Seq[MessagesMergeOption]] = {
       import MessagesMergeOption._
       rd match {
-        case RowData.InMasterOnly(mmd)                                  => Some(mmd.mismatches)
-        case RowData.InBoth(mmd, _) if isSelected                       => Some(mmd.mismatches)
-        case RowData.InBoth(RenderableMismatch.Keep(mms, _, _, _), _)   => Some(mms)
-        case RowData.InBoth(RenderableMismatch.Replace(mm, _, _, _), _) => Some(Seq(mm.asKeep))
-        case _ if !isSelected                                           => None
-        case RowData.InSlaveOnly(smd)                                   => Some(smd.mismatches)
+        case RowData.InMasterOnly(mmd)                                     => Some(mmd.mismatches)
+        case RowData.InBoth(mmd, _) if isSelected                          => Some(mmd.mismatches)
+        case RowData.InBoth(RenderableMismatch.Keep(mms, _, _, _, _), _)   => Some(mms)
+        case RowData.InBoth(RenderableMismatch.Replace(mm, _, _, _, _), _) => Some(Seq(mm.asKeep))
+        case _ if !isSelected                                              => None
+        case RowData.InSlaveOnly(smd)                                      => Some(smd.mismatches)
       }
     }
   }
@@ -190,34 +197,38 @@ class SelectMergeMessagesDialog(
 
     def dao: ChatHistoryDao
     def cwd: ChatWithDetails
+    def dsRoot: DatasetRoot
   }
 
   private object RenderableMismatch {
     def apply(mismatches: Seq[MessagesMergeOption],
               messageOptions: Seq[Either[Int, Message]],
               dao: ChatHistoryDao,
-              cwd: ChatWithDetails): RenderableMismatch = {
+              cwd: ChatWithDetails,
+              dsRoot: DatasetRoot): RenderableMismatch = {
       mismatches match {
         case xs if xs.forall(_.isInstanceOf[MessagesMergeOption.Keep]) =>
-          Keep(mismatches.asInstanceOf[Seq[MessagesMergeOption.Keep]], messageOptions, dao, cwd)
+          Keep(mismatches.asInstanceOf[Seq[MessagesMergeOption.Keep]], messageOptions, dao, cwd, dsRoot)
         case Seq(mmo: MessagesMergeOption.Add) =>
-          Add(mmo, messageOptions, dao, cwd)
+          Add(mmo, messageOptions, dao, cwd, dsRoot)
         case Seq(mmo: MessagesMergeOption.Replace) =>
-          Replace(mmo, messageOptions, dao, cwd)
+          Replace(mmo, messageOptions, dao, cwd, dsRoot)
       }
     }
     case class Keep(
         mismatches: Seq[MessagesMergeOption.Keep],
         messageOptions: Seq[Either[Int, Message]],
         dao: ChatHistoryDao,
-        cwd: ChatWithDetails
+        cwd: ChatWithDetails,
+        dsRoot: DatasetRoot
     ) extends RenderableMismatch(false)
 
     case class Add(
         mismatch: MessagesMergeOption.Add,
         messageOptions: Seq[Either[Int, Message]],
         dao: ChatHistoryDao,
-        cwd: ChatWithDetails
+        cwd: ChatWithDetails,
+        dsRoot: DatasetRoot
     ) extends RenderableMismatch(true) {
       override def mismatches = Seq(mismatch)
     }
@@ -226,7 +237,8 @@ class SelectMergeMessagesDialog(
         mismatch: MessagesMergeOption.Replace,
         messageOptions: Seq[Either[Int, Message]],
         dao: ChatHistoryDao,
-        cwd: ChatWithDetails
+        cwd: ChatWithDetails,
+        dsRoot: DatasetRoot
     ) extends RenderableMismatch(true) {
       override def mismatches = Seq(mismatch)
     }
@@ -306,7 +318,7 @@ private object SelectMergeMessagesDialog {
 
     val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
     val htmlKit = new ExtendedHtmlEditorKit(desktopOption)
-    val msgService = new MessagesService(htmlKit)
+    val msgService = new MessagesDocumentService(htmlKit)
 
     val numUsers = 3
     val msgs = (0 to 1000) map (id => {
@@ -315,16 +327,16 @@ private object SelectMergeMessagesDialog {
         val longText = (
           Seq.fill(100)("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").mkString(" ") + " " + Seq.fill(100)("abcdefg").mkString
         )
-        msg.asInstanceOf[Message.Regular].copy(textOption = Some(RichText(Seq(RichText.Plain(longText)))))
+        msg.copy(text = Seq(RichText.makePlain(longText)))
       } else {
         msg
       }
     })
 
     val mDao = createSimpleDao("Master", msgs, numUsers)
-    val (_, _, mCwd, mMsgsI) = getSimpleDaoEntities(mDao)
+    val (_, _, _, mCwd, mMsgsI) = getSimpleDaoEntities(mDao)
     val sDao = createSimpleDao("Slave", msgs, numUsers)
-    val (_, _, sCwd, sMsgsI) = getSimpleDaoEntities(sDao)
+    val (_, _, _, sCwd, sMsgsI) = getSimpleDaoEntities(sDao)
 
     val mismatches = IndexedSeq(
       // Prefix

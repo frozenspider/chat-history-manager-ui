@@ -2,17 +2,13 @@ package org.fs.chm.loader.telegram
 
 import java.io.File
 import java.io.FileNotFoundException
-import java.util.UUID
 
 import scala.collection.immutable.ListMap
-import scala.swing.Dialog
-import scala.swing.Dialog.Result
-import scala.swing.Swing
-import scala.swing.Swing.EmptyIcon
-import scala.swing.Swing.nullPeer
 
-import javax.swing.JOptionPane
-import org.fs.chm.dao._
+import org.fs.chm.dao.EagerChatHistoryDao
+import org.fs.chm.dao.Entities._
+import org.fs.chm.protobuf.PbUuid
+import org.fs.chm.protobuf.User
 import org.fs.chm.utility.EntityUtils
 import org.fs.utility.Imports._
 import org.json4s._
@@ -33,12 +29,12 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
       throw new FileNotFoundException("result.json not found in " + rootFile.getAbsolutePath)
     }
 
-    val dataset = Dataset.createDefault("Telegram", "telegram")
+    val dataset = createDataset("Telegram", "telegram")
 
     val parsed = JsonMethods.parse(resultJsonFile)
 
     val preUsers = parseUsers(parsed, dataset.uuid)
-    val myself = chooseMyself(preUsers)
+    val myself = preUsers(EntityUtils.chooseMyself(preUsers))
     val users = myself +: preUsers.filter(_ != myself)
 
     val messagesRes = (for {
@@ -59,31 +55,12 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
     )
   }
 
-  protected def chooseMyself(users: Seq[User]): User = {
-    val options = users map (u => EntityUtils.getOrUnnamed(u.firstNameOption))
-    val res = JOptionPane.showOptionDialog(
-      null,
-      "Choose yourself",
-      "Which one of them is you?",
-      Dialog.Options.Default.id,
-      Dialog.Message.Question.id,
-      Swing.wrapIcon(EmptyIcon),
-      (options map (_.asInstanceOf[AnyRef])).toArray,
-      options.head
-    )
-    if (res == JOptionPane.CLOSED_OPTION) {
-      throw new IllegalArgumentException("Well, tough luck")
-    } else {
-      users(res)
-    }
-  }
-
   //
   // Parsers
   //
 
   /** Parse users from chat messages to get as much info as possible. */
-  private def parseUsers(parsed: JValue, dsUuid: UUID): Seq[User] = {
+  private def parseUsers(parsed: JValue, dsUuid: PbUuid): Seq[User] = {
     implicit val dummyTracker = new FieldUsageTracker
 
     // Doing additional pass over messages to fetch all users
@@ -110,6 +87,6 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
     fullUsers.toSeq sortBy (u => (u.id, u.prettyName))
   } ensuring { users =>
     // Ensuring all IDs are unique
-    users.toStream.map(_.id).toSet.size == users.size
+    users.to(LazyList).map(_.id).toSet.size == users.size
   }
 }
