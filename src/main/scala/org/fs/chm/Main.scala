@@ -4,7 +4,8 @@ import org.fs.chm.loader.telegram.TelegramGRPCDataLoader
 import org.fs.chm.ui.swing.MainFrameApp
 import org.slf4s.Logging
 
-object ChatHistoryManagerMain extends App with Logging {
-  val grpcDataLoader = new TelegramGRPCDataLoader(50051)
+object Main extends App with Logging {
+  val grpcPort = 50051
+  val grpcDataLoader = new TelegramGRPCDataLoader(grpcPort)
   new MainFrameApp(grpcDataLoader).startup(args)
 }
