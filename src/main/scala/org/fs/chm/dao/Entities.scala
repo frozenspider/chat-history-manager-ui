@@ -29,6 +29,7 @@ object Entities {
   val NoInternalId: MessageInternalId = -1L.asInstanceOf[MessageInternalId]
 
   val Unnamed = "[unnamed]"
+  val Unknown = "[unknown]"
 
   def fromJavaUuid(uuid: java.util.UUID): PbUuid =
     PbUuid(uuid.toString.toLowerCase)
@@ -43,18 +44,18 @@ object Entities {
       sourceType = srcType
     )
 
-  /** Should be kept in sync with RichTet.make*! */
+  /** Should be kept in sync with RichText.make*! */
   def makeSearchableString(rte: RichTextElement): String = {
-    rte.`val`.value match {
+    normalizeSeachableString(rte.`val`.value match {
       case RtePlain(text, _)                 => text
       case RteBold(text, _)                  => text
       case RteItalic(text, _)                => text
       case RteUnderline(text, _)             => text
       case RteStrikethrough(text, _)         => text
-      case RteLink(textOpt, href, hiddem, _) => (textOpt getOrElse "") + href
+      case RteLink(textOpt, href, hiddem, _) => (textOpt getOrElse "") + " " + href
       case RtePrefmtInline(text, _)          => text
       case RtePrefmtBlock(text, langOpt, _)  => text
-    }
+    })
   }
 
   def makeSearchableString(components: Seq[RichTextElement], typed: Message.Typed): String = {
@@ -463,7 +464,7 @@ object Entities {
 
     // Same as ExtendedUser
     lazy val prettyNameOption: Option[String] = {
-      val parts = Seq(Some(c.firstName), c.lastNameOption).yieldDefined
+      val parts = Seq(c.firstNameOption, c.lastNameOption).yieldDefined
       if (parts.isEmpty) None else Some(parts.mkString(" ").trim)
     }
 

@@ -1109,7 +1109,7 @@ class H2ChatHistoryDao(
           ))
         case "shared_contact" =>
           Content.Val.SharedContact(ContentSharedContact(
-            firstName         = rc.firstNameOption.get,
+            firstNameOption   = rc.firstNameOption,
             lastNameOption    = rc.lastNameOption,
             phoneNumberOption = rc.phoneNumberOption,
             vcardPathOption   = rc.vcardPathOption map (_.makeRelativePath),
@@ -1356,7 +1356,7 @@ class H2ChatHistoryDao(
         case Content.Val.SharedContact(c) =>
           template.copy(
             elementType       = "shared_contact",
-            firstNameOption   = Some(c.firstName),
+            firstNameOption   = c.firstNameOption,
             lastNameOption    = c.lastNameOption,
             phoneNumberOption = c.phoneNumberOption,
             vcardPathOption   = c.vcardPathOption map (_.makeRelativePath)

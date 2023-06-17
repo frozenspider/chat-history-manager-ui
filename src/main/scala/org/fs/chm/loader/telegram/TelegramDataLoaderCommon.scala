@@ -74,7 +74,7 @@ trait TelegramDataLoaderCommon {
       val text = RichTextParser.parseRichText(jv)
       val typed = Message.Typed.Regular(MessageRegular(
         editTimestampOption    = stringOptToDateTimeOpt(getStringOpt(jv, "edited", false)).map(_.unixTimestamp),
-        forwardFromNameOption  = getStringOpt(jv, "forwarded_from", false),
+        forwardFromNameOption  = getForwardedFromOpt(jv, "forwarded_from"),
         replyToMessageIdOption = getFieldOpt[MessageSourceId](jv, "reply_to_message_id", false),
         contentOption          = ContentParser.parseContentOption(jv, rootFile),
       ))
@@ -138,7 +138,7 @@ trait TelegramDataLoaderCommon {
         case "join_group_by_link" =>
           // Maps into usual InviteMembers
           tracker.markUsed("inviter")
-          Some(MessageService(MessageService.Val.GroupRemoveMembers(MessageServiceGroupRemoveMembers(
+          Some(MessageService(MessageService.Val.GroupInviteMembers(MessageServiceGroupInviteMembers(
             members = Seq(getCheckedField[String](jv, "actor")),
           ))))
         case "migrate_from_group" =>
@@ -299,10 +299,10 @@ trait TelegramDataLoaderCommon {
         case (Some("animation"), None, Some(_), false, false, false)     => Some(parseAnimation(jv, rootFile))
         case (Some("video_message"), None, Some(_), false, false, false) => Some(parseVideoMsg(jv, rootFile))
         case (Some("voice_message"), None, Some(_), false, false, false) => Some(parseVoiceMsg(jv, rootFile))
-        case (Some("video_file"), None, Some(_), false, false, false)    => Some(parseFile(jv, rootFile))
-        case (Some("audio_file"), None, Some(_), false, false, false)    => Some(parseFile(jv, rootFile))
+        case (Some("video_file"), None, Some(_), false, false, false)    => Some(parseFile(jv, rootFile, "<Video>"))
+        case (Some("audio_file"), None, Some(_), false, false, false)    => Some(parseFile(jv, rootFile, "<Audio>"))
         case (None, Some(_), None, false, false, false)                  => Some(parsePhoto(jv, rootFile))
-        case (None, None, Some(_), false, false, false)                  => Some(parseFile(jv, rootFile))
+        case (None, None, Some(_), false, false, false)                  => Some(parseFile(jv, rootFile, "<File>"))
         case (None, None, None, true, false, false)                      => Some(parseLocation(jv))
         case (None, None, None, false, true, false)                      => Some(parsePoll(jv))
         case (None, None, None, false, false, true)                      => Some(parseSharedContact(jv, rootFile))
@@ -363,12 +363,12 @@ trait TelegramDataLoaderCommon {
       ))
     }
 
-    private def parseFile(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Val.File = {
+    private def parseFile(jv: JValue, rootFile: File, titleIfEmpty: String)(implicit tracker: FieldUsageTracker): Content.Val.File = {
       Content.Val.File(ContentFile(
         pathOption          = getRelativePathOpt(jv, "file", true, rootFile),
         thumbnailPathOption = getRelativePathOpt(jv, "thumbnail", false, rootFile),
         mimeTypeOption      = getStringOpt(jv, "mime_type", true),
-        title               = getStringOpt(jv, "title", false) getOrElse "<File>",
+        title               = getStringOpt(jv, "title", false) getOrElse titleIfEmpty,
         performerOption     = getStringOpt(jv, "performer", false),
         durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
         widthOption         = getFieldOpt[Int](jv, "width", false),
@@ -396,7 +396,7 @@ trait TelegramDataLoaderCommon {
         implicit tracker: FieldUsageTracker): Content.Val.SharedContact = {
       val ci = getRawField(jv, "contact_information", true)
       Content.Val.SharedContact(ContentSharedContact(
-        firstName         = getCheckedField[String](ci, "first_name"),
+        firstNameOption   = getStringOpt(ci, "first_name", true),
         lastNameOption    = getStringOpt(ci, "last_name", true),
         phoneNumberOption = getStringOpt(ci, "phone_number", true),
         vcardPathOption   = getRelativePathOpt(jv, "contact_vcard", false, rootFile)
@@ -493,22 +493,14 @@ trait TelegramDataLoaderCommon {
     res
   }
 
-  protected def getFieldOpt[A](jv: JValue, fieldName: String, mustPresent: Boolean)(
-      implicit formats: Formats,
-      mf: scala.reflect.Manifest[A],
-      tracker: FieldUsageTracker): Option[A] = {
+  protected def getFieldOpt[A: Manifest](jv: JValue, fieldName: String, mustPresent: Boolean)(implicit formats: Formats,
+                                                                                              tracker: FieldUsageTracker): Option[A] = {
     getRawField(jv, fieldName, mustPresent).extractOpt[A]
   }
 
-  protected def getStringOpt(jv: JValue, fieldName: String, mustPresent: Boolean)(
-      implicit formats: Formats,
-      tracker: FieldUsageTracker): Option[String] = {
-    val res = jv \ fieldName
-    tracker.markUsed(fieldName)
-    if (mustPresent) {
-      require(res != JNothing, s"Incompatible format! Field '$fieldName' not found in ${jv.toString.take(500)}")
-    }
-    res.extractOpt[String] flatMap stringToOption
+  protected def getStringOpt(jv: JValue, fieldName: String, mustPresent: Boolean)(implicit formats: Formats,
+                                                                                  tracker: FieldUsageTracker): Option[String] = {
+    getRawField(jv, fieldName, mustPresent).extractOpt[String] flatMap stringToOption
   }
 
   // Does not d
@@ -524,19 +516,28 @@ trait TelegramDataLoaderCommon {
     getStringOpt(jv, fieldName, mustPresent) map (p => p.makeRelativePath)
   }
 
-  protected def getCheckedField[A](jv: JValue, fieldName: String)(implicit formats: Formats,
-                                                                  mf: scala.reflect.Manifest[A],
-                                                                  tracker: FieldUsageTracker): A = {
+  protected def getCheckedField[A: Manifest](jv: JValue, fieldName: String)(implicit formats: Formats,
+                                                                            tracker: FieldUsageTracker): A = {
     getRawField(jv, fieldName, true).extract[A]
   }
 
-  protected def getCheckedField[A](jv: JValue, fn1: String, fn2: String)(implicit formats: Formats,
-                                                                         mf: scala.reflect.Manifest[A],
-                                                                         tracker: FieldUsageTracker): A = {
+  protected def getCheckedField[A: Manifest](jv: JValue, fn1: String, fn2: String)(implicit formats: Formats,
+                                                                                   tracker: FieldUsageTracker): A = {
     val res = jv \ fn1 \ fn2
     require(res != JNothing, s"Incompatible format! Path '$fn1 \\ $fn2' not found in $jv")
     tracker.markUsed(fn1)
     res.extract[A]
+  }
+
+  protected def getForwardedFromOpt(jv: JValue, fieldName: String)(implicit formats: Formats,
+                                                                   tracker: FieldUsageTracker): Option[String] = {
+    getRawField(jv, fieldName, false) match {
+      case JNothing    => None
+      case JNull       => Some(Unknown)
+      case ff: JString => Some(ff.values)
+      case other =>
+        throw new IllegalArgumentException(s"Don't know how to parse forwarded_from from '${other.toString.take(500)}'")
+    }
   }
 
   protected def getUserId(jv: JValue, fieldName: String)(implicit formats: Formats,
