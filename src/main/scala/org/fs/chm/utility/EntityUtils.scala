@@ -1,5 +1,10 @@
 package org.fs.chm.utility
 
+import scala.swing.Dialog
+import scala.swing.Swing
+import scala.swing.Swing.EmptyIcon
+import javax.swing.JOptionPane
+
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.User
 
@@ -19,5 +24,24 @@ object EntityUtils {
 
   implicit object UserWithId extends WithId[User] {
     override def id(user: User): Long = user.id
+  }
+
+  def chooseMyself(users: Seq[User]): Int = {
+    val options = users map (_.prettyName)
+    val res = JOptionPane.showOptionDialog(
+      null,
+      "Choose yourself",
+      "Which one of them is you?",
+      Dialog.Options.Default.id,
+      Dialog.Message.Question.id,
+      Swing.wrapIcon(EmptyIcon),
+      (options map (_.asInstanceOf[AnyRef])).toArray,
+      options.head
+    )
+    if (res == JOptionPane.CLOSED_OPTION) {
+      throw new IllegalArgumentException("Well, tough luck")
+    } else {
+      res
+    }
   }
 }

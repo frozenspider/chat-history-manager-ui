@@ -4,10 +4,6 @@ import java.io.File
 import java.io.FileNotFoundException
 
 import scala.collection.immutable.ListMap
-import scala.swing.Dialog
-import scala.swing.Swing
-import scala.swing.Swing.EmptyIcon
-import javax.swing.JOptionPane
 
 import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
@@ -38,7 +34,7 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
     val parsed = JsonMethods.parse(resultJsonFile)
 
     val preUsers = parseUsers(parsed, dataset.uuid)
-    val myself = chooseMyself(preUsers)
+    val myself = preUsers(EntityUtils.chooseMyself(preUsers))
     val users = myself +: preUsers.filter(_ != myself)
 
     val messagesRes = (for {
@@ -57,25 +53,6 @@ class TelegramSingleChatDataLoader extends TelegramDataLoader with TelegramDataL
       users1             = users,
       _chatsWithMessages = ListMap(chatRes -> messagesRes)
     )
-  }
-
-  protected def chooseMyself(users: Seq[User]): User = {
-    val options = users map (_.prettyName)
-    val res = JOptionPane.showOptionDialog(
-      null,
-      "Choose yourself",
-      "Which one of them is you?",
-      Dialog.Options.Default.id,
-      Dialog.Message.Question.id,
-      Swing.wrapIcon(EmptyIcon),
-      (options map (_.asInstanceOf[AnyRef])).toArray,
-      options.head
-    )
-    if (res == JOptionPane.CLOSED_OPTION) {
-      throw new IllegalArgumentException("Well, tough luck")
-    } else {
-      users(res)
-    }
   }
 
   //

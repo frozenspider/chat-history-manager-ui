@@ -74,6 +74,7 @@ libraryDependencies ++= Seq(
   "com.thesamet.scalapb"          %% "scalapb-runtime"            % scalapbVer % "protobuf",
   "com.thesamet.scalapb"          %% "scalapb-runtime-grpc"       % scalapbVer,
   "io.grpc"                       %  "grpc-netty"                 % grpcJavaVer,
+  "io.grpc"                       % "grpc-services"               % grpcJavaVer,
   // Test
   "junit"                         %  "junit"                      % "4.12"     % "test",
   "org.scalactic"                 %% "scalactic"                  % "3.2.15"   % "test",

@@ -5,10 +5,9 @@ import java.io.{File => JFile}
 import scala.util.Random
 
 import org.fs.chm.dao.Entities.ChatWithDetails
-import org.fs.chm.loader.telegram.TelegramFullDataLoader
-import org.fs.chm.loader.telegram.TelegramGRPCDataLoader
+import org.fs.chm.loader.telegram._
 
-object GrpcConsistencyVerifierMain extends App {
+object GRPCConsistencyVerifierMain extends App {
   val grpcDataLoader = new TelegramGRPCDataLoader(50051)
   val localDataLoader = new TelegramFullDataLoader()
 

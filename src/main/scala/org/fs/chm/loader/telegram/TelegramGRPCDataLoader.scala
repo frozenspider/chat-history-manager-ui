@@ -3,12 +3,18 @@ package org.fs.chm.loader.telegram
 import java.io.{File => JFile}
 
 import scala.collection.immutable.ListMap
+import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
 
 import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
+import io.grpc.Server
+import io.grpc.ServerBuilder
+import io.grpc.protobuf.services.ProtoReflectionService
 import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf._
+import org.fs.chm.utility.EntityUtils
 import org.fs.utility.StopWatch
 
 class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
@@ -22,12 +28,27 @@ class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
     checkFormatLooksRight(rootFile, Seq()) // Any field works for us
   }
 
+  private lazy val myselfChooserServer: Server = {
+    val serverPort = rpcPort + 1
+    log.info(s"Starting callback server at ${serverPort}")
+    val server: Server = ServerBuilder.forPort(serverPort)
+      .addService(MyselfChooserGrpc.bindService(new MyselfChooserImpl, ExecutionContext.global))
+      .addService(ProtoReflectionService.newInstance())
+      .build.start
+    sys.addShutdownHook {
+      server.shutdown()
+    }
+    Thread.sleep(1000)
+    server
+  }
+
   override protected def loadDataInner(path: JFile, createNew: Boolean): EagerChatHistoryDao = {
-    val request = ParseJsonFileRequest(path = path.getAbsolutePath)
+    val request = ParseHistoryFileRequest(path = path.getAbsolutePath)
     log.info(s"Sending gRPC parse request: ${request}")
+    myselfChooserServer
     StopWatch.measureAndCall {
-      val blockingStub = JsonLoaderGrpc.blockingStub(channel)
-      val response: ParseJsonFileResponse = blockingStub.parseJsonFile(request)
+      val blockingStub = HistoryLoaderGrpc.blockingStub(channel)
+      val response: ParseHistoryFileResponse = blockingStub.parseHistoryFile(request)
       val root = new JFile(response.rootFile).getAbsoluteFile
       require(root.exists, s"Dataset root ${root} does not exist!")
       val chatsWithMessagesLM: ListMap[Chat, IndexedSeq[Message]] =
@@ -50,4 +71,24 @@ class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
       )
     }((_, ms) => log.info(s"Telegram history loaded in ${ms} ms (via gRPC)"))
   }
+
+  private class MyselfChooserImpl extends MyselfChooserGrpc.MyselfChooser {
+    override def chooseMyself(request: ChooseMyselfRequest): Future[ChooseMyselfResponse] = {
+      try {
+        val myselfIdx = EntityUtils.chooseMyself(request.users)
+        val reply = ChooseMyselfResponse(pickedOption = myselfIdx)
+        Future.successful(reply)
+      } catch {
+        case ex: Exception =>
+          Future.failed(ex)
+      }
+    }
+  }
+}
+
+object TelegramGRPCDataLoader extends App {
+  val loader = new TelegramGRPCDataLoader(50051)
+  loader.myselfChooserServer
+  println("Press ENTER to terminate...")
+  System.in.read();
 }
