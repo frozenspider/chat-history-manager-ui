@@ -13,6 +13,27 @@ Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
 Compile / sourceManaged  := baseDirectory.value / "src_managed" / "main" / "scala"
 Test / sourceManaged     := baseDirectory.value / "src_managed" / "test" / "scala"
 
+// ScalaPB config
+val protobufPath = settingKey[File]("Path to the protobuf files")
+
+Compile / PB.protoSources := {
+  def fail(msg: String) = throw new sbt.MessageOnlyException(s"Can't compile protobufs: $msg")
+  val pbFileName = "protobuf-path.txt"
+  val pbConfigFile = baseDirectory.value / pbFileName
+  if (!pbConfigFile.exists) {
+    fail(s"./${pbFileName} does not exist! Create one :)")
+  }
+  val pbPath = IO.readLines(pbConfigFile).headOption.getOrElse(fail(s"./${pbFileName} is empty!"))
+  val pbPathFile = new File(pbPath)
+  if (!pbPathFile.exists || !pbPathFile.isDirectory) {
+    fail(s"${pbPath} aka ${pbPathFile.getAbsolutePath} (specified in /${pbFileName}) does not exist or is not a directory!")
+  }
+  if (pbPathFile.list((_, n) => n.toLowerCase.endsWith(".proto")).isEmpty) {
+    fail(s"${pbPath} aka ${pbPathFile.getAbsolutePath} (specified in /${pbFileName}) has no *.proto files!")
+  }
+  Seq(pbPathFile)
+}
+
 Compile / PB.targets := Seq(
   scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
 )
