@@ -24,6 +24,13 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     // TODO: How to limit width and do word wraps?
     //       width, max-width acts weird,
     //       word-wrap, word-break, overflow-wrap are ignored
+    // TODO: Handle emojis!
+    //       Importing font with
+    //         @font-face {
+    //           font-family: my-font;
+    //           src: url(/full/path/to/font);
+    //         }
+    //       doesn't seem to work
     val doc     = htmlKit.createDefaultDocument().asInstanceOf[HTMLDocument]
     val content = """<div id="messages"></div>"""
     htmlKit.read(new StringReader(content), doc, 0)
@@ -269,16 +276,21 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       }
     }
 
+    /** Replace non-HTML-renderable characters with, well, renderable */
+    private def toHtmlPlaintext(text: String): String = {
+      text replace ("\n", "<br>") replace ("<", "&lt;") replace (">", "&gt;")
+    }
+
     private def renderComponent(rt: RichTextElement): String = {
       val text = rt.textOrEmptyString
       if (rt.`val`.isEmpty) {
         text
       } else rt.`val`.value match {
-        case _: RtePlain         => text replace ("\n", "<br>")
-        case _: RteBold          => s"<b>${text replace ("\n", "<br>")}</b>"
-        case _: RteItalic        => s"<i>${text replace ("\n", "<br>")}</i>"
-        case _: RteUnderline     => s"<u>${text replace ("\n", "<br>")}</u>"
-        case _: RteStrikethrough => s"<strike>${text replace ("\n", "<br>")}</strike>"
+        case _: RtePlain         => toHtmlPlaintext(text)
+        case _: RteBold          => s"<b>${toHtmlPlaintext(text)}</b>"
+        case _: RteItalic        => s"<i>${toHtmlPlaintext(text)}</i>"
+        case _: RteUnderline     => s"<u>${toHtmlPlaintext(text)}</u>"
+        case _: RteStrikethrough => s"<strike>${toHtmlPlaintext(text)}</strike>"
         case link: RteLink       => renderLink(rt, link)
         case _: RtePrefmtBlock   => s"""<pre>${text}</pre>"""
         case _: RtePrefmtInline  => s"""<code>${text}</code>"""

@@ -244,7 +244,8 @@ object MessagesAreaContainer {
       val users = (1 to 2) map (createUser(ds.uuid, _))
       val msgs = IndexedSeq(
         {
-          val text = Seq(RichText.makePlain(s"Join the call!"));
+          val text = Seq(RichText.makePlain(s"Join the call! < Emoji: >👍❤️😄<"));
+          // val text = Seq(RichText.makePlain( "An &#128512;awesome &#128515;string with a few &#128521;emojis!"));
           val typed = Message.Typed.Service(MessageService(MessageService.Val.GroupCall(MessageServiceGroupCall(
             members = users map (_.prettyName)
           ))))
