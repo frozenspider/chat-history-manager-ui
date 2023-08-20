@@ -1047,13 +1047,19 @@ class H2ChatHistoryDao(
     def toContent(dsUuid: PbUuid, rc: RawContent): Content = {
       Content(rc.elementType match {
         case "sticker" =>
-          Content.Val.Sticker(ContentSticker(
+          // FIXME: Legacy stickers used to not have sizes!
+          //        Using default 512, remove after migration
+          val res = Content.Val.Sticker(ContentSticker(
             pathOption          = rc.pathOption map (_.makeRelativePath),
             thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
             emojiOption         = rc.emojiOption,
-            width               = rc.widthOption.get,
-            height              = rc.heightOption.get
+            width               = rc.widthOption.getOrElse(512),
+            height              = rc.heightOption.getOrElse(512)
           ))
+          if (rc.widthOption.isEmpty) {
+            log.error(s"WARNING, sticker with no sizes! ${res}")
+          }
+          res
         case "photo" =>
           Content.Val.Photo(ContentPhoto(
             pathOption = rc.pathOption map (_.makeRelativePath),
