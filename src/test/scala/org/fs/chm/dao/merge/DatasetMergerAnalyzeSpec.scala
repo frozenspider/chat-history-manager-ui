@@ -1,9 +1,11 @@
 package org.fs.chm.dao.merge
 
 import org.fs.chm.TestHelper
+import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.dao.merge.DatasetMerger.{ChatMergeOption => CMO}
-import org.fs.chm.protobuf.Message
+import org.fs.chm.protobuf._
+import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.TestUtils._
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
@@ -575,7 +577,72 @@ class DatasetMergerAnalyzeSpec //
           firstSlaveMsgOption = None,
           lastSlaveMsgOption  = None
         )
-      ))
+      )
+    )
+  }
+
+  // "not found" should NOT conflict with "not downloaded" and vice versa
+  test("combine - photo not found vs photo not downloaded") {
+    val userIds = Seq(rndUserId, rndUserId, rndUserId, rndUserId)
+
+    val photoNotFound = ContentPhoto(
+      pathOption = Some("non/existent/path.jpg"),
+      width      = 100500,
+      height     = 100600
+    )
+    val photoNotDownloaded =
+      photoNotFound.copy(pathOption = None)
+
+    def makeRegularMsgPhoto(idx: Int, regular: Boolean, notDownloaded: Boolean) = {
+      val photo = if (notDownloaded) photoNotDownloaded else photoNotFound
+
+      val typed: Message.Typed = if (regular) {
+        Message.Typed.Regular(MessageRegular(
+          editTimestampOption    = Some(baseDate.plusMinutes(10 + idx).unixTimestamp),
+          replyToMessageIdOption = None,
+          forwardFromNameOption  = Some("some user"),
+          contentOption          = Some(Content(Content.Val.Photo(photo)))
+        ))
+      } else {
+        Message.Typed.Service(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(photo))))
+      }
+      val text = Seq(RichText.makePlain(s"Message for a photo $idx"))
+      Message(
+        internalId       = NoInternalId,
+        sourceIdOption   = Some((100L + idx).asInstanceOf[MessageSourceId]),
+        timestamp        = baseDate.unixTimestamp,
+        fromId           = userIds(idx - 1),
+        searchableString = Some(makeSearchableString(text, typed)),
+        text             = text,
+        typed            = typed
+      )
+    }
+
+    val msgsA = Seq(
+      makeRegularMsgPhoto(1, regular = true, notDownloaded = false),
+      makeRegularMsgPhoto(2, regular = true, notDownloaded = true),
+      makeRegularMsgPhoto(3, regular = false, notDownloaded = false),
+      makeRegularMsgPhoto(4, regular = false, notDownloaded = true)
+    )
+    val msgsB = Seq(
+      makeRegularMsgPhoto(1, regular = true, notDownloaded = true),
+      makeRegularMsgPhoto(2, regular = true, notDownloaded = false),
+      makeRegularMsgPhoto(3, regular = false, notDownloaded = true),
+      makeRegularMsgPhoto(4, regular = false, notDownloaded = false)
+    )
+    val helper = new MergerHelper(msgsA, msgsB)
+    val combine = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
+    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    assert(
+      analysis === Seq(
+        MessagesMergeOption.Keep(
+          firstMasterMsg      = helper.d1msgs.bySrcId(101L),
+          lastMasterMsg       = helper.d1msgs.bySrcId(104L),
+          firstSlaveMsgOption = Some(helper.d2msgs.bySrcId(101L)),
+          lastSlaveMsgOption  = Some(helper.d2msgs.bySrcId(104L))
+        )
+      )
+    )
   }
 
   //

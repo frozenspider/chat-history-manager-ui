@@ -395,7 +395,11 @@ object Entities {
   // Content
   //
 
-  implicit class ExtendedContent(c: Content) {
+  trait WithPathFileOption {
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile]
+  }
+
+  implicit class ExtendedContent(c: Content) extends WithPathFileOption {
     def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = {
       require(hasPath, "No path available!")
       c.`val`.value match {
@@ -421,33 +425,33 @@ object Entities {
       }
   }
 
-  implicit class ExtendedContentSticker(c: ContentSticker) {
+  implicit class ExtendedContentSticker(c: ContentSticker) extends WithPathFileOption {
     def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
 
     def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
   }
 
-  implicit class ExtendedContentPhoto(c: ContentPhoto) {
+  implicit class ExtendedContentPhoto(c: ContentPhoto) extends WithPathFileOption {
     def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
   }
 
-  implicit class ExtendedContentVoiceMsg(c: ContentVoiceMsg) {
+  implicit class ExtendedContentVoiceMsg(c: ContentVoiceMsg) extends WithPathFileOption {
     def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
   }
 
-  implicit class ExtendedContentVideoMsg(c: ContentVideoMsg) {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
-
-    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
-  }
-
-  implicit class ExtendedContentAnimation(c: ContentAnimation) {
+  implicit class ExtendedContentVideoMsg(c: ContentVideoMsg) extends WithPathFileOption {
     def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
 
     def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
   }
 
-  implicit class ExtendedContentFile(c: ContentFile) {
+  implicit class ExtendedContentAnimation(c: ContentAnimation) extends WithPathFileOption {
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
+
+    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
+  }
+
+  implicit class ExtendedContentFile(c: ContentFile) extends WithPathFileOption {
     def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
 
     def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))

@@ -8,11 +8,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.MutableChatHistoryDao
-import org.fs.chm.protobuf.Chat
-import org.fs.chm.protobuf.ChatType
-import org.fs.chm.protobuf.Dataset
-import org.fs.chm.protobuf.Message
-import org.fs.chm.protobuf.User
+import org.fs.chm.protobuf._
 import org.fs.chm.utility.IoUtils
 import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
@@ -333,18 +329,23 @@ class DatasetMerger(
    * Needed for matching sequences.
    * */
   private def matchesDisregardingContent(mm: TaggedMessage.M, sm: TaggedMessage.S): Boolean = {
+    def hasNewContent(mc: WithPathFileOption, sc: WithPathFileOption): Boolean = {
+       mc.pathFileOption(masterRoot).isEmpty && sc.pathFileOption(slaveRoot).isDefined && sc.pathFileOption(slaveRoot).get.exists
+    }
     (mm.typed, sm.typed) match {
       case (mmRegular: Message.Typed.Regular, smRegular: Message.Typed.Regular) =>
         (mmRegular.value.contentOption, smRegular.value.contentOption) match {
-          case (Some(mc), Some(sc)) if mc.hasPath && sc.hasPath &&
-              mc.pathFileOption(masterRoot).isEmpty && sc.pathFileOption(slaveRoot).isDefined && sc.pathFileOption(slaveRoot).get.exists =>
+          case (Some(mc), Some(sc)) if mc.hasPath && sc.hasPath && hasNewContent(mc, sc) =>
             // New information available, treat this as a mismatch
             false
           case _ =>
-            val mmCmp  = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(contentOption = None)))
+            val mmCmp = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(contentOption = None)))
             val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(contentOption = None)))
             (mmCmp, masterRoot) =~= (smCmp, slaveRoot)
         }
+      case (Message.Typed.Service(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(mmPhoto, _)), _)),
+            Message.Typed.Service(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(smPhoto, _)), _))) =>
+        !hasNewContent(mmPhoto, smPhoto)
       case _ =>
         (mm.asInstanceOf[Message], masterRoot) =~= (sm, slaveRoot)
     }
