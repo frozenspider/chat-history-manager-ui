@@ -1047,32 +1047,30 @@ class H2ChatHistoryDao(
     def toContent(dsUuid: PbUuid, rc: RawContent): Content = {
       Content(rc.elementType match {
         case "sticker" =>
-          // FIXME: Legacy stickers used to not have sizes!
-          //        Using default 512, remove after migration
-          val res = Content.Val.Sticker(ContentSticker(
+          assert(rc.widthOption.isDefined && rc.heightOption.isDefined, rc)
+          Content.Val.Sticker(ContentSticker(
             pathOption          = rc.pathOption map (_.makeRelativePath),
             thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
             emojiOption         = rc.emojiOption,
-            width               = rc.widthOption.getOrElse(512),
-            height              = rc.heightOption.getOrElse(512)
+            width               = rc.widthOption.get,
+            height              = rc.heightOption.get
           ))
-          if (rc.widthOption.isEmpty) {
-            log.error(s"WARNING, sticker with no sizes! ${res}")
-          }
-          res
         case "photo" =>
+          assert(rc.widthOption.isDefined && rc.heightOption.isDefined, rc)
           Content.Val.Photo(ContentPhoto(
             pathOption = rc.pathOption map (_.makeRelativePath),
             width      = rc.widthOption.get,
             height     = rc.heightOption.get,
           ))
         case "voice_message" =>
+          assert(rc.mimeTypeOption.isDefined, rc)
           Content.Val.VoiceMsg(ContentVoiceMsg(
             pathOption        = rc.pathOption map (_.makeRelativePath),
             mimeType          = rc.mimeTypeOption.get,
             durationSecOption = rc.durationSecOption
           ))
         case "video_message" =>
+          assert(rc.mimeTypeOption.isDefined && rc.widthOption.isDefined && rc.heightOption.isDefined, rc)
           Content.Val.VideoMsg(ContentVideoMsg(
             pathOption          = rc.pathOption map (_.makeRelativePath),
             thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
@@ -1082,6 +1080,7 @@ class H2ChatHistoryDao(
             height              = rc.heightOption.get
           ))
         case "animation" =>
+          assert(rc.mimeTypeOption.isDefined && rc.widthOption.isDefined && rc.heightOption.isDefined, rc)
           Content.Val.Animation(ContentAnimation(
             pathOption          = rc.pathOption map (_.makeRelativePath),
             thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
@@ -1102,6 +1101,7 @@ class H2ChatHistoryDao(
             heightOption        = rc.heightOption
           ))
         case "location" =>
+          assert(rc.latOption.isDefined && rc.lonOption.isDefined, rc)
           Content.Val.Location(ContentLocation(
             titleOption       = rc.titleOption,
             addressOption     = rc.addressOption,
@@ -1110,6 +1110,7 @@ class H2ChatHistoryDao(
             durationSecOption = rc.durationSecOption
           ))
         case "poll" =>
+          assert(rc.pollQuestionOption.isDefined, rc)
           Content.Val.Poll(ContentPoll(
             question = rc.pollQuestionOption.get
           ))
