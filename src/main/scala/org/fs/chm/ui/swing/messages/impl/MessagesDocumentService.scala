@@ -278,7 +278,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
     /** Replace non-HTML-renderable characters with, well, renderable */
     private def toHtmlPlaintext(text: String): String = {
-      text replace ("\n", "<br>") replace ("<", "&lt;") replace (">", "&gt;")
+      text replace ("<", "&lt;") replace (">", "&gt;") replace ("\n", "<br>")
     }
 
     private def renderComponent(rt: RichTextElement): String = {
