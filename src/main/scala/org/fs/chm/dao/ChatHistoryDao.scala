@@ -52,10 +52,9 @@ trait ChatHistoryDao extends AutoCloseable {
    * Return N messages before the given one (inclusive).
    * Message must be present, so the result would contain at least one element.
    */
-  final def messagesBefore(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
-    val root = datasetRoot(chat.dsUuid)
-    messagesBeforeImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit && (seq.last, root) =~= (msg, root) )
-  }
+  final def messagesBefore(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] =
+    messagesBeforeImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit &&
+      seq.last.sourceIdOption == msg.sourceIdOption && seq.last.internalId == msg.internalId)
 
   protected def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message]
 
@@ -63,10 +62,9 @@ trait ChatHistoryDao extends AutoCloseable {
    * Return N messages after the given one (inclusive).
    * Message must be present, so the result would contain at least one element.
    */
-  final def messagesAfter(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
-    val root = datasetRoot(chat.dsUuid)
-    messagesAfterImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit && (seq.head, root) =~= (msg, root))
-  }
+  final def messagesAfter(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] =
+    messagesAfterImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit &&
+      seq.head.sourceIdOption == msg.sourceIdOption && seq.head.internalId == msg.internalId)
 
   protected def messagesAfterImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message]
 
@@ -74,11 +72,10 @@ trait ChatHistoryDao extends AutoCloseable {
    * Return N messages between the given ones (inclusive).
    * Messages must be present, so the result would contain at least one element (if both are the same message).
    */
-  final def messagesBetween(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] = {
-    val root = datasetRoot(chat.dsUuid)
-    messagesBetweenImpl(chat, msg1, msg2) ensuring (seq =>
-      seq.nonEmpty && (seq.head, root) =~= (msg1, root) && (seq.last, root) =~= (msg2, root))
-  }
+  final def messagesBetween(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] =
+    messagesBetweenImpl(chat, msg1, msg2) ensuring (seq => seq.nonEmpty &&
+      seq.head.sourceIdOption == msg1.sourceIdOption && seq.head.internalId == msg1.internalId &&
+      seq.last.sourceIdOption == msg2.sourceIdOption && seq.last.internalId == msg2.internalId)
 
   protected def messagesBetweenImpl(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message]
 

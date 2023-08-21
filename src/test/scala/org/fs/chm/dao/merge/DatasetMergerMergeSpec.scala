@@ -14,6 +14,7 @@ import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.TestUtils._
+import org.fs.utility.Imports._
 import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfter
 import org.scalatest.BeforeAndAfterAll
@@ -72,7 +73,7 @@ class DatasetMergerMergeSpec //
     assert(helper.dao1.chats(newDs.uuid).size === 1)
     val newMessages = helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     assert(newMessages.size === 1)
-    assert((newMessages.head, helper.d1root) =~= (helper.d1msgs.head, helper.d1root))
+    assert((newMessages.head, helper.d1root, newChats.head) =~= (helper.d1msgs.head, helper.d1root, helper.d1cwd))
     assertFiles(helper.dao1, newDs, msgsPaths(helper.dao1, helper.d1ds, helper.d1msgs))
   }
 
@@ -109,7 +110,7 @@ class DatasetMergerMergeSpec //
     assert(helper.dao1.chats(newDs.uuid).head.chat.nameOption === usersA(1).prettyNameOption)
     val newMessages = helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     assert(newMessages.size === 1)
-    assert((newMessages.head, helper.d1root) =~= (helper.d2msgs.head, helper.d2root))
+    assert((newMessages.head, helper.d1root, helper.d1cwd) =~= (helper.d2msgs.head, helper.d2root, helper.d2cwd))
     assertFiles(helper.dao1, newDs, msgsPaths(helper.dao2, helper.d2ds, helper.d2msgs))
   }
 
@@ -128,7 +129,7 @@ class DatasetMergerMergeSpec //
     }
     assert(newMessages.size === helper.d1msgs.size)
     for ((nm, om) <- (newMessages zip helper.d1msgs)) {
-      assert((nm, helper.d1root) =~= (om, helper.d1root))
+      assert((nm, helper.d1root, helper.d1cwd) =~= (om, helper.d1root, helper.d1cwd))
     }
 
     assertFiles(helper.dao1, newDs, msgsPaths(helper.dao1, helper.d1ds, newMessages))
@@ -149,8 +150,8 @@ class DatasetMergerMergeSpec //
       helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     assert(newMessages.size === 2)
-    assert((newMessages(0), helper.d1root) =~= (helper.d2msgs.bySrcId(3), helper.d2root))
-    assert((newMessages(1), helper.d1root) =~= (helper.d2msgs.bySrcId(4), helper.d2root))
+    assert((newMessages(0), helper.d1root, helper.d1cwd) =~= (helper.d2msgs.bySrcId(3), helper.d2root, helper.d2cwd))
+    assert((newMessages(1), helper.d1root, helper.d1cwd) =~= (helper.d2msgs.bySrcId(4), helper.d2root, helper.d2cwd))
 
     assertFiles(helper.dao1, newDs, msgsPaths(helper.dao2, helper.d2ds, newMessages))
   }
@@ -187,8 +188,8 @@ class DatasetMergerMergeSpec //
       helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     assert(newMessages.size === 2)
-    assert((newMessages(0), helper.d1root) =~= (helper.d2msgs.bySrcId(3), helper.d2root))
-    assert((newMessages(1), helper.d1root) =~= (helper.d2msgs.bySrcId(4), helper.d2root))
+    assert((newMessages(0), helper.d1root, helper.d1cwd) =~= (helper.d2msgs.bySrcId(3), helper.d2root, helper.d2cwd))
+    assert((newMessages(1), helper.d1root, helper.d1cwd) =~= (helper.d2msgs.bySrcId(4), helper.d2root, helper.d2cwd))
 
     assertFiles(helper.dao1, newDs, msgsPaths(helper.dao2, helper.d2ds, newMessages))
   }
@@ -243,12 +244,12 @@ class DatasetMergerMergeSpec //
       helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     assert(newMessages.size === msgs.size - 2)
-    assert((newMessages(0), helper.d1root) =~= (helper.d2msgs.bySrcId(2), helper.d2root))
+    assert((newMessages(0), helper.d1root, helper.d1cwd) =~= (helper.d2msgs.bySrcId(2), helper.d2root, helper.d2cwd))
     val (expectedMessagesWithRoots, expectedFiles) = {
-      val msgs1 = helper.d2msgs.slice(1, bp1).map(m => (m, helper.d2root))
-      val msgs2 = helper.d2msgs.slice(bp1, bp2).map(m => (m, helper.d2root))
-      val msgs3 = helper.d1msgs.slice(bp2, bp3).map(m => (m, helper.d1root))
-      val msgs4 = helper.d2msgs.slice(bp3, maxId - 1).map(m => (m, helper.d2root))
+      val msgs1 = helper.d2msgs.slice(1, bp1).map(m => (m, helper.d2root, helper.d2cwd))
+      val msgs2 = helper.d2msgs.slice(bp1, bp2).map(m => (m, helper.d2root, helper.d2cwd))
+      val msgs3 = helper.d1msgs.slice(bp2, bp3).map(m => (m, helper.d1root, helper.d1cwd))
+      val msgs4 = helper.d2msgs.slice(bp3, maxId - 1).map(m => (m, helper.d2root, helper.d2cwd))
       (
         msgs1 ++ msgs2 ++ msgs3 ++ msgs4,
         (msgsPaths(helper.dao2, helper.d2ds, msgs1.map(_._1))
@@ -259,10 +260,194 @@ class DatasetMergerMergeSpec //
     }
     assert(expectedMessagesWithRoots.size === newMessages.size)
     for ((m1withRooot, m2) <- (expectedMessagesWithRoots zip newMessages).par) {
-      assert(m1withRooot =~= (m2, helper.d1root), (m1withRooot._1, m2))
+      assert(m1withRooot =~= (m2, helper.d1root, helper.d1cwd), (m1withRooot._1, m2))
     }
 
     assertFiles(helper.dao1, newDs, expectedFiles)
+  }
+
+  test("merge chats - group messages with 'members' field should adapt to user renames applied/skipped") {
+    membersTestHelper(
+      "Scenario 1: Messages are replaced",
+      populateOldMessages = true,
+      populateNewMessages = true,
+      makeChatMerges = helper => Seq(
+        ChatMergeOption.Combine(
+          helper.d1cwd, helper.d2cwd,
+          IndexedSeq(
+            MessagesMergeOption.Replace(
+              firstMasterMsg = tag(helper.d1msgs.head),
+              lastMasterMsg  = tag(helper.d1msgs.last),
+              firstSlaveMsg  = tag(helper.d2msgs.head),
+              lastSlaveMsg   = tag(helper.d2msgs.last)
+            )
+          )
+        )
+      )
+    )
+
+    membersTestHelper(
+      "Scenario 2: Messages are kept",
+      populateOldMessages = true,
+      populateNewMessages = true,
+      makeChatMerges = helper => Seq(
+        ChatMergeOption.Combine(
+          helper.d1cwd, helper.d2cwd,
+          IndexedSeq(
+            MessagesMergeOption.Keep(
+              firstMasterMsg      = tag(helper.d1msgs.head),
+              lastMasterMsg       = tag(helper.d1msgs.last),
+              firstSlaveMsgOption = Some(tag(helper.d2msgs.head)),
+              lastSlaveMsgOption  = Some(tag(helper.d2msgs.last))
+            )
+          )
+        )
+      )
+    )
+
+    membersTestHelper(
+      "Scenario 3: New messages are added",
+      populateOldMessages = false,
+      populateNewMessages = true,
+      makeChatMerges = helper => Seq(
+        ChatMergeOption.Combine(
+          helper.d1cwd, helper.d2cwd,
+          IndexedSeq(
+            MessagesMergeOption.Add(
+              firstSlaveMsg = tag(helper.d2msgs.head),
+              lastSlaveMsg  = tag(helper.d2msgs.last)
+            )
+          )
+        )
+      )
+    )
+
+    membersTestHelper(
+      "Scenario 4: Old messages are kept unrelated to new ones",
+      populateOldMessages = true,
+      populateNewMessages = false,
+      makeChatMerges = helper => Seq(
+        ChatMergeOption.Combine(
+          helper.d1cwd, helper.d2cwd,
+          IndexedSeq(
+            MessagesMergeOption.Keep(
+              firstMasterMsg      = tag(helper.d1msgs.head),
+              lastMasterMsg       = tag(helper.d1msgs.last),
+              firstSlaveMsgOption = None,
+              lastSlaveMsgOption  = None
+            )
+          )
+        )
+      )
+    )
+
+    membersTestHelper(
+      "Scenario 5: Entire chat is added",
+      populateOldMessages = false,
+      populateNewMessages = true,
+      makeChatMerges = helper => Seq(
+        ChatMergeOption.Add(helper.d2cwd)
+      )
+    )
+
+    membersTestHelper(
+      "Scenario 6: Entire chat is kept",
+      populateOldMessages = true,
+      populateNewMessages = false,
+      makeChatMerges = helper => Seq(
+        ChatMergeOption.Keep(helper.d1cwd)
+      )
+    )
+  }
+
+  /**
+   * Creates 4 users, users 3 and 4 are renamed. Creates one message of each type that has members.
+   * <p>
+   * In all scenarios, outcome should be the same - group messages should be half-baked.
+   */
+  def membersTestHelper(clue: String,
+                        populateOldMessages: Boolean,
+                        populateNewMessages: Boolean,
+                        makeChatMerges: H2MergerHelper => Seq[ChatMergeOption]): Unit = {
+    def makeMessages(users: Seq[User], groupChatTitle: String) = {
+      val members = users.map(_.prettyName)
+      val typeds = Seq(
+        Message.Typed.Service(MessageService(MessageService.Val.GroupCreate(MessageServiceGroupCreate(
+          title   = groupChatTitle,
+          members = members
+        )))),
+        Message.Typed.Service(MessageService(MessageService.Val.GroupInviteMembers(MessageServiceGroupInviteMembers(
+          members = members
+        )))),
+        Message.Typed.Service(MessageService(MessageService.Val.GroupRemoveMembers(MessageServiceGroupRemoveMembers(
+          members = members
+        )))),
+        Message.Typed.Service(MessageService(MessageService.Val.GroupCall(MessageServiceGroupCall(
+          members = members
+        ))))
+      )
+      typeds.mapWithIndex((typed, idx) => {
+        val text = Seq(RichText.makePlain(s"Message for a group service message ${idx + 1}"))
+        Message(
+          internalId       = NoInternalId,
+          sourceIdOption   = Some((100L + idx).asInstanceOf[MessageSourceId]),
+          timestamp        = baseDate.unixTimestamp,
+          fromId           = users(idx).id,
+          searchableString = Some(makeSearchableString(text, typed)),
+          text             = text,
+          typed            = typed
+        )
+      })
+    }
+    require(populateOldMessages || populateNewMessages, "No messages to populate, that's not how it's supposed to be used")
+
+    val oldUsers = (1 to 4) map (createUser(noUuid, _))
+    val newUsers = oldUsers map (u => u.copy(lastNameOption = Some(u.lastNameOption.get + " (new name)")))
+
+    val helper = {
+      val groupChatStub = createGroupChat(noUuid, 1, "GC", oldUsers.map(_.id), 9999)
+
+      val oldMessages = if (populateOldMessages) makeMessages(oldUsers, groupChatStub.nameOrUnnamed) else Seq.empty
+      val newMessages = if (populateNewMessages) makeMessages(newUsers, groupChatStub.nameOrUnnamed) else Seq.empty
+
+      val oldGroupChat = groupChatStub.copy(msgCount = oldMessages.size)
+      val newGroupChat = groupChatStub.copy(msgCount = newMessages.size)
+
+      new H2MergerHelper(
+        oldUsers, ListMap(oldGroupChat -> oldMessages),
+        newUsers, ListMap(newGroupChat -> newMessages),
+        amendMessagesWithContent = false
+      )
+    }
+
+    // Users 1/2 are kept, users 3/4 are replaced.
+    val usersResolution = Seq(
+      UserMergeOption.Keep(helper.d1users.find(_.id == 1).get),
+      UserMergeOption.Keep(helper.d1users.find(_.id == 2).get),
+      UserMergeOption.Replace(helper.d1users.find(_.id == 3).get, helper.d2users.find(_.id == 3).get),
+      UserMergeOption.Replace(helper.d1users.find(_.id == 4).get, helper.d2users.find(_.id == 4).get),
+    )
+
+    val expectedMembers = Seq(oldUsers(0), oldUsers(1), newUsers(2), newUsers(3)).map(_.prettyName)
+    assert(expectedMembers !== oldUsers.map(_.prettyName), clue)
+    assert(expectedMembers !== newUsers.map(_.prettyName), clue)
+
+    val chatMerges = makeChatMerges(helper)
+    val newDs = helper.merger.merge(usersResolution, chatMerges)
+    val newMessages = {
+      val newChats = helper.dao1.chats(newDs.uuid)
+      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+    }
+    // New messages will be 4 messages no matter what
+    assert(newMessages.size === (if (populateOldMessages) helper.d1msgs.size else helper.d2msgs.size), clue)
+    assert(newMessages(0).typed.service.get.`val`.groupCreate.get.members        === expectedMembers, clue)
+    assert(newMessages(1).typed.service.get.`val`.groupInviteMembers.get.members === expectedMembers, clue)
+    assert(newMessages(2).typed.service.get.`val`.groupRemoveMembers.get.members === expectedMembers, clue)
+    assert(newMessages(3).typed.service.get.`val`.groupCall.get.members          === expectedMembers, clue)
+
+    // As a final step, reset DAO to initial state
+    freeH2Dao()
+    initH2Dao()
   }
 
   //
@@ -294,7 +479,8 @@ class DatasetMergerMergeSpec //
       users1: Seq[User],
       chatsWithMsgs1: ListMap[Chat, Seq[Message]],
       users2: Seq[User],
-      chatsWithMsgs2: ListMap[Chat, Seq[Message]]
+      chatsWithMsgs2: ListMap[Chat, Seq[Message]],
+      amendMessagesWithContent: Boolean = true
   ) {
     val (dao1, d1ds, d1root, d1users, d1cwd, d1msgs) = {
       h2dao.copyAllFrom(createDao("One", users1, chatsWithMsgs1, amendMessageWithContent))
@@ -302,7 +488,7 @@ class DatasetMergerMergeSpec //
       (h2dao, ds, root, users, chat, msgs)
     }
     val (dao2, d2ds, d2root, d2users, d2cwd, d2msgs) = {
-      val dao                     = createDao("Two", users2, chatsWithMsgs2, amendMessageWithContent)
+      val dao                           = createDao("Two", users2, chatsWithMsgs2, amendMessageWithContent)
       val (ds, root, users, chat, msgs) = getSimpleDaoEntities(dao)
       (dao, ds, root, users, chat, msgs)
     }
@@ -310,27 +496,31 @@ class DatasetMergerMergeSpec //
     def merger: DatasetMerger =
       new DatasetMerger(dao1, d1ds, dao2, d2ds)
 
-    private def amendMessageWithContent(path: File, msg: Message): Message =
-      msg.copy(typed = msg.typed match {
-        case Message.Typed.Regular(msg) =>
-          val file1 = new File(path, rnd.alphanumeric.take(30).mkString("", "", ".bin"))
-          val file2 = new File(path, rnd.alphanumeric.take(31).mkString("", "", ".bin"))
-          Files.write(file1.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
-          Files.write(file2.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
-          val content = Content(Content.Val.File(ContentFile(
-            pathOption          = Some(file1.toRelativePath(path)),
-            thumbnailPathOption = Some(file2.toRelativePath(path)),
-            mimeTypeOption      = Some("mt"),
-            title               = "t",
-            performerOption     = Some("p"),
-            durationSecOption   = Some(1),
-            widthOption         = Some(2),
-            heightOption        = Some(3),
-          )))
-          Message.Typed.Regular(msg.copy(contentOption = Some(content)))
-        case _ =>
-          throw new MatchError("Unexpected message type for " + msg)
-      })
+    private def amendMessageWithContent(path: File, msg: Message): Message = {
+      if (amendMessagesWithContent)
+        msg.copy(typed = msg.typed match {
+          case Message.Typed.Regular(msg) =>
+            val file1 = new File(path, rnd.alphanumeric.take(30).mkString("", "", ".bin"))
+            val file2 = new File(path, rnd.alphanumeric.take(31).mkString("", "", ".bin"))
+            Files.write(file1.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
+            Files.write(file2.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
+            val content = Content(Content.Val.File(ContentFile(
+              pathOption          = Some(file1.toRelativePath(path)),
+              thumbnailPathOption = Some(file2.toRelativePath(path)),
+              mimeTypeOption      = Some("mt"),
+              title               = "t",
+              performerOption     = Some("p"),
+              durationSecOption   = Some(1),
+              widthOption         = Some(2),
+              heightOption        = Some(3),
+            )))
+            Message.Typed.Regular(msg.copy(contentOption = Some(content)))
+          case _ =>
+            throw new MatchError("Unexpected message type for " + msg)
+        })
+      else
+        msg
+    }
   }
 
   object H2MergerHelper {

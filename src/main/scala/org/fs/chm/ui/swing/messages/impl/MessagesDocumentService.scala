@@ -131,9 +131,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
   private def renderTitleName(cwd: ChatWithDetails, idOption: Option[Long], nameOption: Option[String]): String = {
     val idx = {
-      val idx1 = idOption map (id => cwd.members indexWhere (_.id == id)) getOrElse -1
-      val idx2 = cwd.members indexWhere (u => nameOption contains u.prettyName)
-      if (idx1 != -1) idx1 else idx2
+      idOption map (id => cwd.members indexWhere (_.id == id)) getOrElse (nameOption.map(cwd.resolveMemberIndex) getOrElse -1)
     }
     val color = if (idx >= 0) Colors.stringForIdx(idx) else "#000000"
     val resolvedName = nameOption getOrElse {

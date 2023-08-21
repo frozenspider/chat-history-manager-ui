@@ -174,10 +174,7 @@ class H2ChatHistoryDao(
         .reverse
         .map(_._2)
     }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesBeforeImpl]")
-  } ensuring (seq => seq.nonEmpty && {
-    val root = datasetRoot(chat.dsUuid)
-    (seq.last, root) =~= (msg, root)
-  })
+  } ensuring (seq => seq.nonEmpty && seq.last.internalId == msg.internalId)
 
   override def messagesAfterImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
     logPerformance {
@@ -293,20 +290,21 @@ class H2ChatHistoryDao(
           assert(
             dao.users(ds.uuid) == users(ds.uuid),
             s"Users differ:\nWas    ${dao.users(ds.uuid)}\nBecame ${users(ds.uuid)}")
-          val chats1 = dao.chats(ds.uuid).map(_.chat)
-          val chats2 = chats(ds.uuid).map(_.chat)
+          val chats1 = dao.chats(ds.uuid)
+          val chats2 = chats(ds.uuid)
           assert(chats1.size == chats2.size, s"Chat size differs:\nWas    ${chats1.size}\nBecame ${chats2.size}")
-          for (((c1, c2), i) <- chats1.zip(chats2).zipWithIndex) {
+          for (((cwd1, cwd2), i) <- chats1.zip(chats2).zipWithIndex) {
             StopWatch.measureAndCall {
-              log.info(s"Checking chat '${c1.nameOption.getOrElse("")}' with ${c1.msgCount} messages")
-              assert(c1 == c2, s"Chat #$i differs:\nWas    $c1\nBecame $c2")
-              val messages1 = dao.lastMessages(c1, c1.msgCount + 1)
-              val messages2 = lastMessages(c2, c2.msgCount + 1)
+              log.info(s"Checking chat '${cwd1.chat.nameOption.getOrElse("")}' with ${cwd1.chat.msgCount} messages")
+              assert(cwd1.chat == cwd2.chat, s"Chat #$i differs:\nWas    ${cwd1.chat}\nBecame ${cwd2.chat}")
+              val messages1 = dao.lastMessages(cwd1.chat, cwd1.chat.msgCount + 1)
+              val messages2 = lastMessages(cwd2.chat, cwd2.chat.msgCount + 1)
               assert(
                 messages1.size == messages1.size,
-                s"Messages size for chat $c1 (#$i) differs:\nWas    ${messages1.size}\nBecame ${messages2.size}")
+                s"Messages size for chat ${cwd1.chat} (#$i) differs:\nWas    ${messages1.size}\nBecame ${messages2.size}")
               for (((m1, m2), j) <- messages1.zip(messages2).zipWithIndex) {
-                assert((m1, fromRoot) =~= (m2, toRoot), s"Message #$j for chat $c1 (#$i) differs:\nWas    $m1\nBecame $m2")
+                assert((m1, fromRoot, cwd1) =~= (m2, toRoot, cwd2),
+                       s"Message #$j for chat ${cwd1.chat} (#$i) differs:\nWas    $m1\nBecame $m2")
               }
             }((_, t) => log.info(s"Chat checked in $t ms"))
           }

@@ -97,47 +97,47 @@ class H2ChatHistoryDaoSpec //
 
       val allTg = tgDao.lastMessages(tgChat, tgChat.msgCount)
       val allH2 = h2dao.lastMessages(h2Chat, tgChat.msgCount)
-      assert((allH2, h2Root) =~= (allTg, tgRoot))
+      assert((allH2, h2Root, h2Cwd) =~= (allTg, tgRoot, tgCwd))
 
       val scroll1 = h2dao.scrollMessages(h2Chat, 0, numMsgsToTake)
       assert(scroll1 === allH2.take(numMsgsToTake))
-      assert((scroll1, h2Root) =~= (tgDao.scrollMessages(tgChat, 0, numMsgsToTake), tgRoot))
+      assert((scroll1, h2Root, h2Cwd) =~= (tgDao.scrollMessages(tgChat, 0, numMsgsToTake), tgRoot, tgCwd))
 
       val scroll2 = h2dao.scrollMessages(h2Chat, 1, numMsgsToTake)
       assert(scroll2 === allH2.tail.take(numMsgsToTake))
-      assert((scroll2, h2Root) =~= (tgDao.scrollMessages(tgChat, 1, numMsgsToTake), tgRoot))
+      assert((scroll2, h2Root, h2Cwd) =~= (tgDao.scrollMessages(tgChat, 1, numMsgsToTake), tgRoot, tgCwd))
 
       val before1 = h2dao.messagesBefore(h2Chat, allH2.last, numMsgsToTake)
       assert(before1.last === allH2.last)
       assert(before1 === allH2.takeRight(numMsgsToTake))
-      assert((before1, h2Root) =~= (tgDao.messagesBefore(tgChat, allTg.last, numMsgsToTake), tgRoot))
+      assert((before1, h2Root, h2Cwd) =~= (tgDao.messagesBefore(tgChat, allTg.last, numMsgsToTake), tgRoot, tgCwd))
 
       val before2 = h2dao.messagesBefore(h2Chat, allH2.dropRight(1).last, numMsgsToTake)
       assert(before2.last === allH2.dropRight(1).last)
       assert(before2 === allH2.dropRight(1).takeRight(numMsgsToTake))
-      assert((before2, h2Root) =~= (tgDao.messagesBefore(tgChat, allTg.dropRight(1).last, numMsgsToTake), tgRoot))
+      assert((before2, h2Root, h2Cwd) =~= (tgDao.messagesBefore(tgChat, allTg.dropRight(1).last, numMsgsToTake), tgRoot, tgCwd))
 
       val after1 = h2dao.messagesAfter(h2Chat, allH2.head, numMsgsToTake)
       assert(after1.head === allH2.head)
       assert(after1 === allH2.take(numMsgsToTake))
-      assert((after1, h2Root) =~= (tgDao.messagesAfter(tgChat, allTg.head, numMsgsToTake), tgRoot))
+      assert((after1, h2Root, h2Cwd) =~= (tgDao.messagesAfter(tgChat, allTg.head, numMsgsToTake), tgRoot, tgCwd))
 
       val after2 = h2dao.messagesAfter(h2Chat, allH2(1), numMsgsToTake)
       assert(after2.head === allH2(1))
       assert(after2 === allH2.tail.take(numMsgsToTake))
-      assert((after2, h2Root) =~= (tgDao.messagesAfter(tgChat, allTg(1), numMsgsToTake), tgRoot))
+      assert((after2, h2Root, h2Cwd) =~= (tgDao.messagesAfter(tgChat, allTg(1), numMsgsToTake), tgRoot, tgCwd))
 
       val between1 = h2dao.messagesBetween(h2Chat, allH2.head, allH2.last)
       assert(between1 === allH2)
-      assert((between1, h2Root) =~= (tgDao.messagesBetween(tgChat, allTg.head, allTg.last), tgRoot))
+      assert((between1, h2Root, h2Cwd) =~= (tgDao.messagesBetween(tgChat, allTg.head, allTg.last), tgRoot, tgCwd))
 
       val between2 = h2dao.messagesBetween(h2Chat, allH2(1), allH2.last)
       assert(between2 === allH2.tail)
-      assert((between2, h2Root) =~= (tgDao.messagesBetween(tgChat, allTg(1), allTg.last), tgRoot))
+      assert((between2, h2Root, h2Cwd) =~= (tgDao.messagesBetween(tgChat, allTg(1), allTg.last), tgRoot, tgCwd))
 
       val between3 = h2dao.messagesBetween(h2Chat, allH2.head, allH2.dropRight(1).last)
       assert(between3 === allH2.dropRight(1))
-      assert((between3, h2Root) =~= (tgDao.messagesBetween(tgChat, allTg.head, allTg.dropRight(1).last), tgRoot))
+      assert((between3, h2Root, h2Cwd) =~= (tgDao.messagesBetween(tgChat, allTg.head, allTg.dropRight(1).last), tgRoot, tgCwd))
 
       val countBetween1 = h2dao.countMessagesBetween(h2Chat, allH2.head, allH2.last)
       assert(countBetween1 === allH2.size - 2)
@@ -155,10 +155,10 @@ class H2ChatHistoryDaoSpec //
 
       val last = h2dao.lastMessages(h2Chat, numMsgsToTake)
       assert(last === allH2.takeRight(numMsgsToTake))
-      assert((last, h2Root) =~= (tgDao.lastMessages(tgChat, numMsgsToTake), tgRoot))
+      assert((last, h2Root, h2Cwd) =~= (tgDao.lastMessages(tgChat, numMsgsToTake), tgRoot, tgCwd))
       assert(last.lastOption === h2Cwd.lastMsgOption)
       (last.lastOption, tgCwd.lastMsgOption) match {
-        case (Some(last1), Some(last2)) => assert((last1, h2Root) =~= (last2, tgRoot))
+        case (Some(last1), Some(last2)) => assert((last1, h2Root, h2Cwd) =~= (last2, tgRoot, tgCwd))
         case (None, None)               => // NOOP
         case _                          => fail("Mismatch! " + (last.lastOption, tgCwd.lastMsgOption))
       }

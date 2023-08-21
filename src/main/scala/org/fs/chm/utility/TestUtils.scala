@@ -32,11 +32,11 @@ object TestUtils {
       phoneNumberOption = Some("xxx xx xx".replaceAll("x", idx.toString))
     )
 
-  def createGroupChat(dsUuid: PbUuid, idx: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat = {
+  def createGroupChat(dsUuid: PbUuid, id: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat = {
     require(memberIds.size >= 2)
     Chat(
       dsUuid        = dsUuid,
-      id            = idx,
+      id            = id,
       nameOption    = Some("Chat " + nameSuffix),
       tpe           = ChatType.PrivateGroup,
       imgPathOption = None,

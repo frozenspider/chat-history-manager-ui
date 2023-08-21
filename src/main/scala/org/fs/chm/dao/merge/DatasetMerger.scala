@@ -32,10 +32,17 @@ class DatasetMerger(
    * Note that we can only detect conflicts if data source supports source IDs.
    */
   def analyzeChatHistoryMerge[T <: ChatMergeOption](merge: T): T = merge match {
-    case merge @ ChatMergeOption.Combine(mcwd, scwd, _) =>
+    case merge @ ChatMergeOption.Combine(mCwd, sCwd, _) =>
       var mismatches = ArrayBuffer.empty[MessagesMergeOption]
       iterate(
-        ((messagesStream(masterDao, mcwd.chat, None), None), (messagesStream(slaveDao, scwd.chat, None), None)),
+        MsgIterationContext(
+          mmStream = messagesStream(masterDao, mCwd.chat, None),
+          prevMm   = None,
+          mCwd     = mCwd,
+          smStream = messagesStream(slaveDao, sCwd.chat, None),
+          prevSm   = None,
+          sCwd     = sCwd,
+        ),
         IterationState.NoState,
         (mm => mismatches += mm)
       )
@@ -136,7 +143,7 @@ class DatasetMerger(
       // NoState
       //
 
-      case (Some(mm), Some(sm), NoState) if matchesDisregardingContent(mm, sm) =>
+      case (Some(mm), Some(sm), NoState) if matchesDisregardingContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
         // Matching subsequence starts
         val state2 = MatchInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
         iterate(cxt.advanceBoth(), state2, onMismatch)
@@ -145,7 +152,7 @@ class DatasetMerger(
            sm.typed.service.flatMap(_.`val`.groupMigrateFrom).isDefined &&
            mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption &&
            mm.fromId < 0x100000000L && sm.fromId > 0x100000000L &&
-           (mm.copy(fromId = sm.fromId), masterRoot) =~= (sm, slaveRoot) =>
+           (mm.copy(fromId = sm.fromId), masterRoot, cxt.mCwd) =~= (sm, slaveRoot, cxt.sCwd) =>
 
         // FIXME: Why does compiler report this as unreachable?!
         // Special handling for a service message mismatch which is expected when merging Telegram after 2020-10
@@ -185,9 +192,8 @@ class DatasetMerger(
       // MatchInProgress
       //
 
-      case (Some(mm), Some(sm), state: MatchInProgress) if matchesDisregardingContent(mm, sm) =>
+      case (Some(mm), Some(sm), state: MatchInProgress) if matchesDisregardingContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
         // Matching subsequence continues
-        matchesDisregardingContent(mm, sm)
         iterate(cxt.advanceBoth(), state, onMismatch)
       case (_, _, state: MatchInProgress) =>
         // Matching subsequence ends
@@ -211,7 +217,8 @@ class DatasetMerger(
       // ConflictInProgress
       //
 
-      case (Some(mm), Some(sm), state: ConflictInProgress) if (mm.asInstanceOf[Message], masterRoot) !=~= (sm, slaveRoot) =>
+      case (Some(mm), Some(sm), state: ConflictInProgress)
+          if (mm.asInstanceOf[Message], masterRoot, cxt.mCwd) !=~= (sm, slaveRoot, cxt.sCwd) =>
         // Conflict continues
         iterate(cxt.advanceBoth(), state, onMismatch)
       case (_, _, state: ConflictInProgress) =>
@@ -269,7 +276,7 @@ class DatasetMerger(
           val user2 = sourceUser.userToInsert.copy(dsUuid = newDs.uuid)
           masterDao.insertUser(user2, user2.id == masterSelf.id)
         }
-        val masterUsers = masterDao.users(newDs.uuid)
+        val finalUsers = masterDao.users(newDs.uuid)
 
         // Chats
         for (cmo <- chatsToMerge) {
@@ -282,7 +289,7 @@ class DatasetMerger(
                 val c2 = (c.tpe, c.memberIds.find(_ != masterSelf.id)) match {
                   case (ChatType.Personal, Some(userId)) =>
                     // For merged personal chats, name should match whatever user name was chosen
-                    val user = masterUsers.find(_.id == userId).get
+                    val user = finalUsers.find(_.id == userId).get
                     c.copy(nameOption = user.prettyNameOption)
                   case _ =>
                     c
@@ -296,9 +303,11 @@ class DatasetMerger(
           val messageBatches: Stream[(DatasetRoot, IndexedSeq[Message])] = cmo match {
             case ChatMergeOption.Keep(mcwd) =>
               messageBatchesStream[TaggedMessage.M](masterDao, mcwd.chat, None)
+                .map(_.map(fixupMessageWithMembers(mcwd, finalUsers)))
                 .map(mb => (masterDao.datasetRoot(masterDs.uuid), mb))
             case ChatMergeOption.Add(scwd) =>
               messageBatchesStream[TaggedMessage.S](slaveDao, scwd.chat, None)
+                .map(_.map(fixupMessageWithMembers(scwd, finalUsers)))
                 .map(mb => (slaveDao.datasetRoot(slaveDs.uuid), mb))
             case ChatMergeOption.Combine(mc, sc, resolution) =>
               resolution.map {
@@ -306,11 +315,11 @@ class DatasetMerger(
                 case etc                                  => etc
               }.map {
                 case MessagesMergeOption.Keep(_, _, Some(firstSlaveMsg), Some(lastSlaveMsg)) =>
-                  batchLoadMsgsUntilInc(slaveDao, slaveDs, slaveRoot, cmo.slaveCwdOption.get.chat, firstSlaveMsg, lastSlaveMsg)
+                  batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
                 case MessagesMergeOption.Keep(firstMasterMsg, lastMasterMsg, _, _) =>
-                  batchLoadMsgsUntilInc(masterDao, masterDs, masterRoot, cmo.masterCwdOption.get.chat, firstMasterMsg, lastMasterMsg)
+                  batchLoadMsgsUntilInc(finalUsers, masterDao, masterDs, cmo.masterCwdOption.get, firstMasterMsg, lastMasterMsg)
                 case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
-                  batchLoadMsgsUntilInc(slaveDao, slaveDs, slaveRoot, cmo.slaveCwdOption.get.chat, firstSlaveMsg, lastSlaveMsg)
+                  batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
                 case _ => throw new MatchError("Impossible!")
               }.toStream.flatten
           }
@@ -346,7 +355,10 @@ class DatasetMerger(
    * Treats master and slave messages as equal if their content mismatches, unless slave message has content and master message doesn't.
    * Needed for matching sequences.
    * */
-  private def matchesDisregardingContent(mm: TaggedMessage.M, sm: TaggedMessage.S): Boolean = {
+  private def matchesDisregardingContent(mm: TaggedMessage.M,
+                                         mCwd: ChatWithDetails,
+                                         sm: TaggedMessage.S,
+                                         sCwd: ChatWithDetails): Boolean = {
     def hasNewContent(mc: WithPathFileOption, sc: WithPathFileOption): Boolean = {
        mc.pathFileOption(masterRoot).isEmpty && sc.pathFileOption(slaveRoot).isDefined && sc.pathFileOption(slaveRoot).get.exists
     }
@@ -359,13 +371,13 @@ class DatasetMerger(
           case _ =>
             val mmCmp = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(contentOption = None)))
             val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(contentOption = None)))
-            (mmCmp, masterRoot) =~= (smCmp, slaveRoot)
+            (mmCmp, masterRoot, mCwd) =~= (smCmp, slaveRoot, sCwd)
         }
       case (Message.Typed.Service(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(mmPhoto, _)), _)),
             Message.Typed.Service(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(smPhoto, _)), _))) =>
         !hasNewContent(mmPhoto, smPhoto)
       case _ =>
-        (mm.asInstanceOf[Message], masterRoot) =~= (sm, slaveRoot)
+        (mm.asInstanceOf[Message], masterRoot, mCwd) =~= (sm, slaveRoot, sCwd)
     }
   }
 
@@ -396,30 +408,37 @@ class DatasetMerger(
     }
   }
 
-  private type MsgIterationContext =
-    ((Stream[TaggedMessage.M], Option[TaggedMessage.M]), (Stream[TaggedMessage.S], Option[TaggedMessage.S]))
-
-  private implicit class RichMsgIterationContext(cxt: MsgIterationContext) {
-    def mmStream: Stream[TaggedMessage.M] = cxt._1._1
-    def prevMm:   Option[TaggedMessage.M] = cxt._1._2
-    def smStream: Stream[TaggedMessage.S] = cxt._2._1
-    def prevSm:   Option[TaggedMessage.S] = cxt._2._2
-
+  private case class MsgIterationContext(
+    mmStream: Stream[TaggedMessage.M],
+    prevMm:   Option[TaggedMessage.M],
+    mCwd:     ChatWithDetails,
+    smStream: Stream[TaggedMessage.S],
+    prevSm:   Option[TaggedMessage.S],
+    sCwd:     ChatWithDetails
+  ) {
     def cmpMasterSlave(): Int = {
       msgOptionOrdering.compare(mmStream.headOption, smStream.headOption)
     }
 
-    def advanceBoth(): MsgIterationContext = {
-      ((mmStream.tail, mmStream.headOption), (smStream.tail, smStream.headOption))
-    }
+    def advanceBoth(): MsgIterationContext =
+      copy(
+        mmStream = mmStream.tail,
+        prevMm   = mmStream.headOption,
+        smStream = smStream.tail,
+        prevSm   = smStream.headOption
+      )
 
-    def advanceMaster(): MsgIterationContext = {
-      ((mmStream.tail, mmStream.headOption), (smStream, prevSm))
-    }
+    def advanceMaster(): MsgIterationContext =
+      copy(
+        mmStream = mmStream.tail,
+        prevMm   = mmStream.headOption
+      )
 
-    def advanceSlave(): MsgIterationContext = {
-      ((mmStream, prevMm), (smStream.tail, smStream.headOption))
-    }
+    def advanceSlave(): MsgIterationContext =
+      copy(
+        smStream = smStream.tail,
+        prevSm   = smStream.headOption
+      )
   }
 
   private sealed trait IterationState
@@ -451,31 +470,54 @@ class DatasetMerger(
     ) extends StateInProgress
   }
 
+  /** Fixup messages who have 'members' field, to make them comply with resolved/final user names. */
+  def fixupMessageWithMembers(cwd: ChatWithDetails, finalUsers: Seq[User])(message: Message): Message = {
+    def fixupMembers(members: Seq[String]): Seq[String] = {
+      // Unresolved members are kept as-is.
+      val resolvedUsers = cwd.resolveMembers(members)
+      resolvedUsers.mapWithIndex((u, idx) =>
+        finalUsers.find(fu => u.exists(_.id == fu.id)).map(_.prettyName).getOrElse(members(idx)))
+    }
+
+    def withTypedService(v: MessageService.Val) = message.copy(typed = Message.Typed.Service(MessageService(v)))
+
+    message.typed.service.map(_.`val`) match {
+      case Some(culprit: MessageService.Val.GroupCreate) =>
+        withTypedService(culprit.copy(value = culprit.value.copy(members = fixupMembers(culprit.value.members))))
+      case Some(culprit: MessageService.Val.GroupInviteMembers) =>
+        withTypedService(culprit.copy(value = culprit.value.copy(members = fixupMembers(culprit.value.members))))
+      case Some(culprit: MessageService.Val.GroupRemoveMembers) =>
+        withTypedService(culprit.copy(value = culprit.value.copy(members = fixupMembers(culprit.value.members))))
+      case Some(culprit: MessageService.Val.GroupCall) =>
+        withTypedService(culprit.copy(value = culprit.value.copy(members = fixupMembers(culprit.value.members))))
+      case _ =>
+        message
+    }
+  }
+
   private def batchLoadMsgsUntilInc[TM <: TaggedMessage](
+      finalUsers: Seq[User],
       dao: ChatHistoryDao,
       ds: Dataset,
-      dsRoot: DatasetRoot,
-      chat: Chat,
+      cwd: ChatWithDetails,
       firstMsg: TM,
       lastMsg: TM
   ): Stream[(DatasetRoot, IndexedSeq[Message])] = {
     takeMsgsFromBatchUntilInc(
-      IndexedSeq(firstMsg) #:: messageBatchesStream(dao, chat, Some(firstMsg)),
-      lastMsg,
-      dsRoot
-    ) map (mb => (dao.datasetRoot(ds.uuid), mb))
+      IndexedSeq(firstMsg) #:: messageBatchesStream(dao, cwd.chat, Some(firstMsg)),
+      lastMsg
+    ) map (mb => (dao.datasetRoot(ds.uuid), mb.map(fixupMessageWithMembers(cwd, finalUsers))))
   }
 
   private def takeMsgsFromBatchUntilInc[T <: TaggedMessage](
       stream: Stream[IndexedSeq[Message]],
-      m: Message,
-      dsRoot: DatasetRoot
+      m: Message
   ): Stream[IndexedSeq[Message]] = {
     var lastFound = false
     stream.map { mb =>
       if (!lastFound) {
         mb.takeWhile { m2 =>
-          val isLast = (m2, dsRoot) =~= (m, dsRoot)
+          val isLast = m2.sourceIdOption == m.sourceIdOption && m2.internalId == m.internalId
           lastFound |= isLast
           isLast || !lastFound
         }

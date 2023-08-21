@@ -24,6 +24,20 @@ object Entities {
                              /** First element MUST be myself, the rest should be in some fixed order. */
                              members: Seq[User]) {
     val dsUuid: PbUuid = chat.dsUuid
+
+    /** Used to resolve plaintext members */
+    def resolveMemberIndex(memberName: String): Int =
+      members indexWhere (_.prettyName == memberName)
+
+    /** Used to resolve plaintext members */
+    def resolveMember(memberName: String): Option[User] =
+     resolveMemberIndex(memberName) match {
+       case -1 => None
+       case x  => Some(members(x))
+     }
+
+    def resolveMembers(memberNames: Seq[String]): Seq[Option[User]] =
+      memberNames.map(resolveMember)
   }
 
   val NoInternalId: MessageInternalId = -1L.asInstanceOf[MessageInternalId]
@@ -88,6 +102,10 @@ object Entities {
   //
   // PracticallyEquals implementation
   //
+
+  def membersPracticallyEquals(members1: Seq[String], cwd1: ChatWithDetails,
+                               members2: Seq[String], cwd2: ChatWithDetails) =
+      cwd1.resolveMembers(members1).map(_.map(_.id)).toSet == cwd2.resolveMembers(members2).map(_.map(_.id)).toSet
 
   implicit object ContentStickerPracticallyEquals extends PracticallyEquals[(ContentSticker, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentSticker, DatasetRoot), v2: (ContentSticker, DatasetRoot)): Boolean = {
@@ -190,8 +208,9 @@ object Entities {
     }
   }
 
-  implicit object MessageServiceValPracticallyEquals extends PracticallyEquals[(MessageService.Val, DatasetRoot)] {
-    override def practicallyEquals(v1: (MessageService.Val, DatasetRoot), v2: (MessageService.Val, DatasetRoot)): Boolean = {
+  implicit object MessageServiceValPracticallyEquals extends PracticallyEquals[(MessageService.Val, DatasetRoot, ChatWithDetails)] {
+    override def practicallyEquals(v1: (MessageService.Val, DatasetRoot, ChatWithDetails),
+                                   v2: (MessageService.Val, DatasetRoot, ChatWithDetails)): Boolean = {
       import MessageService.Val._
       if (v1._1.getClass != v2._1.getClass) {
         false
@@ -199,38 +218,49 @@ object Entities {
         case (m1: PhoneCall,          m2: PhoneCall)          => m1 == m2
         case (m1: PinMessage,         m2: PinMessage)         => m1 == m2
         case (m1: ClearHistory,       m2: ClearHistory)       => m1 == m2
-        case (m1: GroupCreate,        m2: GroupCreate)        => m1 == m2
+        case (m1: GroupCreate,        m2: GroupCreate)        =>
+          m1.value.copy(members = Seq.empty) == m2.value.copy(members = Seq.empty) &&
+            membersPracticallyEquals(m1.value.members, v1._3, m2.value.members, v2._3)
         case (m1: GroupEditTitle,     m2: GroupEditTitle)     => m1 == m2
         case (m1: GroupEditPhoto,     m2: GroupEditPhoto)     => (m1.value.photo, v1._2) =~= (m2.value.photo, v2._2)
-        case (m1: GroupInviteMembers, m2: GroupInviteMembers) => m1 == m2
-        case (m1: GroupRemoveMembers, m2: GroupRemoveMembers) => m1 == m2
+        case (m1: GroupInviteMembers, m2: GroupInviteMembers) =>
+          m1.value.copy(members = Seq.empty) == m2.value.copy(members = Seq.empty) &&
+            membersPracticallyEquals(m1.value.members, v1._3, m2.value.members, v2._3)
+        case (m1: GroupRemoveMembers, m2: GroupRemoveMembers) =>
+          m1.value.copy(members = Seq.empty) == m2.value.copy(members = Seq.empty) &&
+            membersPracticallyEquals(m1.value.members, v1._3, m2.value.members, v2._3)
         case (m1: GroupMigrateFrom,   m2: GroupMigrateFrom)   => m1 == m2
         case (m1: GroupMigrateTo,     m2: GroupMigrateTo)     => m1 == m2
-        case (m1: GroupCall,          m2: GroupCall)          => m1 == m2
+        case (m1: GroupCall,          m2: GroupCall)          =>
+          m1.value.copy(members = Seq.empty) == m2.value.copy(members = Seq.empty) &&
+            membersPracticallyEquals(m1.value.members, v1._3, m2.value.members, v2._3)
       }
     }
   }
 
-  implicit object MessageServicePracticallyEquals extends PracticallyEquals[(MessageService, DatasetRoot)] {
-    override def practicallyEquals(v1: (MessageService, DatasetRoot), v2: (MessageService, DatasetRoot)): Boolean =
-      (v1._1.`val`, v1._2) =~= (v2._1.`val`, v2._2)
+  implicit object MessageServicePracticallyEquals extends PracticallyEquals[(MessageService, DatasetRoot, ChatWithDetails)] {
+    override def practicallyEquals(v1: (MessageService, DatasetRoot, ChatWithDetails),
+                                   v2: (MessageService, DatasetRoot, ChatWithDetails)): Boolean =
+      (v1._1.`val`, v1._2, v1._3) =~= (v2._1.`val`, v2._2, v2._3)
   }
 
-  implicit object TypedMessagePracticallyEquals extends PracticallyEquals[(Message.Typed, DatasetRoot)] {
-    override def practicallyEquals(v1: (Message.Typed, DatasetRoot), v2: (Message.Typed, DatasetRoot)): Boolean = {
+  implicit object TypedMessagePracticallyEquals extends PracticallyEquals[(Message.Typed, DatasetRoot, ChatWithDetails)] {
+    override def practicallyEquals(v1: (Message.Typed, DatasetRoot, ChatWithDetails),
+                                   v2: (Message.Typed, DatasetRoot, ChatWithDetails)): Boolean = {
       (v1._1, v2._1) match {
         case (Message.Typed.Regular(v1Regular), Message.Typed.Regular(v2Regular)) =>
           (v1Regular, v1._2) =~= (v2Regular, v2._2)
         case (Message.Typed.Service(v1Service), Message.Typed.Service(v2Service)) =>
-          (v1Service, v1._2) =~= (v2Service, v2._2)
+          (v1Service, v1._2, v1._3) =~= (v2Service, v2._2, v2._3)
         case _ => false
       }
     }
   }
 
-  implicit object MessagePracticallyEquals extends PracticallyEquals[(Message, DatasetRoot)] {
+  implicit object MessagePracticallyEquals extends PracticallyEquals[(Message, DatasetRoot, ChatWithDetails)] {
     /** "Practical equality" that ignores internal ID, paths of files with equal content, and some unimportant fields */
-    override def practicallyEquals(v1: (Message, DatasetRoot), v2: (Message, DatasetRoot)): Boolean =
+    override def practicallyEquals(v1: (Message, DatasetRoot, ChatWithDetails),
+                                   v2: (Message, DatasetRoot, ChatWithDetails)): Boolean =
       v1._1.copy(
         internalId       = NoInternalId,
         searchableString = None,
@@ -239,7 +269,7 @@ object Entities {
         internalId       = NoInternalId,
         searchableString = None,
         typed            = Message.Typed.Empty
-      ) && (v1._1.typed, v1._2) =~= (v2._1.typed, v1._2)
+      ) && (v1._1.typed, v1._2, v1._3) =~= (v2._1.typed, v2._2, v2._3)
   }
 
   //
