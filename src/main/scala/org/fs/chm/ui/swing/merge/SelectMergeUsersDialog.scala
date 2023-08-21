@@ -21,6 +21,7 @@ import org.fs.utility.Imports._
  * - There will be a merge option in the output for every user in master and slave DSs
  * - Master users will precede slave-only users
  * - Checkbox option will ONLY be present for users that actually changed
+ * - Users whose chat was skipped entirely won't have a checkbox, and won't be selected
  * This means that the only thing that could be controlled is whether to merge changed users or keep an old ones
  */
 class SelectMergeUsersDialog(
@@ -28,6 +29,7 @@ class SelectMergeUsersDialog(
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset,
+    activeUserIds: Set[Long]
 ) extends CustomDialog[Seq[UserMergeOption]](takeFullHeight = true) {
   private lazy val originalTitle = "Select users to merge"
 
@@ -59,8 +61,9 @@ class SelectMergeUsersDialog(
     override val allElems: Seq[RowData[UserWithDao]] = {
       val masterUsersMap = groupById(masterUsers)
 
+      // Exclude non-active users
       val merges: Seq[RowData[UserWithDao]] =
-        for (su <- slaveUsers) yield {
+        for (su <- slaveUsers if activeUserIds contains su.id) yield {
           masterUsersMap.get(su.id) match {
             case None     => RowData.InSlaveOnly(UserWithDao(su, slaveDao))
             case Some(mu) => RowData.InBoth(UserWithDao(mu, masterDao), UserWithDao(su, slaveDao))
@@ -72,7 +75,7 @@ class SelectMergeUsersDialog(
       // 1) Combined and unchanged users
       val combinesMasterToDataMap: Map[User, RowData.InBoth[UserWithDao]] =
         merges.collect { case rd @ RowData.InBoth(mu, su) => (mu.user, rd) }.toMap
-      for (mu <- masterUsers) {
+      for (mu <- masterUsers if activeUserIds contains mu.id) {
         combinesMasterToDataMap.get(mu) match {
           case Some(rd) => mergesAcc = mergesAcc :+ rd
           case None     => mergesAcc = mergesAcc :+ RowData.InMasterOnly(UserWithDao(mu, masterDao))
@@ -170,7 +173,9 @@ object SelectMergeUsersDialog {
     }
     val (sDs, _, _, _, _) = getSimpleDaoEntities(sDao)
 
-    val dialog = new SelectMergeUsersDialog(mDao, mDs, sDao, sDs)
+    val activeUserIds = Seq(mDao.users(mDs.uuid), sDao.users(sDs.uuid)).flatten.map(_.id).toSet
+
+    val dialog = new SelectMergeUsersDialog(mDao, mDs, sDao, sDs, activeUserIds)
     dialog.visible = true
     dialog.peer.setLocationRelativeTo(null)
     println(dialog.selection map (_.mkString("\n  ", "\n  ", "\n")))

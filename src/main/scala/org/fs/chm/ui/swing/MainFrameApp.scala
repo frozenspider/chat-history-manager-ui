@@ -42,11 +42,11 @@ import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
 import org.fs.chm.ui.swing.user.UserDetailsMenuCallbacks
 import org.fs.chm.ui.swing.user.UserDetailsPane
 import org.fs.chm.utility.CliUtils
-import org.fs.chm.utility.EntityUtils
 import org.fs.chm.utility.InterruptableFuture._
 import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.SimpleConfigAware
+import org.fs.utility.Imports._
 import org.slf4s.Logging
 
 class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
@@ -400,7 +400,12 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
           selectChatsDialog.selection foreach { chatsToMerge =>
             val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
             val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge)
-            val selectUsersDialog = new SelectMergeUsersDialog(masterDao, masterDs, slaveDao, slaveDs)
+            val activeUserIds = chatsToMerge
+              .flatMap(ctm => Seq(ctm.masterCwdOption, ctm.slaveCwdOption))
+              .yieldDefined
+              .flatMap(_.chat.memberIds)
+              .toSet
+            val selectUsersDialog = new SelectMergeUsersDialog(masterDao, masterDs, slaveDao, slaveDs, activeUserIds)
             selectUsersDialog.visible = true
             selectUsersDialog.selection match {
               case Some(usersToMerge) =>

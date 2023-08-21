@@ -222,7 +222,7 @@ class DatasetMerger(
   }
 
   def merge(
-      usersToMerge: Seq[UserMergeOption],
+      explicitUsersToMerge: Seq[UserMergeOption],
       chatsToMerge: Seq[ChatMergeOption]
   ): Dataset = {
     StopWatch.measureAndCall {
@@ -236,6 +236,24 @@ class DatasetMerger(
         )
         masterDao.insertDataset(newDs)
 
+        // Account for users who were skipped from usersToMerge due to their chat merge skipped, treated as Keep
+        val usersToMerge: Seq[UserMergeOption] = {
+          val usersToKeep = {
+            val masterUsersIdsToMerge = explicitUsersToMerge.collect {
+              case UserMergeOption.Keep(mu) => mu.id
+              case UserMergeOption.Replace(mu, _) => mu.id
+            }.toSet
+
+            masterDao
+              .users(masterDs.uuid)
+              .filter(mu => !masterUsersIdsToMerge.contains(mu.id))
+              .map(UserMergeOption.Keep)
+          }
+
+          explicitUsersToMerge ++ usersToKeep
+        }
+
+        // Sanity check
         for {
           firstMasterChat <- chatsToMerge.find(_.masterCwdOption.isDefined)
           masterCwd <- firstMasterChat.masterCwdOption
