@@ -45,11 +45,11 @@ object LangUtils extends Logging {
         !s.startsWith("/Users/") &&
         !s.startsWith("/var/"),
         s"$s is not a relative path!")
-      if (s.startsWith("/")) {
+      (if (s.startsWith("/") || s.startsWith("\\")) {
         s.drop(1)
       } else {
         s
-      }
+      }).replace('\\', '/')
     }
   }
 

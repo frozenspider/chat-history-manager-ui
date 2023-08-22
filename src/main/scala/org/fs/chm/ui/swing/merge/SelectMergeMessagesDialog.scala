@@ -333,9 +333,9 @@ private object SelectMergeMessagesDialog {
       }
     })
 
-    val mDao = createSimpleDao("Master", msgs, numUsers)
+    val mDao = createSimpleDao(isMaster = true, "Master", msgs, numUsers)
     val (_, _, _, mCwd, mMsgsI) = getSimpleDaoEntities(mDao)
-    val sDao = createSimpleDao("Slave", msgs, numUsers)
+    val sDao = createSimpleDao(isMaster = false, "Slave", msgs, numUsers)
     val (_, _, _, sCwd, sMsgsI) = getSimpleDaoEntities(sDao)
 
     val mismatches = IndexedSeq(

@@ -650,14 +650,14 @@ class DatasetMergerAnalyzeSpec //
   //
 
   class MergerHelper(msgs1: Seq[Message], msgs2: Seq[Message]) {
-    val (dao1, d1ds, d1root, d1users, d1cwd, d1msgs) = createDaoAndEntities("One", msgs1, maxUserId)
-    val (dao2, d2ds, d2root, d2users, d2cwd, d2msgs) = createDaoAndEntities("Two", msgs2, maxUserId)
+    val (dao1, d1ds, d1root, d1users, d1cwd, d1msgs) = createDaoAndEntities(isMaster = true, "One", msgs1, maxUserId)
+    val (dao2, d2ds, d2root, d2users, d2cwd, d2msgs) = createDaoAndEntities(isMaster = false, "Two", msgs2, maxUserId)
 
     def merger: DatasetMerger =
       new DatasetMerger(dao1, d1ds, dao2, d2ds)
 
-    private def createDaoAndEntities(nameSuffix: String, srcMsgs: Seq[Message], numUsers: Int) = {
-      val dao                     = createSimpleDao(nameSuffix, srcMsgs, numUsers)
+    private def createDaoAndEntities(isMaster: Boolean, nameSuffix: String, srcMsgs: Seq[Message], numUsers: Int) = {
+      val dao                          = createSimpleDao(isMaster, nameSuffix, srcMsgs, numUsers)
       val (ds, root, users, cwd, msgs) = getSimpleDaoEntities(dao)
       (dao, ds, root, users, cwd, msgs)
     }

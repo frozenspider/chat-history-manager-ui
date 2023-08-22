@@ -81,17 +81,18 @@ object TestUtils {
     )
   }
 
-  def createSimpleDao(nameSuffix: String, msgs: Seq[Message], numUsers: Int): MutableChatHistoryDao = {
+  def createSimpleDao(isMaster: Boolean, nameSuffix: String, msgs: Seq[Message], numUsers: Int): MutableChatHistoryDao = {
     val chat  = createGroupChat(noUuid, 1, "One", (1L to numUsers).toSet, msgs.size)
     val users = (1 to numUsers).map(i => createUser(noUuid, i))
-    createDao(nameSuffix, users, ListMap(chat -> msgs.toIndexedSeq))
+    createDao(isMaster, nameSuffix, users, ListMap(chat -> msgs.toIndexedSeq))
   }
 
   def createDao(
+      isMaster: Boolean,
       nameSuffix: String,
       users: Seq[User],
       chatsWithMsgs: ListMap[Chat, Seq[Message]],
-      amendMessage: ((File, Message) => Message) = ((_, m) => m)
+      amendMessage: ((Boolean, File, Message) => Message) = ((_, _, m) => m)
   ): MutableChatHistoryDao = {
     require({
       val userIds = users.map(_.id).toSet
@@ -105,7 +106,7 @@ object TestUtils {
     val users1       = users map (_ copy (dsUuid = ds.uuid))
     val dataPathRoot = Files.createTempDirectory(null).toFile
     dataPathRoot.deleteOnExit()
-    val amend2 = amendMessage.curried(dataPathRoot)
+    val amend2 = amendMessage.curried(isMaster)(dataPathRoot)
     new EagerChatHistoryDao(
       name               = "Dao " + nameSuffix,
       _dataRootFile      = dataPathRoot,
@@ -116,6 +117,12 @@ object TestUtils {
         case (c, ms) => (c.copy(dsUuid = ds.uuid) -> ms.map(amend2).toIndexedSeq)
       }
     ) with EagerMutableDaoTrait
+  }
+
+  def createRandomFile(parent: File): File = {
+    val file = new File(parent, rnd.alphanumeric.take(30).mkString("", "", ".bin"))
+    Files.write(file.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
+    file
   }
 
   def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, DatasetRoot, Seq[User], ChatWithDetails, Seq[Message]) = {

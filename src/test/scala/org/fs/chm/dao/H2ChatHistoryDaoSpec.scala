@@ -222,7 +222,7 @@ class H2ChatHistoryDaoSpec //
   test("message fetching corner cases") {
     freeH2Dao()
 
-    val localTgDao = TestUtils.createSimpleDao("TG", {
+    val localTgDao = TestUtils.createSimpleDao(isMaster = false, "TG", {
       (3 to 7) map (TestUtils.createRegularMessage(_, 1))
     }, 2)
     val localDsUuid = localTgDao.datasets.head.uuid

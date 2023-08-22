@@ -314,9 +314,8 @@ class DatasetMerger(
                 case replace: MessagesMergeOption.Replace => replace.asAdd
                 case etc                                  => etc
               }.map {
-                case MessagesMergeOption.Keep(_, _, Some(firstSlaveMsg), Some(lastSlaveMsg)) =>
-                  batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
                 case MessagesMergeOption.Keep(firstMasterMsg, lastMasterMsg, _, _) =>
+                  // In case of a Keep, we completely ignore slave messages.
                   batchLoadMsgsUntilInc(finalUsers, masterDao, masterDs, cmo.masterCwdOption.get, firstMasterMsg, lastMasterMsg)
                 case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
                   batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
@@ -582,18 +581,18 @@ object DatasetMerger {
         lastSlaveMsgOption: Option[TaggedMessage.S]
     ) extends MessagesMergeOption {
       assert(firstSlaveMsgOption.isDefined == lastSlaveMsgOption.isDefined, (firstSlaveMsgOption, lastSlaveMsgOption))
-      override def firstMasterMsgOption = Some(firstMasterMsg)
-      override def lastMasterMsgOption  = Some(lastMasterMsg)
+      override def firstMasterMsgOption: Option[TaggedMessage.M] = Some(firstMasterMsg)
+      override def lastMasterMsgOption:  Option[TaggedMessage.M] = Some(lastMasterMsg)
     }
 
     case class Add(
         firstSlaveMsg: TaggedMessage.S,
         lastSlaveMsg: TaggedMessage.S
     ) extends MessagesMergeOption {
-      override def firstMasterMsgOption = None
-      override def lastMasterMsgOption  = None
-      override def firstSlaveMsgOption  = Some(firstSlaveMsg)
-      override def lastSlaveMsgOption   = Some(lastSlaveMsg)
+      override def firstMasterMsgOption: Option[TaggedMessage.M] = None
+      override def lastMasterMsgOption:  Option[TaggedMessage.M] = None
+      override def firstSlaveMsgOption:  Option[TaggedMessage.S] = Some(firstSlaveMsg)
+      override def lastSlaveMsgOption:   Option[TaggedMessage.S] = Some(lastSlaveMsg)
     }
 
     case class Replace(
@@ -602,10 +601,10 @@ object DatasetMerger {
         firstSlaveMsg: TaggedMessage.S,
         lastSlaveMsg: TaggedMessage.S
     ) extends MessagesMergeOption {
-      override def firstMasterMsgOption = Some(firstMasterMsg)
-      override def lastMasterMsgOption  = Some(lastMasterMsg)
-      override def firstSlaveMsgOption  = Some(firstSlaveMsg)
-      override def lastSlaveMsgOption   = Some(lastSlaveMsg)
+      override def firstMasterMsgOption: Option[TaggedMessage.M] = Some(firstMasterMsg)
+      override def lastMasterMsgOption:  Option[TaggedMessage.M] = Some(lastMasterMsg)
+      override def firstSlaveMsgOption:  Option[TaggedMessage.S] = Some(firstSlaveMsg)
+      override def lastSlaveMsgOption:   Option[TaggedMessage.S] = Some(lastSlaveMsg)
 
       def asKeep: Keep = Keep(firstMasterMsg, lastMasterMsg, firstSlaveMsgOption, lastSlaveMsgOption)
       def asAdd:  Add  = Add(firstSlaveMsg, lastSlaveMsg)
