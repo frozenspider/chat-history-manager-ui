@@ -47,8 +47,10 @@ class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
     log.info(s"Sending gRPC parse request: ${request}")
     myselfChooserServer
     StopWatch.measureAndCall {
-      val blockingStub = HistoryLoaderGrpc.blockingStub(channel)
-      val response: ParseHistoryFileResponse = blockingStub.parseHistoryFile(request)
+      val response: ParseHistoryFileResponse = tryWrappingExceptions {
+        val blockingStub = HistoryLoaderGrpc.blockingStub(channel)
+        blockingStub.parseHistoryFile(request)
+      }
       val root = new JFile(response.rootFile).getAbsoluteFile
       require(root.exists, s"Dataset root ${root} does not exist!")
       val chatsWithMessagesLM: ListMap[Chat, IndexedSeq[Message]] =
@@ -82,6 +84,17 @@ class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
         case ex: Exception =>
           Future.failed(ex)
       }
+    }
+  }
+
+  private def tryWrappingExceptions[T](block: => T): T = {
+    try {
+      block
+    } catch {
+      case ex: io.grpc.StatusRuntimeException if ex.getStatus.getCode == io.grpc.Status.Code.UNAVAILABLE =>
+        throw new IllegalStateException(s"gRPC parsing server is not running at port $rpcPort")
+      case ex =>
+        throw ex
     }
   }
 }
