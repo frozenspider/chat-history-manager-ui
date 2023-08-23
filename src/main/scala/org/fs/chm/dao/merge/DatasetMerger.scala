@@ -353,7 +353,7 @@ class DatasetMerger(
   /**
    * Treats master and slave messages as equal if their content mismatches, unless slave message has content and master message doesn't.
    * Needed for matching sequences.
-   * */
+   */
   private def matchesDisregardingContent(mm: TaggedMessage.M,
                                          mCwd: ChatWithDetails,
                                          sm: TaggedMessage.S,

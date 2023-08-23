@@ -308,6 +308,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
   object ContentHtmlRenderer {
     def render(cwd: ChatWithDetails, dsRoot: DatasetRoot, ct: Content): String = {
+      require(dsRoot != null, "dsRoot was null!")
       ct.`val`.value match {
         case ct: ContentSticker       => renderSticker(ct, dsRoot)
         case ct: ContentPhoto         => renderPhoto(ct, dsRoot)

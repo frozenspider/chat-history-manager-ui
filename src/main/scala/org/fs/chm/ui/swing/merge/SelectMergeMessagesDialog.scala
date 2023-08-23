@@ -38,13 +38,15 @@ class SelectMergeMessagesDialog(
 ) extends CustomDialog[IndexedSeq[MessagesMergeOption]](takeFullHeight = true) {
   import SelectMergeMessagesDialog._
 
+  // Values here are lazy because they are used from the parent init code.
+
   private lazy val MaxMessageWidth = 500
 
   private lazy val originalTitle =
     s"Select messages to merge (${masterCwd.chat.nameOrUnnamed})"
 
-  private val masterRoot = masterDao.datasetRoot(masterCwd.dsUuid)
-  private val slaveRoot  = slaveDao.datasetRoot(slaveCwd.dsUuid)
+  private lazy val masterRoot = masterDao.datasetRoot(masterCwd.dsUuid)
+  private lazy val slaveRoot  = slaveDao.datasetRoot(slaveCwd.dsUuid)
 
   {
     title = originalTitle

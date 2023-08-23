@@ -31,6 +31,9 @@ class SelectMergeUsersDialog(
     slaveDs: Dataset,
     activeUserIds: Set[Long]
 ) extends CustomDialog[Seq[UserMergeOption]](takeFullHeight = true) {
+
+  // Values here are lazy because they are used from the parent init code.
+
   private lazy val originalTitle = "Select users to merge"
 
   {
