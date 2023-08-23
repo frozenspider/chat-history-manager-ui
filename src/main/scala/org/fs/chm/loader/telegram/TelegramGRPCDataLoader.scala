@@ -93,8 +93,6 @@ class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
     } catch {
       case ex: io.grpc.StatusRuntimeException if ex.getStatus.getCode == io.grpc.Status.Code.UNAVAILABLE =>
         throw new IllegalStateException(s"gRPC parsing server is not running at port $rpcPort")
-      case ex =>
-        throw ex
     }
   }
 }

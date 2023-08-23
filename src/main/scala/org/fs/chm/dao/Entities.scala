@@ -66,6 +66,7 @@ object Entities {
       case RteItalic(text, _)                => text
       case RteUnderline(text, _)             => text
       case RteStrikethrough(text, _)         => text
+      case RteSpoiler(text, _)               => text
       case RteLink(textOpt, href, hiddem, _) => (textOpt getOrElse "") + " " + href
       case RtePrefmtInline(text, _)          => text
       case RtePrefmtBlock(text, langOpt, _)  => text
@@ -379,6 +380,9 @@ object Entities {
     def makeStrikethrough(text: String): RichTextElement =
       RichTextElement(RichTextElement.Val.Strikethrough(RteStrikethrough(text)), Some(normalizeSeachableString(text)))
 
+    def makeSpoiler(text: String): RichTextElement =
+      RichTextElement(RichTextElement.Val.Spoiler(RteSpoiler(text)), Some(normalizeSeachableString(text)))
+
     def makeLink(textOption: Option[String], href: String, hidden: Boolean): RichTextElement = {
       val searchableString = (normalizeSeachableString(textOption getOrElse "") + " " + href).trim
       RichTextElement(RichTextElement.Val.Link(RteLink(
@@ -408,6 +412,7 @@ object Entities {
         case el: RteItalic        => el.text.toOption
         case el: RteUnderline     => el.text.toOption
         case el: RteStrikethrough => el.text.toOption
+        case el: RteSpoiler       => el.text.toOption
         case el: RteLink          => el.textOption
         case el: RtePrefmtInline  => el.text.toOption
         case el: RtePrefmtBlock   => el.text.toOption

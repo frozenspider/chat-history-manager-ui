@@ -213,6 +213,9 @@ trait TelegramDataLoaderCommon {
         case "strikethrough" =>
           require(values.keys == Set("type", "text"), s"Unexpected strikethrough format: $jo")
           RichText.makeStrikethrough(values("text").asInstanceOf[String])
+        case "spoiler" =>
+          require(values.keys == Set("type", "text"), s"Unexpected strikethrough format: $jo")
+          RichText.makeSpoiler(values("spoiler").asInstanceOf[String])
         case "unknown" =>
           require(values.keys == Set("type", "text"), s"Unexpected unknown format: $jo")
           // Unknown is rendered as plaintext in telegram

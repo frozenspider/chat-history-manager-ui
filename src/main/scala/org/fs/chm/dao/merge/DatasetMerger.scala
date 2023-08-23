@@ -440,35 +440,6 @@ class DatasetMerger(
       )
   }
 
-  private sealed trait IterationState
-  private object IterationState {
-    case object NoState extends IterationState
-
-    sealed trait StateInProgress extends IterationState
-    case class MatchInProgress(
-        prevMasterMsgOption: Option[TaggedMessage.M],
-        startMasterMsg: TaggedMessage.M,
-        prevSlaveMsgOption: Option[TaggedMessage.S],
-        startSlaveMsg: TaggedMessage.S
-    ) extends StateInProgress
-    case class RetentionInProgress(
-        prevMasterMsgOption: Option[TaggedMessage.M],
-        startMasterMsg: TaggedMessage.M,
-        prevSlaveMsgOption: Option[TaggedMessage.S]
-    ) extends StateInProgress
-    case class AdditionInProgress(
-        prevMasterMsgOption: Option[TaggedMessage.M],
-        prevSlaveMsgOption: Option[TaggedMessage.S],
-        startSlaveMsg: TaggedMessage.S
-    ) extends StateInProgress
-    case class ConflictInProgress(
-        prevMasterMsgOption: Option[TaggedMessage.M],
-        startMasterMsg: TaggedMessage.M,
-        prevSlaveMsgOption: Option[TaggedMessage.S],
-        startSlaveMsg: TaggedMessage.S
-    ) extends StateInProgress
-  }
-
   /** Fixup messages who have 'members' field, to make them comply with resolved/final user names. */
   def fixupMessageWithMembers(cwd: ChatWithDetails, finalUsers: Seq[User])(message: Message): Message = {
     def fixupMembers(members: Seq[String]): Seq[String] = {
@@ -529,6 +500,35 @@ class DatasetMerger(
 
 object DatasetMerger {
   protected[merge] val BatchSize = 1000
+
+  private sealed trait IterationState
+  private object IterationState {
+    case object NoState extends IterationState
+
+    sealed trait StateInProgress extends IterationState
+    case class MatchInProgress(
+        prevMasterMsgOption: Option[TaggedMessage.M],
+        startMasterMsg: TaggedMessage.M,
+        prevSlaveMsgOption: Option[TaggedMessage.S],
+        startSlaveMsg: TaggedMessage.S
+    ) extends StateInProgress
+    case class RetentionInProgress(
+        prevMasterMsgOption: Option[TaggedMessage.M],
+        startMasterMsg: TaggedMessage.M,
+        prevSlaveMsgOption: Option[TaggedMessage.S]
+    ) extends StateInProgress
+    case class AdditionInProgress(
+        prevMasterMsgOption: Option[TaggedMessage.M],
+        prevSlaveMsgOption: Option[TaggedMessage.S],
+        startSlaveMsg: TaggedMessage.S
+    ) extends StateInProgress
+    case class ConflictInProgress(
+        prevMasterMsgOption: Option[TaggedMessage.M],
+        startMasterMsg: TaggedMessage.M,
+        prevSlaveMsgOption: Option[TaggedMessage.S],
+        startSlaveMsg: TaggedMessage.S
+    ) extends StateInProgress
+  }
 
   /** Represents a single merge decision: a user that should be added, retained, merged (or skipped otherwise) */
   sealed abstract class UserMergeOption(val userToInsert: User)
