@@ -18,8 +18,11 @@ class ChatDetailsPane(
     val data: Seq[(String, String)] = Seq(
       ("Name:", Some(cwd.chat.nameOrUnnamed)),
       ("Type:", Some(cwd.chat.tpe match {
-        case ChatType.Personal     => "Personal"
-        case ChatType.PrivateGroup => "Private Group"
+        case ChatType.Personal     =>
+          val userId = cwd.chat.memberIds.find(_ != dao.myself(cwd.dsUuid).id).getOrElse(Unknown)
+          s"Personal (User ID #$userId)"
+        case ChatType.PrivateGroup =>
+          "Private Group"
       })),
       ("Members:", cwd.chat.tpe match {
         case ChatType.PrivateGroup =>

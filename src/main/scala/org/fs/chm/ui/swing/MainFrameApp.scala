@@ -263,7 +263,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     val chooser = DataLoaders.openChooser
     for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
       val lastFile = new File(lastFileString)
-      chooser.peer.setCurrentDirectory(lastFile.existingDir)
+      chooser.peer.setCurrentDirectory(lastFile.nearestExistingDir)
       chooser.selectedFile = lastFile
     }
     chooser.showOpenDialog(null) match {
@@ -322,7 +322,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     val chooser = DataLoaders.saveAsChooser
     for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
       val lastFile = new File(lastFileString)
-      chooser.peer.setCurrentDirectory(lastFile.existingDir)
+      chooser.peer.setCurrentDirectory(lastFile.nearestExistingDir)
     }
     chooser.showOpenDialog(null) match {
       case FileChooser.Result.Cancel => // NOOP
@@ -351,7 +351,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
       new DaoItem(
         dao,
         None, { ds =>
-          dao.users(ds.uuid).zipWithIndex map {
+          dao.users(ds.uuid).sortBy(_.id).zipWithIndex map {
             case (u, i) =>
               val pane = new UserDetailsPane(dao, u, false, Some(this))
               for (el <- Seq(pane.firstNameC, pane.lastNameC)) {
