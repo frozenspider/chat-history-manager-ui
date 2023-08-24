@@ -55,9 +55,9 @@ object LangUtils extends Logging {
 
   implicit class RichJFile(f: JFile) {
     @tailrec
-    final def existingDir: JFile = {
+    final def nearestExistingDir: JFile = {
       if (f.exists && f.isDirectory) f
-      else f.getParentFile.existingDir
+      else f.getParentFile.nearestExistingDir
     }
 
     def bytes: Array[Byte] =

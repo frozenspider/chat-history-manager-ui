@@ -311,13 +311,14 @@ class DatasetMerger(
                 .map(mb => (slaveDao.datasetRoot(slaveDs.uuid), mb))
             case ChatMergeOption.Combine(mc, sc, resolution) =>
               resolution.map {
-                case replace: MessagesMergeOption.Replace => replace.asAdd
-                case etc                                  => etc
-              }.map {
                 case MessagesMergeOption.Keep(firstMasterMsg, lastMasterMsg, _, _) =>
                   // In case of a Keep, we completely ignore slave messages.
                   batchLoadMsgsUntilInc(finalUsers, masterDao, masterDs, cmo.masterCwdOption.get, firstMasterMsg, lastMasterMsg)
                 case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
+                  batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
+                case MessagesMergeOption.Replace(firstMasterMsg, lastMasterMsg, firstSlaveMsg, lastSlaveMsg) =>
+                  // Treat exactly as Add
+                  // TODO: Should we analyze content and make sure nothing is lost?
                   batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
                 case _ => throw new MatchError("Impossible!")
               }.toStream.flatten
@@ -607,7 +608,6 @@ object DatasetMerger {
       override def lastSlaveMsgOption:   Option[TaggedMessage.S] = Some(lastSlaveMsg)
 
       def asKeep: Keep = Keep(firstMasterMsg, lastMasterMsg, firstSlaveMsgOption, lastSlaveMsgOption)
-      def asAdd:  Add  = Add(firstSlaveMsg, lastSlaveMsg)
     }
   }
 }

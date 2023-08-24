@@ -22,6 +22,9 @@ object TestUtils {
   val baseDate = DateTime.parse("2019-01-02T11:15:21")
   val rnd      = new Random()
 
+  def makeTempDir(): File =
+    Files.createTempDirectory("chm-tmp").toFile
+
   def createUser(dsUuid: PbUuid, idx: Int): User =
     User(
       dsUuid            = dsUuid,
@@ -125,7 +128,7 @@ object TestUtils {
     file
   }
 
-  def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, DatasetRoot, Seq[User], ChatWithDetails, Seq[Message]) = {
+  def getSimpleDaoEntities(dao: ChatHistoryDao): (Dataset, DatasetRoot, Seq[User], ChatWithDetails, IndexedSeq[Message]) = {
     val ds     = dao.datasets.head
     val dsRoot = dao.datasetRoot(ds.uuid)
     val users  = dao.users(ds.uuid)

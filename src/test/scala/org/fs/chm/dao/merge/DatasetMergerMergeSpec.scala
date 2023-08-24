@@ -309,7 +309,7 @@ class DatasetMergerMergeSpec //
             firstSlaveMsg  = helper.d2msgs.bySrcId(2),
             lastSlaveMsg   = helper.d2msgs.bySrcId(bp1)
           ),
-          // Keep, with added messages specified - should act as replace
+          // Keep, with added messages specified - should act as normal keep
           MessagesMergeOption.Keep(
             firstMasterMsg      = helper.d1msgs.bySrcId(bp1 + 1),
             lastMasterMsg       = helper.d1msgs.bySrcId(bp2),
@@ -340,13 +340,13 @@ class DatasetMergerMergeSpec //
     assert((newMessages(0), helper.d1root, helper.d1cwd) =~= (helper.d2msgs.bySrcId(2), helper.d2root, helper.d2cwd))
     val (expectedMessagesWithRoots, expectedFiles) = {
       val msgs1 = helper.d2msgs.slice(1, bp1).map(m => (m, helper.d2root, helper.d2cwd))
-      val msgs2 = helper.d2msgs.slice(bp1, bp2).map(m => (m, helper.d2root, helper.d2cwd))
+      val msgs2 = helper.d1msgs.slice(bp1, bp2).map(m => (m, helper.d2root, helper.d2cwd))
       val msgs3 = helper.d1msgs.slice(bp2, bp3).map(m => (m, helper.d1root, helper.d1cwd))
       val msgs4 = helper.d2msgs.slice(bp3, maxId - 1).map(m => (m, helper.d2root, helper.d2cwd))
       (
         msgs1 ++ msgs2 ++ msgs3 ++ msgs4,
         (msgsPaths(helper.dao2, helper.d2ds, msgs1.map(_._1))
-          ++ msgsPaths(helper.dao2, helper.d2ds, msgs2.map(_._1))
+          ++ msgsPaths(helper.dao1, helper.d1ds, msgs2.map(_._1))
           ++ msgsPaths(helper.dao1, helper.d1ds, msgs3.map(_._1))
           ++ msgsPaths(helper.dao2, helper.d2ds, msgs4.map(_._1)))
       )
@@ -494,21 +494,21 @@ class DatasetMergerMergeSpec //
     }
     require(populateOldMessages || populateNewMessages, "No messages to populate, that's not how it's supposed to be used")
 
-    val oldUsers = (1 to 4) map (createUser(noUuid, _))
-    val newUsers = oldUsers map (u => u.copy(lastNameOption = Some(u.lastNameOption.get + " (new name)")))
+    val masterUsers = (1 to 4) map (createUser(noUuid, _))
+    val slaveUsers  = masterUsers map (u => u.copy(lastNameOption = Some(u.lastNameOption.get + " (new name)")))
 
     val helper = {
-      val groupChatStub = createGroupChat(noUuid, 1, "GC", oldUsers.map(_.id), 9999)
+      val groupChatStub = createGroupChat(noUuid, 1, "GC", masterUsers.map(_.id), 9999)
 
-      val oldMessages = if (populateOldMessages) makeMessages(oldUsers, groupChatStub.nameOrUnnamed) else Seq.empty
-      val newMessages = if (populateNewMessages) makeMessages(newUsers, groupChatStub.nameOrUnnamed) else Seq.empty
+      val masterMsgs = if (populateOldMessages) makeMessages(masterUsers, groupChatStub.nameOrUnnamed) else Seq.empty
+      val slaveMsgs  = if (populateNewMessages) makeMessages(slaveUsers, groupChatStub.nameOrUnnamed) else Seq.empty
 
-      val oldGroupChat = groupChatStub.copy(msgCount = oldMessages.size)
-      val newGroupChat = groupChatStub.copy(msgCount = newMessages.size)
+      val masterGroupChat = groupChatStub.copy(msgCount = masterMsgs.size)
+      val slaveGroupChat  = groupChatStub.copy(msgCount = slaveMsgs.size)
 
       new H2MergerHelper(
-        oldUsers, ListMap(oldGroupChat -> oldMessages),
-        newUsers, ListMap(newGroupChat -> newMessages),
+        masterUsers, ListMap(masterGroupChat -> masterMsgs),
+        slaveUsers,  ListMap(slaveGroupChat  -> slaveMsgs),
         amendMessageWithContent = (_, _, m) => m
       )
     }
@@ -521,9 +521,9 @@ class DatasetMergerMergeSpec //
       UserMergeOption.Replace(helper.d1users.find(_.id == 4).get, helper.d2users.find(_.id == 4).get),
     )
 
-    val expectedMembers = Seq(oldUsers(0), oldUsers(1), newUsers(2), newUsers(3)).map(_.prettyName)
-    assert(expectedMembers !== oldUsers.map(_.prettyName), clue)
-    assert(expectedMembers !== newUsers.map(_.prettyName), clue)
+    val expectedMembers = Seq(masterUsers(0), masterUsers(1), slaveUsers(2), slaveUsers(3)).map(_.prettyName)
+    assert(expectedMembers !== masterUsers.map(_.prettyName), clue)
+    assert(expectedMembers !== slaveUsers.map(_.prettyName), clue)
 
     val chatMerges = makeChatMerges(helper)
     val newDs = helper.merger.merge(usersResolution, chatMerges)
@@ -543,6 +543,56 @@ class DatasetMergerMergeSpec //
     initH2Dao()
   }
 
+  test("merge chats - content should not be discarded") {
+    val helper = {
+      val msgs       = for (i <- 1 to 4) yield createRegularMessage(i, 1)
+      val tmpDir     = makeTempDir().asInstanceOf[DatasetRoot]
+      val addContent = addRandomFileContent(tmpDir)(_)
+
+      // New messages: one has no content, the other has content missing
+      val masterMsgs = msgs.map(addContent)
+      val slaveMsgs  = Seq(msgs(0), addContent(msgs(1)), msgs(2), addContent(msgs(3)))
+      slaveMsgs.foreach(_.files(tmpDir).foreach(_.delete()))
+      assert(masterMsgs.size === slaveMsgs.size)
+
+      H2MergerHelper.fromMessages(masterMsgs, slaveMsgs, (_, _, m) => m)
+    }
+
+    val chatMerges = Seq[ChatMergeOption](
+      ChatMergeOption.Combine(
+        helper.d1cwd,
+        helper.d2cwd,
+        IndexedSeq(
+          MessagesMergeOption.Keep(
+            firstMasterMsg      = tag(helper.d1msgs(0)),
+            lastMasterMsg       = tag(helper.d1msgs(3)),
+            firstSlaveMsgOption = Some(tag(helper.d2msgs(0))),
+            lastSlaveMsgOption  = Some(tag(helper.d2msgs(3)))
+          ),
+          /* MessagesMergeOption.Replace(
+            firstMasterMsg = tag(helper.d1msgs(2)),
+            lastMasterMsg  = tag(helper.d1msgs(3)),
+            firstSlaveMsg  = tag(helper.d2msgs(2)),
+            lastSlaveMsg   = tag(helper.d2msgs(3))
+          ) */
+        )
+      )
+    )
+
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
+    val newMsgs = {
+      val newChats = helper.dao1.chats(newDs.uuid)
+      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+    }
+
+    def getContentOption(m: Message) = m.typed.regular.get.contentOption
+    assert(newMsgs.size === 4)
+    assert(getContentOption(newMsgs(0)) === getContentOption(helper.d1msgs(0)))
+    assert(getContentOption(newMsgs(1)) === getContentOption(helper.d1msgs(1)))
+    assert(getContentOption(newMsgs(2)) === getContentOption(helper.d1msgs(2)))
+    assert(getContentOption(newMsgs(3)) === getContentOption(helper.d1msgs(3)))
+  }
+
   //
   // Helpers
   //
@@ -555,7 +605,7 @@ class DatasetMergerMergeSpec //
     msgs.flatMap(_.files(dao.datasetRoot(ds.uuid))).toSet
   }
 
-  def assertFiles(dao: ChatHistoryDao, ds: Dataset, expectedFiles: Set[File]) = {
+  def assertFiles(dao: ChatHistoryDao, ds: Dataset, expectedFiles: Set[File]): Unit = {
     val files = dao.datasetFiles(ds.uuid)
     assert(files.size === expectedFiles.size)
     // Given that expected files might come from different DS's, we rely on random names being unique and sort by name
@@ -574,6 +624,26 @@ class DatasetMergerMergeSpec //
       }
     }
   }
+
+  def addRandomFileContent(path: File)(msg: Message): Message =
+      msg.copy(typed = msg.typed match {
+        case Message.Typed.Regular(msg) =>
+          val file1 = createRandomFile(path)
+          val file2 = createRandomFile(path)
+          val content = Content(Content.Val.File(ContentFile(
+            pathOption          = Some(file1.toRelativePath(path)),
+            thumbnailPathOption = Some(file2.toRelativePath(path)),
+            mimeTypeOption      = Some("mt"),
+            title               = "t",
+            performerOption     = Some("p"),
+            durationSecOption   = Some(1),
+            widthOption         = Some(2),
+            heightOption        = Some(3),
+          )))
+          Message.Typed.Regular(msg.copy(contentOption = Some(content)))
+        case _ =>
+          throw new MatchError("Unexpected message type for " + msg)
+      })
 
   class H2MergerHelper(
       users1: Seq[User],
@@ -610,7 +680,7 @@ class DatasetMergerMergeSpec //
     def fromMessages(
       msgs1: Seq[Message],
       msgs2: Seq[Message],
-      amendMessagesWithContent: ((Boolean, File, Message) => Message) = H2MergerHelper.amendMessageWithContent
+      amendMessagesWithContent: ((Boolean, File, Message) => Message) = amendMessageWithContent
     ): H2MergerHelper = {
       val users1 = (1 to math.max(msgs1.map(_.fromId).max.toInt, 2)).map(i => createUser(noUuid, i))
       val users2 = (1 to math.max(msgs2.map(_.fromId).max.toInt, 2)).map(i => createUser(noUuid, i))
@@ -619,25 +689,7 @@ class DatasetMergerMergeSpec //
       new H2MergerHelper(users1, chatMsgs1, users2, chatMsgs2, amendMessagesWithContent)
     }
 
-    def amendMessageWithContent(isLeft: Boolean, path: File, msg: Message): Message = {
-      msg.copy(typed = msg.typed match {
-        case Message.Typed.Regular(msg) =>
-          val file1 = createRandomFile(path)
-          val file2 = createRandomFile(path)
-          val content = Content(Content.Val.File(ContentFile(
-            pathOption          = Some(file1.toRelativePath(path)),
-            thumbnailPathOption = Some(file2.toRelativePath(path)),
-            mimeTypeOption      = Some("mt"),
-            title               = "t",
-            performerOption     = Some("p"),
-            durationSecOption   = Some(1),
-            widthOption         = Some(2),
-            heightOption        = Some(3),
-          )))
-          Message.Typed.Regular(msg.copy(contentOption = Some(content)))
-        case _ =>
-          throw new MatchError("Unexpected message type for " + msg)
-      })
-    }
+    private def amendMessageWithContent(isLeft: Boolean, path: File, msg: Message): Message =
+      addRandomFileContent(path)(msg)
   }
 }
