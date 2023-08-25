@@ -224,6 +224,7 @@ object Entities {
             membersPracticallyEquals(m1.value.members, v1._3, m2.value.members, v2._3)
         case (m1: GroupEditTitle,     m2: GroupEditTitle)     => m1 == m2
         case (m1: GroupEditPhoto,     m2: GroupEditPhoto)     => (m1.value.photo, v1._2) =~= (m2.value.photo, v2._2)
+        case (m1: GroupDeletePhoto,   m2: GroupDeletePhoto)   => m1 == m2
         case (m1: GroupInviteMembers, m2: GroupInviteMembers) =>
           m1.value.copy(members = Seq.empty) == m2.value.copy(members = Seq.empty) &&
             membersPracticallyEquals(m1.value.members, v1._3, m2.value.members, v2._3)
@@ -332,6 +333,7 @@ object Entities {
             case _: MessageService.Val.GroupCreate        => Set.empty
             case _: MessageService.Val.GroupEditTitle     => Set.empty
             case m: MessageService.Val.GroupEditPhoto     => Set(m.value.photo.pathOption)
+            case _: MessageService.Val.GroupDeletePhoto   => Set.empty
             case _: MessageService.Val.GroupInviteMembers => Set.empty
             case _: MessageService.Val.GroupRemoveMembers => Set.empty
             case _: MessageService.Val.GroupMigrateFrom   => Set.empty

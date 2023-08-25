@@ -179,6 +179,7 @@ class ChatListItem(
           case _: MessageService.Val.GroupCreate        => "(group created)"
           case _: MessageService.Val.GroupEditTitle     => "(title changed)"
           case _: MessageService.Val.GroupEditPhoto     => "(photo changed)"
+          case _: MessageService.Val.GroupDeletePhoto   => "(photo deleted)"
           case _: MessageService.Val.GroupInviteMembers => "(invited members)"
           case _: MessageService.Val.GroupRemoveMembers => "(removed members)"
           case _: MessageService.Val.GroupMigrateFrom   => "(migrated from group)"

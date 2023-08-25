@@ -986,6 +986,8 @@ class H2ChatHistoryDao(
               height     = rm.heightOption.get
             )
           ))))
+        case "service_delete_photo" =>
+          Message.Typed.Service(MessageService(MessageService.Val.GroupDeletePhoto(MessageServiceGroupDeletePhoto())))
         case "service_invite_group_members" =>
           Message.Typed.Service(MessageService(MessageService.Val.GroupInviteMembers(MessageServiceGroupInviteMembers(
             members = rm.members
@@ -1207,6 +1209,10 @@ class H2ChatHistoryDao(
             pathOption   = photo.pathOption map (_.makeRelativePath),
             widthOption  = Some(photo.width),
             heightOption = Some(photo.height)
+          ) -> None
+        case MessageService(MessageService.Val.GroupDeletePhoto(_), _) =>
+          template.copy(
+            messageType  = "service_delete_photo",
           ) -> None
         case MessageService(MessageService.Val.GroupInviteMembers(m), _) =>
           template.copy(

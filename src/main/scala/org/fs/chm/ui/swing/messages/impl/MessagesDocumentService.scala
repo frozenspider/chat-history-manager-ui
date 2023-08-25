@@ -191,10 +191,11 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       val content = sm.`val`.value match {
         case sm: MessageServicePhoneCall          => renderPhoneCall(sm)
         case sm: MessageServicePinMessage         => "Pinned message" + renderSourceMessage(dao, cwd, dsRoot, sm.messageIdTyped)
-        case sm: MessageServiceClearHistory       => s"History cleared"
+        case sm: MessageServiceClearHistory       => "History cleared"
         case sm: MessageServiceGroupCreate        => renderCreateGroupMessage(cwd, sm)
         case sm: MessageServiceGroupEditTitle     => renderEditTitleMessage(sm)
         case sm: MessageServiceGroupEditPhoto     => renderEditPhotoMessage(sm, dsRoot)
+        case sm: MessageServiceGroupDeletePhoto   => "Deleted group photo"
         case sm: MessageServiceGroupInviteMembers => renderGroupInviteMembersMessage(cwd, sm)
         case sm: MessageServiceGroupRemoveMembers => renderGroupRemoveMembersMessage(cwd, sm)
         case sm: MessageServiceGroupMigrateFrom   => renderMigratedFrom(sm)
