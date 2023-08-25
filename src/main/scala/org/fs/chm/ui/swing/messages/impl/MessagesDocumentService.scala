@@ -99,8 +99,8 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
   //
 
   def renderMessageHtml(dao: ChatHistoryDao, cwd: ChatWithDetails, dsRoot: DatasetRoot, m: Message, isQuote: Boolean = false): String = {
-    val msgHtml: String = m.typed.value match {
-      case rm: MessageRegular =>
+    val msgHtml: String = m.typed match {
+      case Message.Typed.Regular(rm) =>
         val textHtmlOption = RichTextHtmlRenderer.render(m.text)
         val contentHtmlOption = rm.contentOption map { ct =>
           s"""<div class="content">${ContentHtmlRenderer.render(cwd, dsRoot, ct)}</div>"""
@@ -112,7 +112,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
           rm.replyToMessageIdTypedOption map (id => renderSourceMessage(dao, cwd, dsRoot, id))
         }
         Seq(fwdFromHtmlOption, replySrcHtmlOption, textHtmlOption, contentHtmlOption).yieldDefined.mkString
-      case sm: MessageService =>
+      case Message.Typed.Service(Some(sm)) =>
         ServiceMessageHtmlRenderer.render(dao, cwd, dsRoot, m, sm)
     }
     val titleNameHtml = renderTitleName(cwd, Some(m.fromId), None)
@@ -188,7 +188,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
   object ServiceMessageHtmlRenderer {
     def render(dao: ChatHistoryDao, cwd: ChatWithDetails, dsRoot: DatasetRoot, m: Message, sm: MessageService): String = {
       val textHtmlOption = RichTextHtmlRenderer.render(m.text)
-      val content = sm.`val`.value match {
+      val content = sm match {
         case sm: MessageServicePhoneCall          => renderPhoneCall(sm)
         case sm: MessageServicePinMessage         => "Pinned message" + renderSourceMessage(dao, cwd, dsRoot, sm.messageIdTyped)
         case sm: MessageServiceClearHistory       => "History cleared"
@@ -311,7 +311,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
   object ContentHtmlRenderer {
     def render(cwd: ChatWithDetails, dsRoot: DatasetRoot, ct: Content): String = {
       require(dsRoot != null, "dsRoot was null!")
-      ct.`val`.value match {
+      ct match {
         case ct: ContentSticker       => renderSticker(ct, dsRoot)
         case ct: ContentPhoto         => renderPhoto(ct, dsRoot)
         case ct: ContentVoiceMsg      => renderVoiceMsg(ct, dsRoot)

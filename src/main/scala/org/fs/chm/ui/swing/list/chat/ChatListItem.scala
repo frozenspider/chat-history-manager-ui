@@ -13,11 +13,7 @@ import javax.swing.border.LineBorder
 import org.apache.commons.lang3.StringEscapeUtils
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
-import org.fs.chm.protobuf.ChatType
-import org.fs.chm.protobuf.Content
-import org.fs.chm.protobuf.Message
-import org.fs.chm.protobuf.MessageRegular
-import org.fs.chm.protobuf.MessageService
+import org.fs.chm.protobuf._
 import org.fs.chm.ui.swing.list.DaoItem
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.utility.EntityUtils
@@ -157,34 +153,34 @@ class ChatListItem(
             .flatMap(_.prettyNameOption)
         (fromNameOption.getOrElse(Unnamed) + ": ")
       }
-    val text: String = msg.typed.value match {
-      case msgRegular: MessageRegular =>
-        msgRegular.contentOption map (_.`val`) match {
-          case None                               => msg.searchableString.get
-          case Some(s: Content.Val.Sticker)       => s.value.emojiOption.map(_ + " ").getOrElse("") + "(sticker)"
-          case Some(_: Content.Val.Photo)         => "(photo)"
-          case Some(_: Content.Val.VoiceMsg)      => "(voice)"
-          case Some(_: Content.Val.VideoMsg)      => "(video)"
-          case Some(_: Content.Val.Animation)     => "(animation)"
-          case Some(_: Content.Val.File)          => "(file)"
-          case Some(_: Content.Val.Location)      => "(location)"
-          case Some(_: Content.Val.Poll)          => "(poll)"
-          case Some(_: Content.Val.SharedContact) => "(contact)"
+    val text: String = msg.typed match {
+      case Message.Typed.Regular(msgRegular) =>
+        msgRegular.contentOption match {
+          case None                          => msg.searchableString.get
+          case Some(s: ContentSticker)       => s.emojiOption.map(_ + " ").getOrElse("") + "(sticker)"
+          case Some(_: ContentPhoto)         => "(photo)"
+          case Some(_: ContentVoiceMsg)      => "(voice)"
+          case Some(_: ContentVideoMsg)      => "(video)"
+          case Some(_: ContentAnimation)     => "(animation)"
+          case Some(_: ContentFile)          => "(file)"
+          case Some(_: ContentLocation)      => "(location)"
+          case Some(_: ContentPoll)          => "(poll)"
+          case Some(_: ContentSharedContact) => "(contact)"
         }
-      case MessageService(service, _) =>
+      case Message.Typed.Service(Some(service)) =>
         service match {
-          case _: MessageService.Val.PhoneCall          => "(phone call)"
-          case _: MessageService.Val.PinMessage        => "(message pinned)"
-          case _: MessageService.Val.ClearHistory       => "(history cleared)"
-          case _: MessageService.Val.GroupCreate        => "(group created)"
-          case _: MessageService.Val.GroupEditTitle     => "(title changed)"
-          case _: MessageService.Val.GroupEditPhoto     => "(photo changed)"
-          case _: MessageService.Val.GroupDeletePhoto   => "(photo deleted)"
-          case _: MessageService.Val.GroupInviteMembers => "(invited members)"
-          case _: MessageService.Val.GroupRemoveMembers => "(removed members)"
-          case _: MessageService.Val.GroupMigrateFrom   => "(migrated from group)"
-          case _: MessageService.Val.GroupMigrateTo     => "(migrated to group)"
-          case _: MessageService.Val.GroupCall          => "(group call)"
+          case _: MessageServicePhoneCall          => "(phone call)"
+          case _: MessageServicePinMessage         => "(message pinned)"
+          case _: MessageServiceClearHistory       => "(history cleared)"
+          case _: MessageServiceGroupCreate        => "(group created)"
+          case _: MessageServiceGroupEditTitle     => "(title changed)"
+          case _: MessageServiceGroupEditPhoto     => "(photo changed)"
+          case _: MessageServiceGroupDeletePhoto   => "(photo deleted)"
+          case _: MessageServiceGroupInviteMembers => "(invited members)"
+          case _: MessageServiceGroupRemoveMembers => "(removed members)"
+          case _: MessageServiceGroupMigrateFrom   => "(migrated from group)"
+          case _: MessageServiceGroupMigrateTo     => "(migrated to group)"
+          case _: MessageServiceGroupCall          => "(group call)"
         }
     }
     prefix + text.take(50)

@@ -148,8 +148,8 @@ class DatasetMerger(
         val state2 = MatchInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
         iterate(cxt.advanceBoth(), state2, onMismatch)
       case (Some(mm), Some(sm), NoState)
-        if mm.typed.service.flatMap(_.`val`.groupMigrateFrom).isDefined &&
-           sm.typed.service.flatMap(_.`val`.groupMigrateFrom).isDefined &&
+        if mm.typed.service.flatten.flatMap(_.asMessage.sealedValueOptional.groupMigrateFrom).isDefined &&
+           sm.typed.service.flatten.flatMap(_.asMessage.sealedValueOptional.groupMigrateFrom).isDefined &&
            mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption &&
            mm.fromId < 0x100000000L && sm.fromId > 0x100000000L &&
            (mm.copy(fromId = sm.fromId), masterRoot, cxt.mCwd) =~= (sm, slaveRoot, cxt.sCwd) =>
@@ -373,8 +373,8 @@ class DatasetMerger(
             val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(contentOption = None)))
             (mmCmp, masterRoot, mCwd) =~= (smCmp, slaveRoot, sCwd)
         }
-      case (Message.Typed.Service(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(mmPhoto, _)), _)),
-            Message.Typed.Service(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(smPhoto, _)), _))) =>
+      case (Message.Typed.Service(Some(MessageServiceGroupEditPhoto(mmPhoto, _))),
+            Message.Typed.Service(Some(MessageServiceGroupEditPhoto(smPhoto, _)))) =>
         !hasNewContent(mmPhoto, smPhoto)
       case _ =>
         (mm.asInstanceOf[Message], masterRoot, mCwd) =~= (sm, slaveRoot, sCwd)
@@ -450,17 +450,17 @@ class DatasetMerger(
         finalUsers.find(fu => u.exists(_.id == fu.id)).map(_.prettyName).getOrElse(members(idx)))
     }
 
-    def withTypedService(v: MessageService.Val) = message.copy(typed = Message.Typed.Service(MessageService(v)))
+    def withTypedService(v: MessageService) = message.copy(typed = Message.Typed.Service(Some(v)))
 
-    message.typed.service.map(_.`val`) match {
-      case Some(culprit: MessageService.Val.GroupCreate) =>
-        withTypedService(culprit.copy(value = culprit.value.copy(members = fixupMembers(culprit.value.members))))
-      case Some(culprit: MessageService.Val.GroupInviteMembers) =>
-        withTypedService(culprit.copy(value = culprit.value.copy(members = fixupMembers(culprit.value.members))))
-      case Some(culprit: MessageService.Val.GroupRemoveMembers) =>
-        withTypedService(culprit.copy(value = culprit.value.copy(members = fixupMembers(culprit.value.members))))
-      case Some(culprit: MessageService.Val.GroupCall) =>
-        withTypedService(culprit.copy(value = culprit.value.copy(members = fixupMembers(culprit.value.members))))
+    message.typed.service.flatten match {
+      case Some(culprit: MessageServiceGroupCreate) =>
+        withTypedService(culprit.copy(members = fixupMembers(culprit.members)))
+      case Some(culprit: MessageServiceGroupInviteMembers) =>
+        withTypedService(culprit.copy(members = fixupMembers(culprit.members)))
+      case Some(culprit: MessageServiceGroupRemoveMembers) =>
+        withTypedService(culprit.copy(members = fixupMembers(culprit.members)))
+      case Some(culprit: MessageServiceGroupCall) =>
+        withTypedService(culprit.copy(members = fixupMembers(culprit.members)))
       case _ =>
         message
     }

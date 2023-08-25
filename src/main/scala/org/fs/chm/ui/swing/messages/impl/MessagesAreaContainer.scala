@@ -246,9 +246,9 @@ object MessagesAreaContainer {
         {
           val text = Seq(RichText.makePlain(s"Join the call! < Emoji: >👍❤️😄<"));
           // val text = Seq(RichText.makePlain( "An &#128512;awesome &#128515;string with a few &#128521;emojis!"));
-          val typed = Message.Typed.Service(MessageService(MessageService.Val.GroupCall(MessageServiceGroupCall(
+          val typed = Message.Typed.Service(Some(MessageServiceGroupCall(
             members = users map (_.prettyName)
-          ))))
+          )))
           Message(
             internalId       = NoInternalId,
             sourceIdOption   = Some(1L.asInstanceOf[MessageSourceId]),
@@ -265,13 +265,14 @@ object MessagesAreaContainer {
             forwardFromNameOption  = Some("u" + users.head.id),
             replyToMessageIdOption = Some(1L.asInstanceOf[MessageSourceId]),
             contentOption          = Some(
-              Content(Content.Val.Location(ContentLocation(
+              ContentLocation(
                 titleOption       = Some("My Brand New Place"),
                 addressOption     = Some("1 Caesar Ave"),
                 latStr            = "11.11111",
                 lonStr            = "22.22222",
                 durationSecOption = Some(5)
-              ))))
+              )
+            )
           ))
           val text = Seq(RichText.makePlain(s"Sharing my location"))
           Message(

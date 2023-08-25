@@ -124,15 +124,14 @@ class DatasetMergerMergeSpec //
     def makeAnimationContent(path: File): Content = {
       val file1 = createRandomFile(path)
       val file2 = createRandomFile(path)
-      val content = Content(Content.Val.Animation(ContentAnimation(
+      ContentAnimation(
         pathOption          = Some(file1.toRelativePath(path)),
         width               = 111,
         height              = 222,
         mimeType            = "mt",
         durationSecOption   = Some(10),
         thumbnailPathOption = Some(file2.toRelativePath(path))
-      )))
-      content
+      )
     }
 
     def addAnimationToMasterMessage(isMaster: Boolean, path: File, msg: Message): Message = {
@@ -465,19 +464,19 @@ class DatasetMergerMergeSpec //
     def makeMessages(users: Seq[User], groupChatTitle: String) = {
       val members = users.map(_.prettyName)
       val typeds = Seq(
-        Message.Typed.Service(MessageService(MessageService.Val.GroupCreate(MessageServiceGroupCreate(
+        Message.Typed.Service(Some(MessageServiceGroupCreate(
           title   = groupChatTitle,
           members = members
-        )))),
-        Message.Typed.Service(MessageService(MessageService.Val.GroupInviteMembers(MessageServiceGroupInviteMembers(
+        ))),
+        Message.Typed.Service(Some(MessageServiceGroupInviteMembers(
           members = members
-        )))),
-        Message.Typed.Service(MessageService(MessageService.Val.GroupRemoveMembers(MessageServiceGroupRemoveMembers(
+        ))),
+        Message.Typed.Service(Some(MessageServiceGroupRemoveMembers(
           members = members
-        )))),
-        Message.Typed.Service(MessageService(MessageService.Val.GroupCall(MessageServiceGroupCall(
+        ))),
+        Message.Typed.Service(Some(MessageServiceGroupCall(
           members = members
-        ))))
+        )))
       )
       typeds.mapWithIndex((typed, idx) => {
         val text = Seq(RichText.makePlain(s"Message for a group service message ${idx + 1}"))
@@ -532,11 +531,13 @@ class DatasetMergerMergeSpec //
       helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     // New messages will be 4 messages no matter what
+    def serviceValue(m: Message) =
+      m.typed.service.get.get.asMessage.sealedValueOptional
     assert(newMessages.size === (if (populateOldMessages) helper.d1msgs.size else helper.d2msgs.size), clue)
-    assert(newMessages(0).typed.service.get.`val`.groupCreate.get.members        === expectedMembers, clue)
-    assert(newMessages(1).typed.service.get.`val`.groupInviteMembers.get.members === expectedMembers, clue)
-    assert(newMessages(2).typed.service.get.`val`.groupRemoveMembers.get.members === expectedMembers, clue)
-    assert(newMessages(3).typed.service.get.`val`.groupCall.get.members          === expectedMembers, clue)
+    assert(serviceValue(newMessages(0)).groupCreate.get.members        === expectedMembers, clue)
+    assert(serviceValue(newMessages(1)).groupInviteMembers.get.members === expectedMembers, clue)
+    assert(serviceValue(newMessages(2)).groupRemoveMembers.get.members === expectedMembers, clue)
+    assert(serviceValue(newMessages(3)).groupCall.get.members          === expectedMembers, clue)
 
     // As a final step, reset DAO to initial state
     freeH2Dao()
@@ -630,7 +631,7 @@ class DatasetMergerMergeSpec //
         case Message.Typed.Regular(msg) =>
           val file1 = createRandomFile(path)
           val file2 = createRandomFile(path)
-          val content = Content(Content.Val.File(ContentFile(
+          val content = ContentFile(
             pathOption          = Some(file1.toRelativePath(path)),
             thumbnailPathOption = Some(file2.toRelativePath(path)),
             mimeTypeOption      = Some("mt"),
@@ -639,7 +640,7 @@ class DatasetMergerMergeSpec //
             durationSecOption   = Some(1),
             widthOption         = Some(2),
             heightOption        = Some(3),
-          )))
+          )
           Message.Typed.Regular(msg.copy(contentOption = Some(content)))
         case _ =>
           throw new MatchError("Unexpected message type for " + msg)

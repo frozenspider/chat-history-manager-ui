@@ -70,7 +70,7 @@ object TestUtils {
       editTimestampOption    = Some(baseDate.plusMinutes(idx).plusSeconds(5).unixTimestamp),
       replyToMessageIdOption = replyToMessageIdOption,
       forwardFromNameOption  = Some("u" + userId),
-      contentOption          = Some(Content(Content.Val.Poll(ContentPoll(question = s"Hey, ${idx}!"))))
+      contentOption          = Some(ContentPoll(question = s"Hey, ${idx}!"))
     ))
     val text = Seq(RichText.makePlain(s"Hello there, ${idx}!"))
     Message(

@@ -601,10 +601,10 @@ class DatasetMergerAnalyzeSpec //
           editTimestampOption    = Some(baseDate.plusMinutes(10 + idx).unixTimestamp),
           replyToMessageIdOption = None,
           forwardFromNameOption  = Some("some user"),
-          contentOption          = Some(Content(Content.Val.Photo(photo)))
+          contentOption          = Some(photo)
         ))
       } else {
-        Message.Typed.Service(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(photo))))
+        Message.Typed.Service(Some(MessageServiceGroupEditPhoto(photo)))
       }
       val text = Seq(RichText.makePlain(s"Message for a photo $idx"))
       Message(

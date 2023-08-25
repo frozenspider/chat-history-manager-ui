@@ -959,53 +959,53 @@ class H2ChatHistoryDao(
             contentOption          = contents.get(rm.internalId)
           ))
         case "service_phone_call" =>
-          Message.Typed.Service(MessageService(MessageService.Val.PhoneCall(MessageServicePhoneCall(
+          Message.Typed.Service(Some(MessageServicePhoneCall(
             durationSecOption   = rm.durationSecOption,
             discardReasonOption = rm.discardReasonOption
-          ))))
+          )))
         case "service_pin_message" =>
-          Message.Typed.Service(MessageService(MessageService.Val.PinMessage(MessageServicePinMessage(
+          Message.Typed.Service(Some(MessageServicePinMessage(
             messageId = rm.pinnedMessageIdOption.get
-          ))))
+          )))
         case "service_clear_history" =>
-          Message.Typed.Service(MessageService(MessageService.Val.ClearHistory(MessageServiceClearHistory())))
+          Message.Typed.Service(Some(MessageServiceClearHistory()))
         case "service_group_create" =>
-          Message.Typed.Service(MessageService(MessageService.Val.GroupCreate(MessageServiceGroupCreate(
+          Message.Typed.Service(Some(MessageServiceGroupCreate(
             title   = rm.titleOption.get,
             members = rm.members
-          ))))
+          )))
         case "service_edit_title" =>
-          Message.Typed.Service(MessageService(MessageService.Val.GroupEditTitle(MessageServiceGroupEditTitle(
+          Message.Typed.Service(Some(MessageServiceGroupEditTitle(
             title = rm.titleOption.get
-          ))))
+          )))
         case "service_edit_photo" =>
-          Message.Typed.Service(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(
+          Message.Typed.Service(Some(MessageServiceGroupEditPhoto(
             ContentPhoto(
               pathOption = rm.pathOption,
               width      = rm.widthOption.get,
               height     = rm.heightOption.get
             )
-          ))))
+          )))
         case "service_delete_photo" =>
-          Message.Typed.Service(MessageService(MessageService.Val.GroupDeletePhoto(MessageServiceGroupDeletePhoto())))
+          Message.Typed.Service(Some(MessageServiceGroupDeletePhoto()))
         case "service_invite_group_members" =>
-          Message.Typed.Service(MessageService(MessageService.Val.GroupInviteMembers(MessageServiceGroupInviteMembers(
+          Message.Typed.Service(Some(MessageServiceGroupInviteMembers(
             members = rm.members
-          ))))
+          )))
         case "service_group_remove_members" =>
-          Message.Typed.Service(MessageService(MessageService.Val.GroupRemoveMembers(MessageServiceGroupRemoveMembers(
+          Message.Typed.Service(Some(MessageServiceGroupRemoveMembers(
             members = rm.members
-          ))))
+          )))
         case "service_group_migrate_from" =>
-          Message.Typed.Service(MessageService(MessageService.Val.GroupMigrateFrom(MessageServiceGroupMigrateFrom(
+          Message.Typed.Service(Some(MessageServiceGroupMigrateFrom(
             title = rm.titleOption.get
-          ))))
+          )))
         case "service_group_migrate_to" =>
-          Message.Typed.Service(MessageService(MessageService.Val.GroupMigrateTo(MessageServiceGroupMigrateTo())))
+          Message.Typed.Service(Some(MessageServiceGroupMigrateTo()))
         case "service_group_call" =>
-          Message.Typed.Service(MessageService(MessageService.Val.GroupCall(MessageServiceGroupCall(
+          Message.Typed.Service(Some(MessageServiceGroupCall(
             members = rm.members
-          ))))
+          )))
       }
       val text = richTexts.getOrElse(rm.internalId, Seq.empty)
       Message(
@@ -1047,52 +1047,52 @@ class H2ChatHistoryDao(
     }
 
     def toContent(dsUuid: PbUuid, rc: RawContent): Content = {
-      Content(rc.elementType match {
+      rc.elementType match {
         case "sticker" =>
           assert(rc.widthOption.isDefined && rc.heightOption.isDefined, rc)
-          Content.Val.Sticker(ContentSticker(
+          ContentSticker(
             pathOption          = rc.pathOption map (_.makeRelativePath),
             thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
             emojiOption         = rc.emojiOption,
             width               = rc.widthOption.get,
             height              = rc.heightOption.get
-          ))
+          )
         case "photo" =>
           assert(rc.widthOption.isDefined && rc.heightOption.isDefined, rc)
-          Content.Val.Photo(ContentPhoto(
+          ContentPhoto(
             pathOption = rc.pathOption map (_.makeRelativePath),
             width      = rc.widthOption.get,
             height     = rc.heightOption.get,
-          ))
+          )
         case "voice_message" =>
           assert(rc.mimeTypeOption.isDefined, rc)
-          Content.Val.VoiceMsg(ContentVoiceMsg(
+          ContentVoiceMsg(
             pathOption        = rc.pathOption map (_.makeRelativePath),
             mimeType          = rc.mimeTypeOption.get,
             durationSecOption = rc.durationSecOption
-          ))
+          )
         case "video_message" =>
           assert(rc.mimeTypeOption.isDefined && rc.widthOption.isDefined && rc.heightOption.isDefined, rc)
-          Content.Val.VideoMsg(ContentVideoMsg(
+          ContentVideoMsg(
             pathOption          = rc.pathOption map (_.makeRelativePath),
             thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
             mimeType            = rc.mimeTypeOption.get,
             durationSecOption   = rc.durationSecOption,
             width               = rc.widthOption.get,
             height              = rc.heightOption.get
-          ))
+          )
         case "animation" =>
           assert(rc.mimeTypeOption.isDefined && rc.widthOption.isDefined && rc.heightOption.isDefined, rc)
-          Content.Val.Animation(ContentAnimation(
+          ContentAnimation(
             pathOption          = rc.pathOption map (_.makeRelativePath),
             thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
             mimeType            = rc.mimeTypeOption.get,
             durationSecOption   = rc.durationSecOption,
             width               = rc.widthOption.get,
             height              = rc.heightOption.get
-          ))
+          )
         case "file" =>
-          Content.Val.File(ContentFile(
+          ContentFile(
             pathOption          = rc.pathOption map (_.makeRelativePath),
             thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
             mimeTypeOption      = rc.mimeTypeOption,
@@ -1101,29 +1101,29 @@ class H2ChatHistoryDao(
             durationSecOption   = rc.durationSecOption,
             widthOption         = rc.widthOption,
             heightOption        = rc.heightOption
-          ))
+          )
         case "location" =>
           assert(rc.latOption.isDefined && rc.lonOption.isDefined, rc)
-          Content.Val.Location(ContentLocation(
+          ContentLocation(
             titleOption       = rc.titleOption,
             addressOption     = rc.addressOption,
             latStr            = rc.latOption.get.toString,
             lonStr            = rc.lonOption.get.toString,
             durationSecOption = rc.durationSecOption
-          ))
+          )
         case "poll" =>
           assert(rc.pollQuestionOption.isDefined, rc)
-          Content.Val.Poll(ContentPoll(
+          ContentPoll(
             question = rc.pollQuestionOption.get
-          ))
+          )
         case "shared_contact" =>
-          Content.Val.SharedContact(ContentSharedContact(
+          ContentSharedContact(
             firstNameOption   = rc.firstNameOption,
             lastNameOption    = rc.lastNameOption,
             phoneNumberOption = rc.phoneNumberOption,
             vcardPathOption   = rc.vcardPathOption map (_.makeRelativePath),
-          ))
-      })
+          )
+      }
     }
 
     def fromChat(dsRoot: JFile, c: Chat): RawChat = {
@@ -1167,8 +1167,8 @@ class H2ChatHistoryDao(
         heightOption           = None
       )
 
-      val (rawMessage: RawMessage, rawContentOption: Option[RawContent]) = msg.typed.value match {
-        case m: MessageRegular =>
+      val (rawMessage: RawMessage, rawContentOption: Option[RawContent]) = msg.typed match {
+        case Message.Typed.Regular(m) =>
           val rawContentOption = m.contentOption map fromContent(dsUuid, dsRoot, msg.internalIdTyped)
           template.copy(
             messageType            = "regular",
@@ -1176,33 +1176,33 @@ class H2ChatHistoryDao(
             forwardFromNameOption  = m.forwardFromNameOption,
             replyToMessageIdOption = m.replyToMessageIdTypedOption
           ) -> rawContentOption
-        case MessageService(MessageService.Val.PhoneCall(m), _) =>
+        case Message.Typed.Service(Some(m: MessageServicePhoneCall)) =>
           template.copy(
             messageType         = "service_phone_call",
             durationSecOption   = m.durationSecOption,
             discardReasonOption = m.discardReasonOption
           ) -> None
-        case MessageService(MessageService.Val.PinMessage(m), _) =>
+        case Message.Typed.Service(Some(m: MessageServicePinMessage)) =>
           template.copy(
             messageType           = "service_pin_message",
             pinnedMessageIdOption = Some(m.messageIdTyped),
           ) -> None
-        case MessageService(MessageService.Val.ClearHistory(_), _) =>
+        case Message.Typed.Service(Some(_: MessageServiceClearHistory)) =>
           template.copy(
             messageType = "service_clear_history",
           ) -> None
-        case MessageService(MessageService.Val.GroupCreate(m), _) =>
+        case Message.Typed.Service(Some(m: MessageServiceGroupCreate)) =>
           template.copy(
             messageType = "service_group_create",
             titleOption = Some(m.title),
             members     = m.members
           ) -> None
-        case MessageService(MessageService.Val.GroupEditTitle(m), _) =>
+        case Message.Typed.Service(Some(m: MessageServiceGroupEditTitle)) =>
           template.copy(
             messageType = "service_edit_title",
             titleOption = Some(m.title)
           ) -> None
-        case MessageService(MessageService.Val.GroupEditPhoto(m), _) =>
+        case Message.Typed.Service(Some(m: MessageServiceGroupEditPhoto)) =>
           val photo = m.photo
           template.copy(
             messageType  = "service_edit_photo",
@@ -1210,34 +1210,36 @@ class H2ChatHistoryDao(
             widthOption  = Some(photo.width),
             heightOption = Some(photo.height)
           ) -> None
-        case MessageService(MessageService.Val.GroupDeletePhoto(_), _) =>
+        case Message.Typed.Service(Some(_: MessageServiceGroupDeletePhoto)) =>
           template.copy(
             messageType  = "service_delete_photo",
           ) -> None
-        case MessageService(MessageService.Val.GroupInviteMembers(m), _) =>
+        case Message.Typed.Service(Some(m: MessageServiceGroupInviteMembers)) =>
           template.copy(
             messageType = "service_invite_group_members",
             members     = m.members
           ) -> None
-        case MessageService(MessageService.Val.GroupRemoveMembers(m), _) =>
+        case Message.Typed.Service(Some(m: MessageServiceGroupRemoveMembers)) =>
           template.copy(
             messageType = "service_group_remove_members",
             members     = m.members
           ) -> None
-        case MessageService(MessageService.Val.GroupMigrateFrom(m), _) =>
+        case Message.Typed.Service(Some(m: MessageServiceGroupMigrateFrom)) =>
           template.copy(
             messageType = "service_group_migrate_from",
             titleOption = Some(m.title)
           ) -> None
-        case MessageService(MessageService.Val.GroupMigrateTo(_), _) =>
+        case Message.Typed.Service(Some(_: MessageServiceGroupMigrateTo)) =>
           template.copy(
             messageType = "service_group_migrate_to",
           ) -> None
-        case MessageService(MessageService.Val.GroupCall(m), _) =>
+        case Message.Typed.Service(Some(m: MessageServiceGroupCall)) =>
           template.copy(
             messageType = "service_group_call",
             members     = m.members
           ) -> None
+        case Message.Typed.Empty | Message.Typed.Service(None) =>
+          unexpectedCase(msg)
       }
       (rawMessage, rawContentOption, rawRichTextEls)
     }
@@ -1297,8 +1299,8 @@ class H2ChatHistoryDao(
         phoneNumberOption   = None,
         vcardPathOption     = None
       )
-      c.`val` match {
-        case Content.Val.Sticker(c) =>
+      c match {
+        case c: ContentSticker =>
           template.copy(
             elementType         = "sticker",
             pathOption          = c.pathOption map (_.makeRelativePath),
@@ -1307,21 +1309,21 @@ class H2ChatHistoryDao(
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
-        case Content.Val.Photo(c) =>
+        case c: ContentPhoto =>
           template.copy(
             elementType  = "photo",
             pathOption   = c.pathOption map (_.makeRelativePath),
             widthOption  = Some(c.width),
             heightOption = Some(c.height)
           )
-        case Content.Val.VoiceMsg(c) =>
+        case c: ContentVoiceMsg =>
           template.copy(
             elementType       = "voice_message",
             pathOption        = c.pathOption map (_.makeRelativePath),
             mimeTypeOption    = Some(c.mimeType),
             durationSecOption = c.durationSecOption
           )
-        case Content.Val.VideoMsg(c) =>
+        case c: ContentVideoMsg =>
           template.copy(
             elementType         = "video_message",
             pathOption          = c.pathOption map (_.makeRelativePath),
@@ -1331,7 +1333,7 @@ class H2ChatHistoryDao(
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
-        case Content.Val.Animation(c) =>
+        case c: ContentAnimation =>
           template.copy(
             elementType         = "animation",
             pathOption          = c.pathOption map (_.makeRelativePath),
@@ -1341,7 +1343,7 @@ class H2ChatHistoryDao(
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
-        case Content.Val.File(c) =>
+        case c: ContentFile =>
           template.copy(
             elementType         = "file",
             pathOption          = c.pathOption map (_.makeRelativePath),
@@ -1353,7 +1355,7 @@ class H2ChatHistoryDao(
             widthOption         = c.widthOption,
             heightOption        = c.heightOption
           )
-        case Content.Val.Location(c) =>
+        case c: ContentLocation =>
           template.copy(
             elementType       = "location",
             titleOption       = c.titleOption,
@@ -1362,12 +1364,12 @@ class H2ChatHistoryDao(
             lonOption         = Some(c.lon),
             durationSecOption = c.durationSecOption
           )
-        case Content.Val.Poll(c) =>
+        case c: ContentPoll =>
           template.copy(
             elementType        = "poll",
             pollQuestionOption = Some(c.question)
           )
-        case Content.Val.SharedContact(c) =>
+        case c: ContentSharedContact =>
           template.copy(
             elementType       = "shared_contact",
             firstNameOption   = c.firstNameOption,
@@ -1375,8 +1377,6 @@ class H2ChatHistoryDao(
             phoneNumberOption = c.phoneNumberOption,
             vcardPathOption   = c.vcardPathOption map (_.makeRelativePath)
           )
-        case Content.Val.Empty =>
-          throw new IllegalArgumentException("Empty content!")
       }
     }
   }
@@ -1491,7 +1491,7 @@ object H2ChatHistoryDao {
   }
 
   implicit val chatTypeToString: Put[ChatType] = Put[String].tcontramap {
-    case ChatType.Personal => "personal"
+    case ChatType.Personal     => "personal"
     case ChatType.PrivateGroup => "private_group"
   }
 

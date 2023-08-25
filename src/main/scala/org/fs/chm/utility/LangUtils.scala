@@ -31,6 +31,10 @@ object LangUtils extends Logging {
     }
   }
 
+  def unexpectedCase(clue: Any): Nothing = {
+    throw new IllegalStateException(s"Unexpected case! $clue")
+  }
+
   implicit class RichString(s: String) {
     def toOption: Option[String] =
       if (s.isEmpty) None else Some(s)

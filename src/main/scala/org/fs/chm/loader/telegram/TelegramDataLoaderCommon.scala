@@ -94,63 +94,63 @@ trait TelegramDataLoaderCommon {
       tracker.markUsed("actor")  // Sending user name has been parsed during a separate pass
       val serviceOption: Option[MessageService] =  getCheckedField[String](jv, "action") match {
         case "phone_call" =>
-          Some(MessageService(MessageService.Val.PhoneCall(MessageServicePhoneCall(
+          Some(MessageServicePhoneCall(
             durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
             discardReasonOption = getStringOpt(jv, "discard_reason", false),
-          ))))
+          ))
         case "group_call" =>
           // Treated the same as phone_call
-          Some(MessageService(MessageService.Val.PhoneCall(MessageServicePhoneCall(
+          Some(MessageServicePhoneCall(
             durationSecOption   = None,
             discardReasonOption = None,
-          ))))
+          ))
         case "pin_message" =>
-          Some(MessageService(MessageService.Val.PinMessage(MessageServicePinMessage(
+          Some(MessageServicePinMessage(
             messageId = getCheckedField[MessageSourceId](jv, "message_id"),
-          ))))
+          ))
         case "clear_history" =>
-          Some(MessageService(MessageService.Val.ClearHistory(MessageServiceClearHistory())))
+          Some(MessageServiceClearHistory())
         case "create_group" =>
-          Some(MessageService(MessageService.Val.GroupCreate(MessageServiceGroupCreate(
+          Some(MessageServiceGroupCreate(
             title   = getCheckedField[String](jv, "title"),
             members = getCheckedField[Seq[String]](jv, "members"),
-          ))))
+          ))
         case "edit_group_photo" =>
-          Some(MessageService(MessageService.Val.GroupEditPhoto(MessageServiceGroupEditPhoto(
+          Some(MessageServiceGroupEditPhoto(
             ContentPhoto(
               pathOption = getFileOpt(jv, "photo", true, rootFile),
               width      = getCheckedField[Int](jv, "width"),
               height     = getCheckedField[Int](jv, "height"),
             )
-          ))))
+          ))
         case "edit_group_title" =>
-          Some(MessageService(MessageService.Val.GroupEditTitle(MessageServiceGroupEditTitle(
+          Some(MessageServiceGroupEditTitle(
             title = getCheckedField[String](jv, "title"),
-          ))))
+          ))
         case "invite_members" =>
-          Some(MessageService(MessageService.Val.GroupInviteMembers(MessageServiceGroupInviteMembers(
+          Some(MessageServiceGroupInviteMembers(
             members = getCheckedField[Seq[String]](jv, "members"),
-          ))))
+          ))
         case "remove_members" =>
-          Some(MessageService(MessageService.Val.GroupRemoveMembers(MessageServiceGroupRemoveMembers(
+          Some(MessageServiceGroupRemoveMembers(
             members = getCheckedField[Seq[String]](jv, "members"),
-          ))))
+          ))
         case "join_group_by_link" =>
           // Maps into usual InviteMembers
           tracker.markUsed("inviter")
-          Some(MessageService(MessageService.Val.GroupInviteMembers(MessageServiceGroupInviteMembers(
+          Some(MessageServiceGroupInviteMembers(
             members = Seq(getCheckedField[String](jv, "actor")),
-          ))))
+          ))
         case "migrate_from_group" =>
-          Some(MessageService(MessageService.Val.GroupMigrateFrom(MessageServiceGroupMigrateFrom(
+          Some(MessageServiceGroupMigrateFrom(
             title = getCheckedField[String](jv, "title"),
-          ))))
+          ))
         case "migrate_to_supergroup" =>
-          Some(MessageService(MessageService.Val.GroupMigrateTo(MessageServiceGroupMigrateTo())))
+          Some(MessageServiceGroupMigrateTo())
         case "invite_to_group_call" =>
-          Some(MessageService(MessageService.Val.GroupCall(MessageServiceGroupCall(
+          Some(MessageServiceGroupCall(
             members = getCheckedField[Seq[String]](jv, "members"),
-          ))))
+          ))
         case "edit_chat_theme" =>
           // Not really interesting to track.
           Seq("id", "date", "actor_id", "emoticon", "text").foreach(tracker.markUsed)
@@ -161,7 +161,7 @@ trait TelegramDataLoaderCommon {
       }
       serviceOption map { service =>
         val text = RichTextParser.parseRichText(jv)
-        val typed = Message.Typed.Service(service)
+        val typed = Message.Typed.Service(Some(service))
         Message(
           internalId       = NoInternalId,
           sourceIdOption   = Some(getCheckedField[MessageSourceId](jv, "id")),
@@ -296,7 +296,7 @@ trait TelegramDataLoaderCommon {
       val locPresent = (jv \ "location_information") != JNothing
       val pollQuestionPresent = (jv \ "poll" \ "question") != JNothing
       val contactInfoPresent = (jv \ "contact_information") != JNothing
-      val ct = (mediaTypeOption, photoOption, fileOption, locPresent, pollQuestionPresent, contactInfoPresent) match {
+      (mediaTypeOption, photoOption, fileOption, locPresent, pollQuestionPresent, contactInfoPresent) match {
         case (None, None, None, false, false, false)                     => None
         case (Some("sticker"), None, Some(_), false, false, false)       => Some(parseSticker(jv, rootFile))
         case (Some("animation"), None, Some(_), false, false, false)     => Some(parseAnimation(jv, rootFile))
@@ -312,62 +312,61 @@ trait TelegramDataLoaderCommon {
         case _ =>
           throw new IllegalArgumentException(s"Couldn't determine content type for '$jv'")
       }
-      ct.map(c => Content.apply(c))
     }
 
-    private def parseSticker(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Val.Sticker = {
-      Content.Val.Sticker(ContentSticker(
+    private def parseSticker(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): ContentSticker = {
+      ContentSticker(
         pathOption          = getRelativePathOpt(jv, "file", true, rootFile),
         thumbnailPathOption = getRelativePathOpt(jv, "thumbnail", true, rootFile),
         emojiOption         = getStringOpt(jv, "sticker_emoji", false),
         width               = getCheckedField[Int](jv, "width"),
         height              = getCheckedField[Int](jv, "height")
-      ))
+      )
     }
 
-    private def parsePhoto(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): Content.Val.Photo = {
-      Content.Val.Photo(ContentPhoto(
+    private def parsePhoto(jv: JValue, rootFile: File)(implicit tracker: FieldUsageTracker): ContentPhoto = {
+      ContentPhoto(
         pathOption = getRelativePathOpt(jv, "photo", true, rootFile),
         width      = getCheckedField[Int](jv, "width"),
         height     = getCheckedField[Int](jv, "height"),
-      ))
+      )
     }
 
     private def parseAnimation(jv: JValue, rootFile: File)(
-        implicit tracker: FieldUsageTracker): Content.Val.Animation = {
-      Content.Val.Animation(ContentAnimation(
+        implicit tracker: FieldUsageTracker): ContentAnimation = {
+      ContentAnimation(
         pathOption          = getRelativePathOpt(jv, "file", true, rootFile),
         thumbnailPathOption = getRelativePathOpt(jv, "thumbnail", false, rootFile),
         mimeType            = getCheckedField[String](jv, "mime_type"),
         durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
         width               = getCheckedField[Int](jv, "width"),
         height              = getCheckedField[Int](jv, "height"),
-      ))
+      )
     }
 
     private def parseVoiceMsg(jv: JValue, rootFile: File)(
-        implicit tracker: FieldUsageTracker): Content.Val.VoiceMsg = {
-      Content.Val.VoiceMsg(ContentVoiceMsg(
+        implicit tracker: FieldUsageTracker): ContentVoiceMsg = {
+      ContentVoiceMsg(
         pathOption        = getRelativePathOpt(jv, "file", true, rootFile),
         mimeType          = getCheckedField[String](jv, "mime_type"),
         durationSecOption = getFieldOpt[Int](jv, "duration_seconds", false),
-      ))
+      )
     }
 
     private def parseVideoMsg(jv: JValue, rootFile: File)(
-        implicit tracker: FieldUsageTracker): Content.Val.VideoMsg = {
-      Content.Val.VideoMsg(ContentVideoMsg(
+        implicit tracker: FieldUsageTracker): ContentVideoMsg = {
+      ContentVideoMsg(
         pathOption          = getRelativePathOpt(jv, "file", true, rootFile),
         thumbnailPathOption = getRelativePathOpt(jv, "thumbnail", true, rootFile),
         mimeType            = getCheckedField[String](jv, "mime_type"),
         durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
         width               = getCheckedField[Int](jv, "width"),
         height              = getCheckedField[Int](jv, "height"),
-      ))
+      )
     }
 
-    private def parseFile(jv: JValue, rootFile: File, titleIfEmpty: String)(implicit tracker: FieldUsageTracker): Content.Val.File = {
-      Content.Val.File(ContentFile(
+    private def parseFile(jv: JValue, rootFile: File, titleIfEmpty: String)(implicit tracker: FieldUsageTracker): ContentFile = {
+      ContentFile(
         pathOption          = getRelativePathOpt(jv, "file", true, rootFile),
         thumbnailPathOption = getRelativePathOpt(jv, "thumbnail", false, rootFile),
         mimeTypeOption      = getStringOpt(jv, "mime_type", true),
@@ -376,34 +375,34 @@ trait TelegramDataLoaderCommon {
         durationSecOption   = getFieldOpt[Int](jv, "duration_seconds", false),
         widthOption         = getFieldOpt[Int](jv, "width", false),
         heightOption        = getFieldOpt[Int](jv, "height", false)
-      ))
+      )
     }
 
-    private def parseLocation(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Val.Location = {
-      Content.Val.Location(ContentLocation(
+    private def parseLocation(jv: JValue)(implicit tracker: FieldUsageTracker): ContentLocation = {
+      ContentLocation(
         titleOption       = getStringOpt(jv, "place_name", false),
         addressOption     = getStringOpt(jv, "address", false),
         latStr            = getCheckedField[String](jv, "location_information", "latitude"),
         lonStr            = getCheckedField[String](jv, "location_information", "longitude"),
         durationSecOption = getFieldOpt[Int](jv, "live_location_period_seconds", false)
-      ))
+      )
     }
 
-    private def parsePoll(jv: JValue)(implicit tracker: FieldUsageTracker): Content.Val.Poll = {
-      Content.Val.Poll(ContentPoll(
+    private def parsePoll(jv: JValue)(implicit tracker: FieldUsageTracker): ContentPoll = {
+      ContentPoll(
         question = getCheckedField[String](jv, "poll", "question")
-      ))
+      )
     }
 
     private def parseSharedContact(jv: JValue, rootFile: File)(
-        implicit tracker: FieldUsageTracker): Content.Val.SharedContact = {
+        implicit tracker: FieldUsageTracker): ContentSharedContact = {
       val ci = getRawField(jv, "contact_information", true)
-      Content.Val.SharedContact(ContentSharedContact(
+      ContentSharedContact(
         firstNameOption   = getStringOpt(ci, "first_name", true),
         lastNameOption    = getStringOpt(ci, "last_name", true),
         phoneNumberOption = getStringOpt(ci, "phone_number", true),
         vcardPathOption   = getRelativePathOpt(jv, "contact_vcard", false, rootFile)
-      ))
+      )
     }
   }
 

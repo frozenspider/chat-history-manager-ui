@@ -103,8 +103,8 @@ class TelegramFullDataLoaderSpec //
       val msgs = dao.lastMessages(cwm.chat, 100500)
       assert(msgs.size === 3)
       val typed = msgs.map(_.typed)
-      assert(typed(0).service.get.`val`.isGroupCreate)
-      assert(typed(1).service.get.`val`.isGroupMigrateFrom)
+      assert(typed(0).service.get.get.asMessage.sealedValueOptional.isGroupCreate)
+      assert(typed(1).service.get.get.asMessage.sealedValueOptional.isGroupMigrateFrom)
       assert(typed(2).isRegular)
     }
   }
@@ -176,10 +176,10 @@ test("loading @ 2021-06 (supergroup and added user)") {
       fromId           = u222222222.id,
       text             = Seq.empty,
       searchableString = Some(u444444444.firstNameOption.get),
-      typed            = Message.Typed.Service(MessageService(
-        MessageService.Val.GroupInviteMembers(MessageServiceGroupInviteMembers(
+      typed            = Message.Typed.Service(Some(
+        MessageServiceGroupInviteMembers(
           members = Seq(u444444444.firstNameOption.get)
-        ))
+        )
       ))
     ))
     assert(msgs(1) === Message(
@@ -240,10 +240,10 @@ test("loading @ 2021-06 (supergroup and added user)") {
       assert(cwm.members(1) === member)
       val msgs = dao.lastMessages(cwm.chat, 100500)
       assert(msgs.size === 2)
-      assert(msgs(0).typed.service.flatMap(_.`val`.groupCall).isDefined)
-      assert(msgs(1).typed.service.flatMap(_.`val`.groupCall).isDefined)
+      assert(msgs(0).typed.service.get.flatMap(_.asMessage.sealedValueOptional.groupCall).isDefined)
+      assert(msgs(1).typed.service.get.flatMap(_.asMessage.sealedValueOptional.groupCall).isDefined)
       assert(
-        msgs.map(_.typed.service.get.`val`.groupCall.get.members) === Seq(
+        msgs.map(_.typed.service.get.get.asMessage.sealedValueOptional.groupCall.get.members) === Seq(
           Seq("Www Wwwwww"),
           Seq("Myself")
         )
@@ -280,13 +280,13 @@ test("loading @ 2021-06 (supergroup and added user)") {
       assert(msgs.size === 1)
       assert(msgs.head.typed.isRegular)
       val regularMsg = msgs.head.typed.regular.get
-      assert(regularMsg.contentOption === Some(Content(Content.Val.Location(ContentLocation(
+      assert(regularMsg.contentOption === Some(ContentLocation(
         titleOption       = Some("Çıralı Plajı"),
         addressOption     = Some("Olympos"),
         latStr            = "36.417978",
         lonStr            = "30.482614",
         durationSecOption = None
-      )))))
+      )))
     }
   }
 
