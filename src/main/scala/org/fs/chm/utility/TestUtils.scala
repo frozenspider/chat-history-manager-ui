@@ -107,7 +107,7 @@ object TestUtils {
       sourceType = "test source"
     )
     val users1       = users map (_ copy (dsUuid = ds.uuid))
-    val dataPathRoot = Files.createTempDirectory(null).toFile
+    val dataPathRoot = Files.createTempDirectory("java_chm-eager_").toFile
     dataPathRoot.deleteOnExit()
     val amend2 = amendMessage.curried(isMaster)(dataPathRoot)
     new EagerChatHistoryDao(
@@ -167,11 +167,11 @@ object TestUtils {
 
     override def mergeUsers(baseUser: User, absorbedUser: User): Unit = ???
 
-    override def insertChat(dsRoot: File, chat: Chat): Unit = ???
+    override def insertChat(srcDsRoot: File, chat: Chat): Unit = ???
 
     override def deleteChat(chat: Chat): Unit = ???
 
-    override def insertMessages(dsRoot: File, chat: Chat, msgs: Seq[Message]): Unit = ???
+    override def insertMessages(srcDsRoot: File, chat: Chat, msgs: Seq[Message]): Unit = ???
 
     override def disableBackups(): Unit = ???
 

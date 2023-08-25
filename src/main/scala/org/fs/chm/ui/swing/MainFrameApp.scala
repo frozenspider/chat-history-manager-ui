@@ -43,7 +43,6 @@ import org.fs.chm.ui.swing.user.UserDetailsMenuCallbacks
 import org.fs.chm.ui.swing.user.UserDetailsPane
 import org.fs.chm.utility.CliUtils
 import org.fs.chm.utility.InterruptableFuture._
-import org.fs.chm.utility.IoUtils._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.SimpleConfigAware
 import org.fs.utility.Imports._

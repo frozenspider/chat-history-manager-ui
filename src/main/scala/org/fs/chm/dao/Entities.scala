@@ -112,46 +112,46 @@ object Entities {
 
   implicit object ContentStickerPracticallyEquals extends PracticallyEquals[(ContentSticker, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentSticker, DatasetRoot), v2: (ContentSticker, DatasetRoot)): Boolean = {
-      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
-        v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v1._2) &&
+      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v2._2) &&
+        v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v2._2) &&
         v1._1.copy(pathOption = None, thumbnailPathOption = None) == v2._1.copy(pathOption = None, thumbnailPathOption = None)
     }
   }
 
   implicit object ContentPhotoPracticallyEquals extends PracticallyEquals[(ContentPhoto, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentPhoto, DatasetRoot), v2: (ContentPhoto, DatasetRoot)): Boolean = {
-      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
+      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v2._2) &&
         v1._1.copy(pathOption = None) == v2._1.copy(pathOption = None)
     }
   }
 
   implicit object ContentVoiceMsgPracticallyEquals extends PracticallyEquals[(ContentVoiceMsg, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentVoiceMsg, DatasetRoot), v2: (ContentVoiceMsg, DatasetRoot)): Boolean = {
-      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
+      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v2._2) &&
         v1._1.copy(pathOption = None) == v2._1.copy(pathOption = None)
     }
   }
 
   implicit object ContentVideoMsgPracticallyEquals extends PracticallyEquals[(ContentVideoMsg, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentVideoMsg, DatasetRoot), v2: (ContentVideoMsg, DatasetRoot)): Boolean = {
-      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
-        v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v1._2) &&
+      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v2._2) &&
+        v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v2._2) &&
         v1._1.copy(pathOption = None, thumbnailPathOption = None) == v2._1.copy(pathOption = None, thumbnailPathOption = None)
     }
   }
 
   implicit object ContentAnimationPracticallyEquals extends PracticallyEquals[(ContentAnimation, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentAnimation, DatasetRoot), v2: (ContentAnimation, DatasetRoot)): Boolean = {
-      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
-        v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v1._2) &&
+      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v2._2) &&
+        v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v2._2) &&
         v1._1.copy(pathOption = None, thumbnailPathOption = None) == v2._1.copy(pathOption = None, thumbnailPathOption = None)
     }
   }
 
   implicit object ContentFilePracticallyEquals extends PracticallyEquals[(ContentFile, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentFile, DatasetRoot), v2: (ContentFile, DatasetRoot)): Boolean = {
-      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v1._2) &&
-        v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v1._2) &&
+      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v2._2) &&
+        v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v2._2) &&
         v1._1.copy(pathOption = None, thumbnailPathOption = None) == v2._1.copy(pathOption = None, thumbnailPathOption = None)
     }
   }
@@ -170,7 +170,7 @@ object Entities {
 
   implicit object ContentSharedContactPracticallyEquals extends PracticallyEquals[(ContentSharedContact, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentSharedContact, DatasetRoot), v2: (ContentSharedContact, DatasetRoot)): Boolean = {
-      v1._1.vcardFileOption(v1._2) =~= v2._1.vcardFileOption(v1._2) &&
+      v1._1.vcardFileOption(v1._2) =~= v2._1.vcardFileOption(v2._2) &&
         v1._1.copy(vcardPathOption = None) == v2._1.copy(vcardPathOption = None)
     }
   }

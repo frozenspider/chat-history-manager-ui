@@ -42,13 +42,16 @@ object LangUtils extends Logging {
     def toFile(datasetRoot: JFile): JFile =
       new JFile(datasetRoot, s.replace('\\', '/')).getAbsoluteFile
 
+    def isRelativePath: Boolean = {
+      s.contains(":/") ||
+        s.contains(":\\") ||
+        s.startsWith("/home/") ||
+        s.startsWith("/Users/") ||
+        s.startsWith("/var/")
+    }
+
     def makeRelativePath: String = {
-      require(!s.contains(":/") &&
-        !s.contains(":\\") &&
-        !s.startsWith("/home/") &&
-        !s.startsWith("/Users/") &&
-        !s.startsWith("/var/"),
-        s"$s is not a relative path!")
+      require(!s.isRelativePath, s"$s is not a relative path!")
       (if (s.startsWith("/") || s.startsWith("\\")) {
         s.drop(1)
       } else {
@@ -107,18 +110,6 @@ object LangUtils extends Logging {
       !(this =~= that)
   }
 
-  class OptionPracticallyEquals[T: PracticallyEquals] extends PracticallyEquals[Option[T]] {
-    override def practicallyEquals(thisOption: Option[T], thatOption: Option[T]): Boolean =
-      (thisOption, thatOption) match {
-        case (None, None)       => true
-        case (Some(a), Some(b)) => a =~= b
-        case _                  => false
-      }
-  }
-
-  implicit def x[T: PracticallyEquals]: PracticallyEquals[Option[T]] =
-    new OptionPracticallyEquals[T]
-
   implicit object JFilePracticallyEquals extends PracticallyEquals[JFile] {
     override def practicallyEquals(f1: JFile, f2: JFile): Boolean = {
       if (!f1.exists()) {
@@ -127,6 +118,17 @@ object LangUtils extends Logging {
         f2.exists() && (f1.bytes sameElements f2.bytes)
       }
     }
+  }
+
+  implicit object JFileOptionPracticallyEquals extends PracticallyEquals[Option[JFile]] {
+    override def practicallyEquals(thisOption: Option[JFile], thatOption: Option[JFile]): Boolean =
+      (thisOption, thatOption) match {
+        case (None, None)                 => true
+        case (Some(a), None) if !a.exists => true
+        case (None, Some(b)) if !b.exists => true
+        case (Some(a), Some(b))           => a =~= b
+        case _                            => false
+      }
   }
 
   implicit object JFileSeqPracticallyEquals extends PracticallyEquals[Seq[JFile]] {

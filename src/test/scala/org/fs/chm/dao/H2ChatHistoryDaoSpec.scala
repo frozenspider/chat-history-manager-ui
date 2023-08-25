@@ -10,12 +10,7 @@ import org.fs.chm.WithH2Dao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.loader.H2DataManager
 import org.fs.chm.loader.telegram.TelegramFullDataLoader
-import org.fs.chm.protobuf.Chat
-import org.fs.chm.protobuf.ChatType
-import org.fs.chm.protobuf.Message
-import org.fs.chm.protobuf.PbUuid
-import org.fs.chm.protobuf.User
-import org.fs.chm.utility.IoUtils._
+import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.TestUtils
 import org.junit.runner.RunWith
@@ -61,12 +56,23 @@ class H2ChatHistoryDaoSpec //
     val srcDataPath = tgDao.datasetRoot(dsUuid)
     val dstDataPath = h2dao.datasetRoot(dsUuid)
 
-    for (path <- pathRegex.findAllIn(src).toList) {
-      assert(new File(srcDataPath, path).exists(), s"File ${path} (source) isn't found! Bug in test?")
-      assert(new File(dstDataPath, path).exists(), s"File ${path} wasn't copied!")
-      val srcBytes = new File(srcDataPath, path).bytes
-      assert(!srcBytes.isEmpty, s"Source file ${path} was empty! Bug in test?")
-      assert(srcBytes === new File(dstDataPath, path).bytes, s"Copy of ${path} didn't match its source!")
+    val srcFiles1 = tgDao.datasetFiles(dsUuid).toSeq sortBy (_.getAbsolutePath)
+    val srcFiles2 = pathRegex.findAllIn(src).toSeq map (new File(srcDataPath, _)) sortBy (_.getAbsolutePath)
+    assert(srcFiles1 === srcFiles2)
+
+    val dstFiles = h2dao.datasetFiles(dsUuid)
+    assert(dstFiles.size === srcFiles1.size)
+
+    // Sorting by content.mkString is not particularly smart or efficient, but it does its job
+    val srcFilesWithContent = srcFiles1 map (f => (f, f.bytes)) sortBy (_._2.mkString)
+    val dstFilesWithContent = dstFiles.toSeq map (f => (f, f.bytes)) sortBy (_._2.mkString)
+
+    (srcFilesWithContent zip dstFilesWithContent).foreach {
+      case ((src, srcBytes), (dst, dstBytes)) =>
+        assert(src.exists, s"File ${src} (source) isn't found! Bug in test?")
+        assert(dst.exists, s"File ${dst} wasn't copied from ${src}!")
+        assert(!srcBytes.isEmpty, s"Source file ${src} was empty! Bug in test?")
+        assert(srcBytes === dstBytes, s"Content of ${dst} didn't match its source ${src}!")
     }
 
     val pathsNotToCopy = Seq(
@@ -74,14 +80,13 @@ class H2ChatHistoryDaoSpec //
       "chats/chat_01/dont_copy_me_either.txt"
     )
     for (path <- pathsNotToCopy) {
-      assert(new File(srcDataPath, path).exists(), s"File ${path} (source) isn't found! Bug in test?")
-      assert(!new File(dstDataPath, path).exists(), s"File ${path} was copied - but it shouldn't have been!")
-      val srcBytes = new File(srcDataPath, path).bytes
-      assert(!srcBytes.isEmpty, s"Source file ${path} was empty! Bug in test?")
+      val src = new File(srcDataPath, path)
+      assert(src.exists, s"File ${path} (source) isn't found! Bug in test?")
+      assert(!srcFiles1.contains(src))
+      assert(!dstFiles.map(_.getName).contains(src.getName))
     }
 
-    assert(tgDao.datasetFiles(dsUuid).toSeq.sortBy(_.getAbsolutePath)
-      =~= h2dao.datasetFiles(dsUuid).toSeq.sortBy(_.getAbsolutePath))
+    assert(srcFilesWithContent.map(_._1) =~= dstFilesWithContent.map(_._1))
   }
 
   test("messages and chats are equal, retrieval methods work as needed") {
@@ -228,9 +233,9 @@ class H2ChatHistoryDaoSpec //
     val localDsUuid = localTgDao.datasets.head.uuid
     val chat        = localTgDao.chats(localDsUuid).head.chat
     val msgs        = localTgDao.firstMessages(chat, 999999)
-    dir = Files.createTempDirectory(null).toFile
+    h2dir = Files.createTempDirectory("java_chm-h2_").toFile
 
-    h2dao = manager.create(dir)
+    h2dao = manager.create(h2dir)
     h2dao.copyAllFrom(localTgDao)
 
     val dsUuid = localTgDao.datasets.head.uuid

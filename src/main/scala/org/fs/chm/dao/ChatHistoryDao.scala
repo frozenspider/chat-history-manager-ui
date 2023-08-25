@@ -124,13 +124,21 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
    */
   def mergeUsers(baseUser: User, absorbedUser: User): Unit
 
-  /** Insert a new chat. It should not yet exist, and all users must already be inserted */
-  def insertChat(dsRoot: JFile, chat: Chat): Unit
+  /**
+   * Insert a new chat.
+   * It should have a proper DS UUID set, should not yet exist, and all users must already be inserted.
+   * Content will be resolved based on the given dataset root and copied accordingly.
+   */
+  def insertChat(srcDsRoot: JFile, chat: Chat): Unit
 
   def deleteChat(chat: Chat): Unit
 
-  /** Insert a new message for the given chat. Internal ID will be ignored */
-  def insertMessages(dsRoot: JFile, chat: Chat, msgs: Seq[Message]): Unit
+  /**
+   * Insert a new message for the given chat.
+   * Internal ID will be ignored.
+   * Content will be resolved based on the given dataset root and copied accordingly.
+   */
+  def insertMessages(srcDsRoot: JFile, chat: Chat, msgs: Seq[Message]): Unit
 
   /** Don't do automatic backups on data changes until re-enabled */
   def disableBackups(): Unit

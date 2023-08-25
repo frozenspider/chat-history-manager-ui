@@ -9,7 +9,6 @@ import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.protobuf._
-import org.fs.chm.utility.IoUtils
 import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
@@ -326,17 +325,8 @@ class DatasetMerger(
 
           val toRootFile = masterDao.datasetRoot(newDs.uuid)
           for ((srcDsRoot, mb) <- messageBatches) {
+            // Also copies files
             masterDao.insertMessages(srcDsRoot, chat, mb)
-
-            // Copying files
-            val files = mb.flatMap(_.files(srcDsRoot))
-            if (files.nonEmpty) {
-              val fromPrefixLen = srcDsRoot.getAbsolutePath.length
-              val filesMap = files.map(f => (f, new File(toRootFile, f.getAbsolutePath.drop(fromPrefixLen)))).toMap
-              val (notFound, _) =
-                StopWatch.measureAndCall(IoUtils.copyAll(filesMap))((_, t) => log.info(s"Copied in $t ms"))
-              notFound.foreach(nf => log.info(s"Not found: ${nf.getAbsolutePath}"))
-            }
           }
         }
 

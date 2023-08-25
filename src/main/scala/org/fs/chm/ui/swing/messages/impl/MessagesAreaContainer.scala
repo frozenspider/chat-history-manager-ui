@@ -288,7 +288,7 @@ object MessagesAreaContainer {
       )
 
       val chat = createPersonalChat(ds.uuid, 1, users.head, users.map(_.id), msgs.size)
-      val dataPathRoot = Files.createTempDirectory(null).toFile
+      val dataPathRoot = Files.createTempDirectory("java_chm-eager_").toFile
       dataPathRoot.deleteOnExit()
       new EagerChatHistoryDao(
         name               = "Dao",

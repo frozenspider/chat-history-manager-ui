@@ -153,7 +153,7 @@ object SelectMergeChatsDialog {
       )
       val users        = (1 to 2) map (createUser(ds.uuid, _))
       val chats        = chatsProducer(ds, users)
-      val dataPathRoot = Files.createTempDirectory(null).toFile
+      val dataPathRoot = Files.createTempDirectory("java_chm-eager_").toFile
       dataPathRoot.deleteOnExit()
       new EagerChatHistoryDao(
         name               = "Dao",
