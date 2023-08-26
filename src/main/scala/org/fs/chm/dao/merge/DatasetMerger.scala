@@ -161,6 +161,22 @@ class DatasetMerger(
         onMismatch(mismatchAfterConflictEnd(cxt.advanceBoth(), singleConflictState))
         iterate(cxt.advanceBoth(), NoState, onMismatch)
       case (Some(mm), Some(sm), NoState) if mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption =>
+        // Checking if there's a timestamp shift
+        if (matchesDisregardingContent(mm.copy(timestamp = sm.timestamp).asInstanceOf[TaggedMessage.M], cxt.mCwd, sm, cxt.sCwd)) {
+          val (aheadBehind, diffSec) = {
+            val tsDiff = sm.timestamp - mm.timestamp
+            assert(tsDiff != 0)
+            if (tsDiff > 0) {
+              ("ahead of", tsDiff)
+            } else {
+              ("behind", -tsDiff)
+            }
+          }
+          val diffHrs = diffSec / 3600
+
+          throw new IllegalStateException("Time shift detected between datasets! " +
+            s"Slave is ${aheadBehind} master by ${diffSec} sec (${diffHrs} hrs)")
+        }
         // Conflict started
         // (Conflicts are only detectable if data source supply source IDs)
         val state2 = ConflictInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
