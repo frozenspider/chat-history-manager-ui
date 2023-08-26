@@ -102,7 +102,7 @@ class SelectMergeChatsDialog(
             // Mismatches have to be analyzed by DatasetMerger
             Some(ChatMergeOption.Combine(mcwd, scwd, IndexedSeq.empty))
           } else {
-            Some(ChatMergeOption.Keep(scwd))
+            Some(ChatMergeOption.Keep(mcwd))
           }
         case RowData.InSlaveOnly((_, scwd), true) =>
           if (isSelected) {

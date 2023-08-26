@@ -278,7 +278,7 @@ class DatasetMerger(
         // Sanity check
         for {
           firstMasterChat <- chatsToMerge.find(_.masterCwdOption.isDefined)
-          masterCwd <- firstMasterChat.masterCwdOption
+          masterCwd       <- firstMasterChat.masterCwdOption
         } require(masterDao.users(masterCwd.chat.dsUuid).size <= usersToMerge.size, "Not enough user merges!")
 
         // Users
