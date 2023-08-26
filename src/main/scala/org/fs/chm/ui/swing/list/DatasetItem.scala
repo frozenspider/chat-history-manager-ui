@@ -18,9 +18,9 @@ class DatasetItem[I <: Panel](
     dao: ChatHistoryDao,
     getInnerItems: Dataset => Seq[I],
     popupEnabled: Boolean,
-    renameDatasetCallbackOption: Option[Callbacks.RenameDataset],
-    deleteDatasetCallbackOption: Option[Callbacks.DeleteDataset],
-    shiftDatasetTimeCallbackOption: Option[Callbacks.ShiftDatasetTime]
+    renameDatasetCallbackOption: Option[Callbacks.RenameDatasetCb],
+    deleteDatasetCallbackOption: Option[Callbacks.DeleteDatasetCb],
+    shiftDatasetTimeCallbackOption: Option[Callbacks.ShiftDatasetTimeCb]
 ) extends GridBagPanel {
 
   private val headerPopupMenu = new PopupMenu {

@@ -12,15 +12,16 @@ import com.github.nscala_time.time.Imports._
 import javax.swing.text.Element
 import javax.swing.text.html.HTML
 import javax.swing.text.html.HTMLEditorKit
+
+import org.fs.chm.ui.swing.Callbacks
 import org.fs.chm.ui.swing.general.SwingUtils._
-import org.fs.chm.ui.swing.messages.MessageNavigationCallbacks
 import org.fs.utility.Imports._
 import org.jdatepicker._
 import org.jdatepicker.impl._
 
 class MessagesAreaEnhancedContainer(
     htmlKit: HTMLEditorKit,
-    callbacks: MessageNavigationCallbacks
+    callbacks: Callbacks.MessageHistoryCb
 ) extends MessagesAreaContainer(htmlKit) {
   private lazy val goToBeginBtn = new Button("Beginning")
   private lazy val goToDateBtn  = new Button("Date (NYI)")

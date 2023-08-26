@@ -14,15 +14,16 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf._
+import org.fs.chm.ui.swing.Callbacks
 import org.fs.chm.ui.swing.list.DaoItem
 import org.fs.chm.ui.swing.general.SwingUtils._
-import org.fs.chm.utility.EntityUtils
+import org.fs.chm.utility.LangUtils._
 
 class ChatListItem(
     dao: ChatHistoryDao,
     cwd: ChatWithDetails,
     selectionGroupOption: Option[ChatListItemSelectionGroup],
-    callbacksOption: Option[ChatListSelectionCallbacks]
+    callbacksOption: Option[Callbacks.ChatCb]
 ) extends BorderPanel { self =>
   private val labelPreferredWidth = DaoItem.PanelWidth - 100 // TODO: Remove
 
@@ -71,6 +72,7 @@ class ChatListItem(
     val tpeString = cwd.chat.tpe match {
       case ChatType.Personal     => ""
       case ChatType.PrivateGroup => "(" + cwd.members.size + ")"
+      case _                     => unexpectedCase(cwd.chat.tpe)
     }
     val tpeLabel = new Label(tpeString)
     tpeLabel.preferredWidth    = 30
@@ -99,7 +101,7 @@ class ChatListItem(
   def select(): Unit = {
     markSelected()
     selectionGroupOption foreach (_.deselectOthers(this))
-    callbacksOption foreach (_.chatSelected(dao, cwd))
+    callbacksOption foreach (_.selectChat(dao, cwd))
   }
 
   def markSelected(): Unit = {
@@ -182,6 +184,8 @@ class ChatListItem(
           case _: MessageServiceGroupMigrateTo     => "(migrated to group)"
           case _: MessageServiceGroupCall          => "(group call)"
         }
+      case Message.Typed.Empty | Message.Typed.Service(None) =>
+        unexpectedCase(msg)
     }
     prefix + text.take(50)
   }

@@ -37,10 +37,8 @@ import org.fs.chm.ui.swing.list.DaoItem
 import org.fs.chm.ui.swing.list.DaoList
 import org.fs.chm.ui.swing.list.chat._
 import org.fs.chm.ui.swing.merge._
-import org.fs.chm.ui.swing.messages.MessageNavigationCallbacks
 import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
-import org.fs.chm.ui.swing.user.UserDetailsMenuCallbacks
 import org.fs.chm.ui.swing.user.UserDetailsPane
 import org.fs.chm.utility.CliUtils
 import org.fs.chm.utility.InterruptableFuture._
@@ -53,9 +51,9 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     extends SimpleSwingApplication
     with SimpleConfigAware
     with Logging
-    with ChatListSelectionCallbacks
-    with UserDetailsMenuCallbacks
-    with MessageNavigationCallbacks { app =>
+    with Callbacks.ChatCb
+    with Callbacks.UserDetailsMenuCb
+    with Callbacks.MessageHistoryCb { app =>
 
   type MD = MessagesAreaContainer.MessageDocument
 
@@ -614,7 +612,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     }
   }
 
-  override def chatSelected(dao: ChatHistoryDao, cwd: ChatWithDetails): Unit = {
+  override def selectChat(dao: ChatHistoryDao, cwd: ChatWithDetails): Unit = {
     checkEdt()
     MutationLock.synchronized {
       currentChatOption = None

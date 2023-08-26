@@ -11,6 +11,7 @@ import javax.swing.border.MatteBorder
 
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.protobuf.User
+import org.fs.chm.ui.swing.Callbacks
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.general.field.TextComponent
 import org.fs.chm.ui.swing.general.field.TextOptionComponent
@@ -20,7 +21,7 @@ class UserDetailsPane(
     dao: ChatHistoryDao,
     private var user: User,
     editable: Boolean,
-    menuCallbacksOption: Option[UserDetailsMenuCallbacks]
+    menuCallbacksOption: Option[Callbacks.UserDetailsMenuCb]
 ) extends GridBagPanel {
 
   val firstNameC   = new TextOptionComponent(user.firstNameOption, editable)
