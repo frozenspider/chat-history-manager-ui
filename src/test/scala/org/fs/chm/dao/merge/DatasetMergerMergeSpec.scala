@@ -613,23 +613,8 @@ class DatasetMergerMergeSpec //
   }
 
   def assertFiles(dao: ChatHistoryDao, ds: Dataset, expectedFiles: Set[File]): Unit = {
-    val files = dao.datasetFiles(ds.uuid)
-    assert(files.size === expectedFiles.size)
-    // Given that expected files might come from different DS's, we rely on random names being unique and sort by name
-    val sortedFiles         = files.toSeq.sortBy(_.getName)
-    val sortedExpectedFiles = expectedFiles.toSeq.sortBy(_.getName)
-    for ((af, ef) <- (sortedFiles zip sortedExpectedFiles).par) {
-      assert(af.getName === ef.getName, (af, ef))
-      assert(af.exists === ef.exists, (af, ef))
-      assert(af =~= ef, ((af, ef), (af.bytes, ef.bytes)))
-    }
-    val dsRoot = dao.datasetRoot(ds.uuid)
-    for (c <- dao.chats(ds.uuid)) {
-      val files = dao.firstMessages(c.chat, c.chat.msgCount).flatMap(_.files(dsRoot))
-      for (file <- files) {
-        assert(sortedFiles contains file)
-      }
-    }
+    val actualFiles = dao.datasetFiles(ds.uuid)
+    assertFiles(expectedFiles, actualFiles, canBeMissing = true)
   }
 
   def addRandomFileContent(path: File)(msg: Message): Message =

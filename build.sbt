@@ -78,7 +78,8 @@ libraryDependencies ++= Seq(
   "com.twelvemonkeys.imageio"     % "imageio-webp"                % "3.9.4",
   // Utility
   "com.github.frozenspider"       %% "fs-common-utils"            % "0.2.0",
-  "commons-codec"                 %  "commons-codec"              % "1.15",
+  "commons-codec"                 %  "commons-codec"              % "1.16.0",
+  "commons-io"                    %  "commons-io"                 % "2.13.0",
   "org.apache.commons"            %  "commons-lang3"              % "3.12.0",
   "com.github.nscala-time"        %% "nscala-time"                % "2.32.0",
   "org.scala-lang.modules"        %% "scala-parallel-collections" % "1.0.4",

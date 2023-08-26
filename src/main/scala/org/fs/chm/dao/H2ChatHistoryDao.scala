@@ -18,6 +18,8 @@ import doobie.free.connection
 import doobie.free.connection.ConnectionOp
 import doobie.h2.implicits._
 import doobie.implicits._
+import org.apache.commons.codec.digest.DigestUtils
+import org.apache.commons.io.FilenameUtils
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
@@ -1121,23 +1123,43 @@ class H2ChatHistoryDao(
       }
     }
 
-    def copyFileFrom(srcDsRoot: JFile, dstDsRoot: JFile, chatId: ChatId)(subpath: Subpath)(srcRelPath: String): Option[String] = {
+    def copyFileFrom(srcDsRoot: JFile,
+                     dstDsRoot: JFile,
+                     chatId: ChatId)(subpath: Subpath, thumbnailForOption: Option[String])(srcRelPath: String): Option[String] = {
       val srcFile = new JFile(srcDsRoot, srcRelPath)
       if (!srcFile.exists) {
         log.info(s"Not found: ${srcFile.getAbsolutePath}")
         None
       } else Some {
         require(srcFile.isFile, s"Not a file: ${srcFile.getAbsolutePath}")
-        val name = srcFile.getName
+        val srcExtSuffix = FilenameUtils.getExtension(srcFile.getName) match {
+          case "" => ""
+          case x  => "." + x
+        }
+        val name = thumbnailForOption match {
+          case Some(mainFile) =>
+            val baseName = FilenameUtils.getBaseName(mainFile)
+            require(baseName.nonEmpty)
+            baseName + "_thumb" + srcExtSuffix
+          case _ if subpath.useHashing =>
+            val hash = Hash.digestAsHex(srcFile)
+            hash + srcExtSuffix
+          case _ =>
+            srcFile.getName
+        }
         require(name.nonEmpty, s"Filename empty: ${srcFile.getAbsolutePath}")
 
         val dstRelPath = s"chats/chat_${chatId}/${subpath.fragment}${name}"
         val dstFile = new JFile(dstDsRoot, dstRelPath)
         require(dstFile.getParentFile.exists || dstFile.getParentFile.mkdirs(),
           s"Can't create dataset root path ${dstFile.getParentFile.getAbsolutePath}")
-        require(!dstFile.exists, s"File already exists: ${dstFile.getAbsolutePath}")
-
-        Files.copy(srcFile.toPath, dstFile.toPath)
+        if (dstFile.exists) {
+          // Assume collisions don't exist
+          require(subpath.useHashing || (srcFile.bytes sameElements dstFile.bytes),
+            s"File already exists: ${dstFile.getAbsolutePath}, and it doesn't match source ${srcFile.getAbsolutePath}")
+        } else {
+          Files.copy(srcFile.toPath, dstFile.toPath)
+        }
 
         dstRelPath
       }
@@ -1149,7 +1171,7 @@ class H2ChatHistoryDao(
         id              = c.id,
         nameOption      = c.nameOption,
         tpe             = c.tpe,
-        imgPathOption   = c.imgPathOption flatMap copyFileFrom(srcDsRoot, dstDsRoot, c.id)(Subpath.Root),
+        imgPathOption   = c.imgPathOption flatMap copyFileFrom(srcDsRoot, dstDsRoot, c.id)(Subpath.Root, None),
         memberIdsOption = Some(c.memberIds.toList),
         msgCount        = c.msgCount
       )
@@ -1224,7 +1246,7 @@ class H2ChatHistoryDao(
           val photo = m.photo
           template.copy(
             messageType  = "service_edit_photo",
-            pathOption   = photo.pathOption flatMap copyFileFrom(srcDsRoot, dstDsRoot, chatId)(Subpath.Photos),
+            pathOption   = photo.pathOption flatMap copyFileFrom(srcDsRoot, dstDsRoot, chatId)(Subpath.Photos, None),
             widthOption  = Some(photo.width),
             heightOption = Some(photo.height)
           ) -> None
@@ -1324,10 +1346,11 @@ class H2ChatHistoryDao(
       )
       c match {
         case c: ContentSticker =>
+          val newPathOption = c.pathOption flatMap copy(Subpath.Stickers, None)
           template.copy(
             elementType         = "sticker",
-            pathOption          = c.pathOption flatMap copy(Subpath.Stickers),
-            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Stickers),
+            pathOption          = newPathOption,
+            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Stickers, newPathOption),
             emojiOption         = c.emojiOption,
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
@@ -1335,42 +1358,45 @@ class H2ChatHistoryDao(
         case c: ContentPhoto =>
           template.copy(
             elementType  = "photo",
-            pathOption   = c.pathOption flatMap copy(Subpath.Photos),
+            pathOption   = c.pathOption flatMap copy(Subpath.Photos, None),
             widthOption  = Some(c.width),
             heightOption = Some(c.height)
           )
         case c: ContentVoiceMsg =>
           template.copy(
             elementType       = "voice_message",
-            pathOption        = c.pathOption flatMap copy(Subpath.Voices),
+            pathOption        = c.pathOption flatMap copy(Subpath.Voices, None),
             mimeTypeOption    = Some(c.mimeType),
             durationSecOption = c.durationSecOption
           )
         case c: ContentVideoMsg =>
+          val newPathOption = c.pathOption flatMap copy(Subpath.Videos, None)
           template.copy(
             elementType         = "video_message",
-            pathOption          = c.pathOption flatMap copy(Subpath.Videos),
-            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Videos),
+            pathOption          = newPathOption,
+            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Videos, newPathOption),
             mimeTypeOption      = Some(c.mimeType),
             durationSecOption   = c.durationSecOption,
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
         case c: ContentAnimation =>
+          val newPathOption = c.pathOption flatMap copy(Subpath.Videos, None)
           template.copy(
             elementType         = "animation",
-            pathOption          = c.pathOption flatMap copy(Subpath.Videos),
-            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Videos),
+            pathOption          = newPathOption,
+            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Videos, newPathOption),
             mimeTypeOption      = Some(c.mimeType),
             durationSecOption   = c.durationSecOption,
             widthOption         = Some(c.width),
             heightOption        = Some(c.height)
           )
         case c: ContentFile =>
+          val newPathOption = c.pathOption flatMap copy(Subpath.Files, None)
           template.copy(
             elementType         = "file",
-            pathOption          = c.pathOption flatMap copy(Subpath.Files),
-            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Files),
+            pathOption          = newPathOption,
+            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Files, newPathOption),
             mimeTypeOption      = c.mimeTypeOption,
             titleOption         = Some(c.title),
             performerOption     = c.performerOption,
@@ -1398,7 +1424,7 @@ class H2ChatHistoryDao(
             firstNameOption   = c.firstNameOption,
             lastNameOption    = c.lastNameOption,
             phoneNumberOption = c.phoneNumberOption,
-            vcardPathOption   = c.vcardPathOption flatMap copy(Subpath.Files),
+            vcardPathOption   = c.vcardPathOption flatMap copy(Subpath.Files, None),
           )
       }
     }
@@ -1420,16 +1446,19 @@ object H2ChatHistoryDao {
   val MaxBackups = 3
 
   /** Subpath inside a directory, suffixed by "/" to be concatenated. */
-  sealed abstract class Subpath(val fragment: String)
+  sealed abstract class Subpath(val fragment: String, val useHashing: Boolean = false)
 
   object Subpath {
     case object Root extends Subpath("")
-    case object Photos extends Subpath("photos/")
-    case object Stickers extends Subpath("stickers/")
+    case object Photos extends Subpath("photos/", useHashing = true)
+    case object Stickers extends Subpath("stickers/", useHashing = true)
     case object Voices extends Subpath("voice_messages/")
-    case object Videos extends Subpath("videos/")
+    case object Videos extends Subpath("videos/", useHashing = true)
     case object Files extends Subpath("files/")
   }
+
+  lazy val Hash: DigestUtils =
+    new DigestUtils("SHA3-256")
 
   //
   // "Raw" case classes, more closely matching DB structure

@@ -63,17 +63,7 @@ class H2ChatHistoryDaoSpec //
     val dstFiles = h2dao.datasetFiles(dsUuid)
     assert(dstFiles.size === srcFiles1.size)
 
-    // Sorting by content.mkString is not particularly smart or efficient, but it does its job
-    val srcFilesWithContent = srcFiles1 map (f => (f, f.bytes)) sortBy (_._2.mkString)
-    val dstFilesWithContent = dstFiles.toSeq map (f => (f, f.bytes)) sortBy (_._2.mkString)
-
-    (srcFilesWithContent zip dstFilesWithContent).foreach {
-      case ((src, srcBytes), (dst, dstBytes)) =>
-        assert(src.exists, s"File ${src} (source) isn't found! Bug in test?")
-        assert(dst.exists, s"File ${dst} wasn't copied from ${src}!")
-        assert(!srcBytes.isEmpty, s"Source file ${src} was empty! Bug in test?")
-        assert(srcBytes === dstBytes, s"Content of ${dst} didn't match its source ${src}!")
-    }
+    assertFiles(srcFiles1, dstFiles, canBeMissing = false)
 
     val pathsNotToCopy = Seq(
       "dont_copy_me.txt",
@@ -85,8 +75,6 @@ class H2ChatHistoryDaoSpec //
       assert(!srcFiles1.contains(src))
       assert(!dstFiles.map(_.getName).contains(src.getName))
     }
-
-    assert(srcFilesWithContent.map(_._1) =~= dstFilesWithContent.map(_._1))
   }
 
   test("messages and chats are equal, retrieval methods work as needed") {
