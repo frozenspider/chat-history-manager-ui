@@ -19,7 +19,9 @@ import javax.swing.event.HyperlinkEvent
 
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
+import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.loader._
@@ -31,7 +33,6 @@ import org.fs.chm.protobuf.User
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils
 import org.fs.chm.ui.swing.general.SwingUtils._
-import org.fs.chm.ui.swing.list.DaoDatasetSelectionCallbacks
 import org.fs.chm.ui.swing.list.DaoItem
 import org.fs.chm.ui.swing.list.DaoList
 import org.fs.chm.ui.swing.list.chat._
@@ -52,7 +53,6 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     extends SimpleSwingApplication
     with SimpleConfigAware
     with Logging
-    with DaoDatasetSelectionCallbacks
     with ChatListSelectionCallbacks
     with UserDetailsMenuCallbacks
     with MessageNavigationCallbacks { app =>
@@ -349,7 +349,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     val userList = new DaoList({ dao =>
       new DaoItem(
         dao,
-        None, { ds =>
+        { ds =>
           dao.users(ds.uuid).sortBy(_.id).zipWithIndex map {
             case (u, i) =>
               val pane = new UserDetailsPane(dao, u, false, Some(this))
@@ -359,7 +359,9 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
               }
               pane
           }
-        }
+        },
+        popupEnabled = false,
+        None, None, None
       )
     })
     userList.replaceWith(loadedDaos.keys.toSeq)
@@ -514,14 +516,14 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     chatsOuterPanel.repaint()
   }
 
-  override def renameDataset(dao: ChatHistoryDao, dsUuid: PbUuid, newName: String): Unit = {
+  def renameDataset(dao: ChatHistoryDao, dsUuid: PbUuid, newName: String): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     freezeTheWorld("Renaming...")
     Swing.onEDT { // To release UI lock
       try {
         MutationLock.synchronized {
-          dao.mutable.renameDataset(dsUuid, newName)
+          dao match { case dao: MutableChatHistoryDao => dao.renameDataset(dsUuid, newName) }
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
         chatsOuterPanel.revalidate()
@@ -532,14 +534,14 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     }
   }
 
-  override def deleteDataset(dao: ChatHistoryDao, dsUuid: PbUuid): Unit = {
+  def deleteDataset(dao: ChatHistoryDao, dsUuid: PbUuid): Unit = {
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     freezeTheWorld("Deleting...")
     Swing.onEDT { // To release UI lock
       try {
         MutationLock.synchronized {
-          dao.mutable.deleteDataset(dsUuid)
+          dao match { case dao: MutableChatHistoryDao => dao.deleteDataset(dsUuid) }
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
         chatsOuterPanel.revalidate()
@@ -550,14 +552,20 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     }
   }
 
-  override def shiftDatasetTime(dao: ChatHistoryDao, dsUuid: PbUuid, hrs: Int): Unit = {
+  def shiftDatasetTime(dao: ChatHistoryDao, dsUuid: PbUuid, hrs: Int): Unit = {
     checkEdt()
-    require(dao.isMutable, "DAO is immutable!")
+    require(dao.isMutable || dao.isInstanceOf[EagerChatHistoryDao], "DAO is immutable!")
     freezeTheWorld("Shifting time...")
     Swing.onEDT { // To release UI lock
       try {
         MutationLock.synchronized {
-          dao.mutable.shiftDatasetTime(dsUuid, hrs)
+          dao match {
+            case dao: MutableChatHistoryDao =>
+              dao.shiftDatasetTime(dsUuid, hrs)
+            case dao: EagerChatHistoryDao =>
+              val newDao = dao.copyWithShiftedDatasetTime(dsUuid, hrs)
+              loadDaoInEDT(newDao, Some(dao))
+          }
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
         chatsOuterPanel.revalidate()
@@ -573,7 +581,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     require(dao.isMutable, "DAO is immutable!")
     freezeTheWorld("Modifying...")
     asyncChangeUsers(dao, {
-      dao.mutable.updateUser(user)
+      dao match { case dao: MutableChatHistoryDao => dao.updateUser(user) }
       Seq(user.id)
     })
   }
@@ -584,7 +592,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     require(baseUser.dsUuid == absorbedUser.dsUuid, "Users are from different datasets!")
     freezeTheWorld("Modifying...")
     asyncChangeUsers(dao, {
-      dao.mutable.mergeUsers(baseUser, absorbedUser)
+      dao match { case dao: MutableChatHistoryDao => dao.mergeUsers(baseUser, absorbedUser) }
       Seq(baseUser.id, absorbedUser.id)
     })
   }
@@ -594,7 +602,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     Swing.onEDT {
       try {
         MutationLock.synchronized {
-          dao.mutable.deleteChat(chat)
+          dao match { case dao: MutableChatHistoryDao => dao.deleteChat(chat) }
           evictFromCache(dao, chat)
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
@@ -918,10 +926,13 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
   private class DaoChatItem(dao: ChatHistoryDao)
       extends DaoItem(
         dao             = dao,
-        callbacksOption = Some(this),
         getInnerItems = { ds =>
           dao.chats(ds.uuid) map (cwd => new ChatListItem(dao, cwd, Some(chatSelGroup), Some(this)))
-        }
+        },
+        popupEnabled                   = true,
+        renameDatasetCallbackOption    = if (dao.isMutable) Some(renameDataset) else None,
+        deleteDatasetCallbackOption    = if (dao.isMutable) Some(deleteDataset) else None,
+        shiftDatasetTimeCallbackOption = Some(shiftDatasetTime)
       )
 
   private case class ChatCache(

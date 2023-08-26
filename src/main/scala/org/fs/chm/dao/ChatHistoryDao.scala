@@ -94,8 +94,6 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def isMutable: Boolean = this.isInstanceOf[MutableChatHistoryDao]
 
-  def mutable = this.asInstanceOf[MutableChatHistoryDao]
-
   override def close(): Unit = {}
 
   /** Whether given data path is the one loaded in this DAO */

@@ -10,21 +10,25 @@ import javax.swing.border.MatteBorder
 
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.protobuf.Dataset
+import org.fs.chm.ui.swing.Callbacks
 import org.fs.chm.ui.swing.general.SwingUtils._
 
 class DatasetItem[I <: Panel](
     ds: Dataset,
     dao: ChatHistoryDao,
-    callbacksOption: Option[DaoDatasetSelectionCallbacks],
-    getInnerItems: Dataset => Seq[I]
+    getInnerItems: Dataset => Seq[I],
+    popupEnabled: Boolean,
+    renameDatasetCallbackOption: Option[Callbacks.RenameDataset],
+    deleteDatasetCallbackOption: Option[Callbacks.DeleteDataset],
+    shiftDatasetTimeCallbackOption: Option[Callbacks.ShiftDatasetTime]
 ) extends GridBagPanel {
 
-  val headerPopupMenu = new PopupMenu {
-    callbacksOption foreach { _ =>
-      contents += menuItem("Rename", enabled = dao.isMutable)(rename())
-      contents += menuItem("Shift time", enabled = dao.isMutable)(shiftDatasetTime())
+  private val headerPopupMenu = new PopupMenu {
+    if (popupEnabled) {
+      contents += menuItem("Rename", enabled = renameDatasetCallbackOption.isDefined)(rename())
+      contents += menuItem("Shift time", enabled = shiftDatasetTimeCallbackOption.isDefined)(shiftDatasetTime())
       contents += new Separator()
-      contents += menuItem("Delete", enabled = dao.isMutable)(delete())
+      contents += menuItem("Delete", enabled = deleteDatasetCallbackOption.isDefined)(delete())
     }
   }
 
@@ -60,7 +64,7 @@ class DatasetItem[I <: Panel](
       title   = "Rename dataset",
       message = "Choose a new name",
       initial = ds.alias
-    ) foreach (newAlias => callbacksOption.get.renameDataset(dao, ds.uuid, newAlias))
+    ) foreach (newAlias => renameDatasetCallbackOption.get.renameDataset(dao, ds.uuid, newAlias))
   }
 
   private def delete(): Unit = {
@@ -68,7 +72,7 @@ class DatasetItem[I <: Panel](
       title   = "Delete dataset",
       message = s"Are you sure you want to delete a dataset '${ds.alias}', sourced from ${ds.sourceType}?"
     ) match {
-      case Dialog.Result.Yes => callbacksOption.get.deleteDataset(dao, ds.uuid)
+      case Dialog.Result.Yes => deleteDatasetCallbackOption.get.deleteDataset(dao, ds.uuid)
       case _                 => // NOOP
     }
   }
@@ -78,7 +82,7 @@ class DatasetItem[I <: Panel](
       title   = "Shift dataset time",
       message = "Choose an hours difference",
       initial = "0"
-    ) foreach (hrsString => callbacksOption.get.shiftDatasetTime(dao, ds.uuid, hrsString.toInt))
+    ) foreach (hrsString => shiftDatasetTimeCallbackOption.get.shiftDatasetTime(dao, ds.uuid, hrsString.toInt))
   }
 
   override def enabled_=(b: Boolean): Unit = {

@@ -10,12 +10,16 @@ import javax.swing.border.MatteBorder
 
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.protobuf.Dataset
+import org.fs.chm.ui.swing.Callbacks
 import org.fs.chm.ui.swing.general.SwingUtils._
 
 class DaoItem[I <: Panel](
     dao: ChatHistoryDao,
-    callbacksOption: Option[DaoDatasetSelectionCallbacks],
-    getInnerItems: Dataset => Seq[I]
+    getInnerItems: Dataset => Seq[I],
+    popupEnabled: Boolean,
+    renameDatasetCallbackOption: Option[Callbacks.RenameDataset],
+    deleteDatasetCallbackOption: Option[Callbacks.DeleteDataset],
+    shiftDatasetTimeCallbackOption: Option[Callbacks.ShiftDatasetTime]
 ) extends GridBagPanel {
 
   val header: Label = new Label {
@@ -28,7 +32,8 @@ class DaoItem[I <: Panel](
   }
 
   val items: Seq[DatasetItem[I]] =
-    dao.datasets map (ds => new DatasetItem(ds, dao, callbacksOption, getInnerItems))
+    dao.datasets map (ds => new DatasetItem(ds, dao, getInnerItems, popupEnabled,
+      renameDatasetCallbackOption, deleteDatasetCallbackOption, shiftDatasetTimeCallbackOption))
 
   {
     val c = verticalListConstraint(this)
