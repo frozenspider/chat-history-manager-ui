@@ -216,11 +216,7 @@ object SelectMergesTable extends Logging {
 
     private var _totalSelectableCount = 0
 
-    protected def rowDataToResultOption(rd: RowData[V], isSelected: Boolean): Option[R]
-
-    protected def isInBothSelectable(mv: V, sv: V): Boolean
-    protected def isInSlaveSelectable(sv: V): Boolean
-    protected def isInMasterSelectable(mv: V): Boolean
+    protected def rowDataToResultOption(rd: RowData[V], selected: Boolean): Option[R]
 
     lazy val (maxItemHeight: Int, maxItemWidth: Int) = {
       val uiItems = for {
@@ -272,25 +268,22 @@ object SelectMergesTable extends Logging {
           } else ""
         }
         val row: Array[AnyRef] = merge match {
-          case RowData.InBoth(mv, sv) =>
-            val isSelectable = isInBothSelectable(mv, sv)
+          case RowData.InBoth(mv, sv, selectable) =>
             Array(
-              ListItemRenderable[V](mv, isSelectable, isCombine = true),
-              checkboxOrEmpty(isSelectable, isCombine = true),
-              ListItemRenderable[V](sv, isSelectable, isCombine = true)
+              ListItemRenderable[V](mv, selectable, isCombine = true),
+              checkboxOrEmpty(selectable, isCombine = true),
+              ListItemRenderable[V](sv, selectable, isCombine = true)
             )
-          case RowData.InSlaveOnly(sv) =>
-            val isSelectable = isInSlaveSelectable(sv)
+          case RowData.InSlaveOnly(sv, selectable) =>
             Array(
               "",
-              checkboxOrEmpty(isSelectable, isAdd = true),
-              ListItemRenderable[V](sv, isSelectable, isAdd = true)
+              checkboxOrEmpty(selectable, isAdd = true),
+              ListItemRenderable[V](sv, selectable, isAdd = true)
             )
-          case RowData.InMasterOnly(mv) =>
-            val isSelectable = isInMasterSelectable(mv)
+          case RowData.InMasterOnly(mv, selectable) =>
             Array(
-              ListItemRenderable[V](mv, isSelectable),
-              checkboxOrEmpty(isSelectable),
+              ListItemRenderable[V](mv, selectable),
+              checkboxOrEmpty(selectable),
               ""
             )
         }
@@ -382,11 +375,13 @@ object SelectMergesTable extends Logging {
     override def removeCellEditorListener(l: CellEditorListener): Unit    = {}
   }
 
-  sealed trait RowData[V]
+  sealed trait RowData[V] {
+    def selectable: Boolean
+  }
   object RowData {
-    sealed case class InBoth[V](masterValue: V, slaveValue: V) extends RowData[V]
-    sealed case class InMasterOnly[V](masterValue: V)          extends RowData[V]
-    sealed case class InSlaveOnly[V](slaveValue: V)            extends RowData[V]
+    sealed case class InBoth[V](masterValue: V, slaveValue: V, selectable: Boolean) extends RowData[V]
+    sealed case class InMasterOnly[V](masterValue: V, selectable: Boolean) extends RowData[V]
+    sealed case class InSlaveOnly[V](slaveValue: V, selectable: Boolean) extends RowData[V]
   }
 
   case class ListItemRenderable[V](v: V, isSelectable: Boolean, isCombine: Boolean = false, isAdd: Boolean = false)

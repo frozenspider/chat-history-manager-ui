@@ -8,7 +8,8 @@ import javax.swing.text.html.HTMLEditorKit
 
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
-import org.fs.chm.dao.merge.DatasetMerger.MessagesMergeOption
+import org.fs.chm.dao.merge.DatasetMerger.MessagesMergeDecision
+import org.fs.chm.dao.merge.DatasetMerger.MessagesMergeDiff
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Message
 import org.fs.chm.ui.swing.general.CustomDialog
@@ -22,8 +23,8 @@ import org.fs.utility.Imports._
  * Show dialog for merging chat messages.
  * Unlike other merge dialogs, this one does not perform a mismatch analysis, and relies on the provided one instead.
  * Rules:
- * - Multiple `Keep` mismatches will be squished together to avoid cluttering
- * - Checkbox option will be present for all `Add`/`Replace` mismatches
+ * - Multiple `Match` diffs will be squished together to avoid cluttering
+ * - Checkbox option will be present for all `Add`/`Replace` diffs
  * - `Add` mismatch that was unchecked will be removed from output
  * - `Replace` mismatch that was unchecked will be replaced by `Keep` mismatch
  * This means that master messages coverage should not change in the output
@@ -33,12 +34,17 @@ class SelectMergeMessagesDialog(
     masterCwd: ChatWithDetails,
     slaveDao: ChatHistoryDao,
     slaveCwd: ChatWithDetails,
-    mismatches: IndexedSeq[MessagesMergeOption],
+    _diffs: IndexedSeq[MessagesMergeDecision], // Type is a hack!
     htmlKit: HTMLEditorKit
-) extends CustomDialog[IndexedSeq[MessagesMergeOption]](takeFullHeight = true) {
+) extends CustomDialog[IndexedSeq[MessagesMergeDecision]](takeFullHeight = true) {
   import SelectMergeMessagesDialog._
 
   // Values here are lazy because they are used from the parent init code.
+
+  private lazy val diffs = {
+    require(_diffs.forall(_.isInstanceOf[MessagesMergeDiff]))
+    _diffs.asInstanceOf[IndexedSeq[MessagesMergeDiff]]
+  }
 
   private lazy val MaxMessageWidth = 500
 
@@ -56,25 +62,25 @@ class SelectMergeMessagesDialog(
 
   private lazy val table = {
     checkEdt()
-    new SelectMergesTable[RenderableMismatch, Seq[MessagesMergeOption]](models)
+    new SelectMergesTable[RenderableDiff, MessagesMergeDecision](models)
   }
 
   override protected lazy val dialogComponent: Component = {
     table.wrapInScrollpaneAndAdjustWidth()
   }
 
-  override protected def validateChoices(): Option[IndexedSeq[MessagesMergeOption]] = {
-    Some(table.selected.flatten.toIndexedSeq)
+  override protected def validateChoices(): Option[IndexedSeq[MessagesMergeDecision]] = {
+    Some(table.selected.toIndexedSeq)
   }
 
   import SelectMergesTable._
 
-  private class Models extends MergeModels[RenderableMismatch, Seq[MessagesMergeOption]] {
-    override val allElems: Seq[RowData[RenderableMismatch]] = {
-      require(mismatches.nonEmpty)
+  private class Models extends MergeModels[RenderableDiff, MessagesMergeDecision] {
+    override val allElems: Seq[RowData[RenderableDiff]] = {
+      require(diffs.nonEmpty)
 
       val masterCxtFetcher = new ContextFetcher(masterDao, masterCwd.chat)
-      val slaveCxtFetcher = new ContextFetcher(slaveDao, slaveCwd.chat)
+      val slaveCxtFetcher  = new ContextFetcher(slaveDao, slaveCwd.chat)
 
       def cxtToRaw(fetchResult: CxtFetchResult): Seq[Either[Int, Message]] = fetchResult match {
         case CxtFetchResult.Discrete(msf, n, msl) =>
@@ -83,52 +89,23 @@ class SelectMergeMessagesDialog(
           ms map Right.apply
       }
 
-      // Group consecutive Keeps
-      val groupedMismatches: Seq[Seq[MessagesMergeOption]] = {
-        @tailrec
-        def process(acc: Seq[Seq[MessagesMergeOption]],
-                    left: Seq[MessagesMergeOption]): Seq[Seq[MessagesMergeOption]] = {
-          left.headOption match {
-            case None => acc
-            case Some(_: MessagesMergeOption.Keep) =>
-              val (keeps, rest) = left.span(_.isInstanceOf[MessagesMergeOption.Keep])
-              process(acc :+ keeps, rest)
-            case Some(mmo) =>
-              process(acc :+ Seq(mmo), left.tail)
-          }
-        }
-        process(Seq.empty, mismatches)
-      }
-
-      groupedMismatches map { mismatches =>
-        val fwdStream = mismatches.toStream
-        val bckStream = mismatches.reverse.toStream
-        val masterFetchResult =
-          masterCxtFetcher(
-            fwdStream.flatMap(_.firstMasterMsgOption).headOption,
-            bckStream.flatMap(_.lastMasterMsgOption).headOption
-          )
-        val slaveFetchResult =
-          slaveCxtFetcher(
-            fwdStream.flatMap(_.firstSlaveMsgOption).headOption,
-            bckStream.flatMap(_.lastSlaveMsgOption).headOption
-          )
-        val masterValue = RenderableMismatch(mismatches, cxtToRaw(masterFetchResult), masterDao, masterCwd, masterRoot)
-        val slaveValue = RenderableMismatch(mismatches, cxtToRaw(slaveFetchResult), slaveDao, slaveCwd, slaveRoot)
-        mismatches match {
-          // Those are keeps
-          case xs if xs.tail.nonEmpty                                => RowData.InBoth(masterValue, slaveValue)
-          case MessagesMergeOption.Keep(_, _, Some(_), Some(_)) +: _ => RowData.InBoth(masterValue, slaveValue)
-          case (_: MessagesMergeOption.Keep) +: _                    => RowData.InMasterOnly(masterValue)
-          case (_: MessagesMergeOption.Add) +: _                     => RowData.InSlaveOnly(slaveValue)
-          case (_: MessagesMergeOption.Replace) +: _                 => RowData.InBoth(masterValue, slaveValue)
+      diffs map { diff =>
+        val masterFetchResult = masterCxtFetcher(diff.firstMasterMsgOption, diff.lastMasterMsgOption)
+        val slaveFetchResult  = slaveCxtFetcher(diff.firstSlaveMsgOption, diff.lastSlaveMsgOption)
+        val masterValue = RenderableDiff(diff, cxtToRaw(masterFetchResult), masterDao, masterCwd, masterRoot)
+        val slaveValue  = RenderableDiff(diff, cxtToRaw(slaveFetchResult),  slaveDao,  slaveCwd,  slaveRoot)
+        diff match {
+          case _: MessagesMergeDiff.Retain  => RowData.InMasterOnly(masterValue, selectable = false)
+          case _: MessagesMergeDiff.Add     => RowData.InSlaveOnly(slaveValue, selectable = true)
+          case _: MessagesMergeDiff.Replace => RowData.InBoth(masterValue, slaveValue, selectable = true)
+          case _: MessagesMergeDiff.Match   => RowData.InBoth(masterValue, slaveValue, selectable = false)
         }
       }
     }
 
     override val cellsAreInteractive = true
 
-    override lazy val renderer = (renderable: ListItemRenderable[RenderableMismatch]) => {
+    override lazy val renderer = (renderable: ListItemRenderable[RenderableDiff]) => {
       // FIXME: Figure out what to do with a shitty layout!
       checkEdt()
       val msgAreaContainer = new MessagesAreaContainer(htmlKit)
@@ -148,7 +125,7 @@ class SelectMergeMessagesDialog(
         rendered
       }
       md.insert(allRendered.mkString.replaceAll("\n", ""), MessagesDocumentService.MessageInsertPosition.Trailing)
-      msgAreaContainer.render(md, true)
+      msgAreaContainer.render(md, showTop = true)
       val ui = msgAreaContainer.textPane.peer.getUI
       val rootView = ui.getRootView(null)
       val view = rootView.getView(0)
@@ -170,81 +147,37 @@ class SelectMergeMessagesDialog(
       res
     }
 
-    override protected def isInBothSelectable(mv: RenderableMismatch, sv: RenderableMismatch): Boolean = mv.isSelectable
-    override protected def isInSlaveSelectable(sv: RenderableMismatch):                        Boolean = sv.isSelectable
-    override protected def isInMasterSelectable(mv: RenderableMismatch):                       Boolean = mv.isSelectable
-
     override protected def rowDataToResultOption(
-        rd: RowData[RenderableMismatch],
-        isSelected: Boolean
-    ): Option[Seq[MessagesMergeOption]] = {
-      import MessagesMergeOption._
-      rd match {
-        case RowData.InMasterOnly(mmd)                                     => Some(mmd.mismatches)
-        case RowData.InBoth(mmd, _) if isSelected                          => Some(mmd.mismatches)
-        case RowData.InBoth(RenderableMismatch.Keep(mms, _, _, _, _), _)   => Some(mms)
-        case RowData.InBoth(RenderableMismatch.Replace(mm, _, _, _, _), _) => Some(Seq(mm.asKeep))
-        case _ if !isSelected                                              => None
-        case RowData.InSlaveOnly(smd)                                      => Some(smd.mismatches)
+        rd: RowData[RenderableDiff],
+        selected: Boolean
+    ): Option[MessagesMergeDecision] = {
+      import MessagesMergeDiff._
+      val diff: MessagesMergeDiff = rd match {
+        case RowData.InBoth(mmd, _, _)    => mmd.diff
+        case RowData.InMasterOnly(mmd, _) => mmd.diff
+        case RowData.InSlaveOnly(smd, _)  => smd.diff
+      }
+      diff match {
+        case diff: Retain               => Some(diff)
+        case diff: Match                => Some(diff)
+
+        case diff: Add if selected      => Some(diff)
+        case diff: Add                  => None
+        case diff: Replace if selected  => Some(diff)
+        case diff: Replace              => Some(diff.asDontReplace)
       }
     }
   }
 
-  private sealed abstract class RenderableMismatch(val isSelectable: Boolean) {
-    /** Mismatches to be rendered */
-    def mismatches: Seq[MessagesMergeOption]
-
+  private case class RenderableDiff(
+    /** Note that diff is the same for lhs and rhs */
+    diff: MessagesMergeDiff,
     /** Messages to be rendered, or number of messages abbreviated out */
-    def messageOptions: Seq[Either[Int, Message]]
-
-    def dao: ChatHistoryDao
-    def cwd: ChatWithDetails
-    def dsRoot: DatasetRoot
-  }
-
-  private object RenderableMismatch {
-    def apply(mismatches: Seq[MessagesMergeOption],
-              messageOptions: Seq[Either[Int, Message]],
-              dao: ChatHistoryDao,
-              cwd: ChatWithDetails,
-              dsRoot: DatasetRoot): RenderableMismatch = {
-      mismatches match {
-        case xs if xs.forall(_.isInstanceOf[MessagesMergeOption.Keep]) =>
-          Keep(mismatches.asInstanceOf[Seq[MessagesMergeOption.Keep]], messageOptions, dao, cwd, dsRoot)
-        case Seq(mmo: MessagesMergeOption.Add) =>
-          Add(mmo, messageOptions, dao, cwd, dsRoot)
-        case Seq(mmo: MessagesMergeOption.Replace) =>
-          Replace(mmo, messageOptions, dao, cwd, dsRoot)
-      }
-    }
-    case class Keep(
-        mismatches: Seq[MessagesMergeOption.Keep],
-        messageOptions: Seq[Either[Int, Message]],
-        dao: ChatHistoryDao,
-        cwd: ChatWithDetails,
-        dsRoot: DatasetRoot
-    ) extends RenderableMismatch(false)
-
-    case class Add(
-        mismatch: MessagesMergeOption.Add,
-        messageOptions: Seq[Either[Int, Message]],
-        dao: ChatHistoryDao,
-        cwd: ChatWithDetails,
-        dsRoot: DatasetRoot
-    ) extends RenderableMismatch(true) {
-      override def mismatches = Seq(mismatch)
-    }
-
-    case class Replace(
-        mismatch: MessagesMergeOption.Replace,
-        messageOptions: Seq[Either[Int, Message]],
-        dao: ChatHistoryDao,
-        cwd: ChatWithDetails,
-        dsRoot: DatasetRoot
-    ) extends RenderableMismatch(true) {
-      override def mismatches = Seq(mismatch)
-    }
-  }
+    messageOptions: Seq[Either[Int, Message]],
+    dao: ChatHistoryDao,
+    cwd: ChatWithDetails,
+    dsRoot: DatasetRoot
+ )
 
   sealed trait CxtFetchResult
   object CxtFetchResult {
@@ -342,35 +275,31 @@ private object SelectMergeMessagesDialog {
 
     val mismatches = IndexedSeq(
       // Prefix
-      MessagesMergeOption.Keep(
-        firstMasterMsg      = mMsgsI.bySrcId(10),
-        lastMasterMsg       = mMsgsI.bySrcId(15),
-        firstSlaveMsgOption = None,
-        lastSlaveMsgOption  = None
+      MessagesMergeDiff.Retain(
+        firstMasterMsg = mMsgsI.bySrcId(10),
+        lastMasterMsg  = mMsgsI.bySrcId(15),
       ),
 
-      MessagesMergeOption.Keep(
-        firstMasterMsg      = mMsgsI.bySrcId(15),
-        lastMasterMsg       = mMsgsI.bySrcId(39),
-        firstSlaveMsgOption = Some(sMsgsI.bySrcId(15)),
-        lastSlaveMsgOption  = Some(sMsgsI.bySrcId(39))
+      MessagesMergeDiff.Match(
+        firstMasterMsg = mMsgsI.bySrcId(15),
+        lastMasterMsg  = mMsgsI.bySrcId(39),
+        firstSlaveMsg  = sMsgsI.bySrcId(15),
+        lastSlaveMsg   = sMsgsI.bySrcId(39)
       ),
 
-      MessagesMergeOption.Keep(
-        firstMasterMsg      = mMsgsI.bySrcId(40),
-        lastMasterMsg       = mMsgsI.bySrcId(40),
-        firstSlaveMsgOption = None,
-        lastSlaveMsgOption  = None
+      MessagesMergeDiff.Retain(
+        firstMasterMsg = mMsgsI.bySrcId(40),
+        lastMasterMsg  = mMsgsI.bySrcId(40),
       ),
 
 //      // Addition
-//      MessagesMergeOption.Add(
+//      MessagesMergeDiff.Add(
 //        firstSlaveMsg = sMsgsI.bySrcId(41),
 //        lastSlaveMsg  = sMsgsI.bySrcId(60)
 //      )
 
 //      // Conflict
-//      MessagesMergeOption.Replace(
+//      MessagesMergeDiff.Replace(
 //        firstMasterMsg = mMsgsI.bySrcId(41),
 //        lastMasterMsg  = mMsgsI.bySrcId(60),
 //        firstSlaveMsg  = sMsgsI.bySrcId(41),
@@ -378,35 +307,33 @@ private object SelectMergeMessagesDialog {
 //      ),
 
       // Addition + conflict + addition
-      MessagesMergeOption.Add(
+      MessagesMergeDiff.Add(
         firstSlaveMsg = sMsgsI.bySrcId(41),
         lastSlaveMsg  = sMsgsI.bySrcId(42)
       ),
-      MessagesMergeOption.Replace(
+      MessagesMergeDiff.Replace(
         firstMasterMsg = mMsgsI.bySrcId(43),
         lastMasterMsg  = mMsgsI.bySrcId(44),
         firstSlaveMsg  = sMsgsI.bySrcId(43),
         lastSlaveMsg   = sMsgsI.bySrcId(44)
       ),
-      MessagesMergeOption.Add(
+      MessagesMergeDiff.Add(
         firstSlaveMsg = sMsgsI.bySrcId(45),
         lastSlaveMsg  = sMsgsI.bySrcId(46)
       ),
 
       // Suffix
-      MessagesMergeOption.Keep(
-        firstMasterMsg      = mMsgsI.bySrcId(200),
-        lastMasterMsg       = mMsgsI.bySrcId(201),
-//        firstSlaveMsgOption = None,
-//        lastSlaveMsgOption  = None
-        firstSlaveMsgOption = Some(sMsgsI.bySrcId(200)),
-        lastSlaveMsgOption  = Some(sMsgsI.bySrcId(201))
+      MessagesMergeDiff.Match(
+        firstMasterMsg = mMsgsI.bySrcId(200),
+        lastMasterMsg  = mMsgsI.bySrcId(201),
+        firstSlaveMsg  = sMsgsI.bySrcId(200),
+        lastSlaveMsg   = sMsgsI.bySrcId(201)
       ),
-      MessagesMergeOption.Keep(
-        firstMasterMsg      = mMsgsI.bySrcId(202),
-        lastMasterMsg       = mMsgsI.bySrcId(400),
-        firstSlaveMsgOption = Some(sMsgsI.bySrcId(202)),
-        lastSlaveMsgOption  = Some(sMsgsI.bySrcId(400))
+      MessagesMergeDiff.Match(
+        firstMasterMsg = mMsgsI.bySrcId(202),
+        lastMasterMsg  = mMsgsI.bySrcId(400),
+        firstSlaveMsg  = sMsgsI.bySrcId(202),
+        lastSlaveMsg   = sMsgsI.bySrcId(400)
       )
     )
 

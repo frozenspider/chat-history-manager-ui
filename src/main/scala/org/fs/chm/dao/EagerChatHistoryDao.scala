@@ -69,7 +69,7 @@ class EagerChatHistoryDao(
   override def chats(dsUuid: PbUuid): Seq[ChatWithDetails] = {
     chatsWithMessages.toSeq.map {
       case (c, msgs) => ChatWithDetails(c, msgs.lastOption, chatMembers(c))
-    }.sortBy(_.lastMsgOption.map(_.timestamp)).reverse
+    }.sortBy(_.lastMsgOption.map(- _.timestamp).getOrElse(Long.MaxValue)) // Minus used to reverse order
   }
 
   override def chatOption(dsUuid: PbUuid, id: Long): Option[ChatWithDetails] = chatsWithMessages find (_._1.id == id) map {

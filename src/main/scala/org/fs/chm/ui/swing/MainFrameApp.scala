@@ -446,15 +446,15 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
       val (resolved, cancelled) = analyzed.foldLeft((Seq.empty[ChatMergeOption], false)) {
         case ((res, stop), _) if stop =>
           (res, true)
-        case ((res, _), (cmo @ ChatMergeOption.Combine(mcwd, scwd, mismatches))) =>
+        case ((res, _), (cmo @ ChatMergeOption.Combine(mcwd, scwd, diffs))) =>
           setStatus(s"Combining '${scwd.chat.nameOrUnnamed}' (${scwd.chat.msgCount} messages)...")
           // Resolve mismatches
-          if (mismatches.forall(_.isInstanceOf[MessagesMergeOption.Keep])) {
+          if (diffs.forall(_.isInstanceOf[MessagesMergeDiff.Match])) {
             // User has no choice - pass them as-is
             (res :+ cmo, false)
           } else {
             val dialog = onEdtReturning {
-              new SelectMergeMessagesDialog(merger.masterDao, mcwd, merger.slaveDao, scwd, mismatches, htmlKit)
+              new SelectMergeMessagesDialog(merger.masterDao, mcwd, merger.slaveDao, scwd, diffs, htmlKit)
             }
             dialog.visible = true
             dialog.selection

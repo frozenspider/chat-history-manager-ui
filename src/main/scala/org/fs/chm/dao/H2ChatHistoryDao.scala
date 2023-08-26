@@ -98,11 +98,10 @@ class H2ChatHistoryDao(
   private def chatMembers(chat: Chat): Seq[User] = {
     val allUsers = users(chat.dsUuid)
     val me = myself(chat.dsUuid)
-    me +: (chat.memberIds
+    me +: chat.memberIds
       .filter(_ != me.id)
       .map(mId => allUsers.find(_.id == mId).get)
-      .toSeq
-      .sortBy(_.id))
+      .sortBy(_.id)
   }
 
   private def addChatsDetails(dsUuid: PbUuid, chatQuery: ConnectionIO[Seq[Chat]]):  ConnectionIO[Seq[ChatWithDetails]] = {
@@ -115,7 +114,8 @@ class H2ChatHistoryDao(
   override def chats(dsUuid: PbUuid): Seq[ChatWithDetails] = {
     // FIXME: Double-call when loading a DB!
     logPerformance {
-      addChatsDetails(dsUuid, queries.chats.selectAll(dsUuid)).transact(txctr).unsafeRunSync().sortBy(_.lastMsgOption.map(_.timestamp)).reverse
+      addChatsDetails(dsUuid, queries.chats.selectAll(dsUuid)).transact(txctr).unsafeRunSync()
+        .sortBy(_.lastMsgOption.map(-_.timestamp).getOrElse(Long.MaxValue))
     }((res, ms) => s"${res.size} chats fetched in ${ms} ms")
   }
 
@@ -273,7 +273,7 @@ class H2ChatHistoryDao(
 
         // Sanity checks
         StopWatch.measureAndCall {
-          log.info(s"Running sanity checks on $ds")
+          log.info(s"Running sanity checks on dataset ${ds.uuid.value}")
           val ds2Option = datasets.find(_.uuid == ds.uuid)
           assert(
             ds2Option.isDefined && ds == ds2Option.get,
@@ -1557,6 +1557,7 @@ object H2ChatHistoryDao {
   implicit val chatTypeToString: Put[ChatType] = Put[String].tcontramap {
     case ChatType.Personal     => "personal"
     case ChatType.PrivateGroup => "private_group"
+    case x                     => unexpectedCase(x)
   }
 
   implicit val pbUuidFromString: Get[PbUuid] = Get[String].tmap(s => fromJavaUuid(java.util.UUID.fromString(s)))

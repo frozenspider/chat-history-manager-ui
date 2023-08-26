@@ -95,7 +95,7 @@ object TestUtils {
       nameSuffix: String,
       users: Seq[User],
       chatsWithMsgs: ListMap[Chat, Seq[Message]],
-      amendMessage: ((Boolean, File, Message) => Message) = ((_, _, m) => m)
+      amendMessage: ((Boolean, DatasetRoot, Message) => Message) = ((_, _, m) => m)
   ): MutableChatHistoryDao = {
     require({
       val userIds = users.map(_.id).toSet
@@ -107,7 +107,7 @@ object TestUtils {
       sourceType = "test source"
     )
     val users1       = users map (_ copy (dsUuid = ds.uuid))
-    val dataPathRoot = Files.createTempDirectory("java_chm-eager_").toFile
+    val dataPathRoot = Files.createTempDirectory("java_chm-eager_").toFile.asInstanceOf[DatasetRoot]
     dataPathRoot.deleteOnExit()
     val amend2 = amendMessage.curried(isMaster)(dataPathRoot)
     new EagerChatHistoryDao(

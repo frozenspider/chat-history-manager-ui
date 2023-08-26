@@ -32,7 +32,7 @@ class DatasetMerger(
    */
   def analyzeChatHistoryMerge[T <: ChatMergeOption](merge: T): T = merge match {
     case merge @ ChatMergeOption.Combine(mCwd, sCwd, _) =>
-      var mismatches = ArrayBuffer.empty[MessagesMergeOption]
+      var diffs = ArrayBuffer.empty[MessagesMergeDiff]
       iterate(
         MsgIterationContext(
           mmStream = messagesStream(masterDao, mCwd.chat, None),
@@ -43,9 +43,9 @@ class DatasetMerger(
           sCwd     = sCwd,
         ),
         IterationState.NoState,
-        (mm => mismatches += mm)
+        (mm => diffs += mm)
       )
-      merge.copy(messageMergeOptions = mismatches.toVector).asInstanceOf[T]
+      merge.copy(messageMergeOptions = diffs.toVector).asInstanceOf[T]
     case _ => merge
   }
 
@@ -77,34 +77,32 @@ class DatasetMerger(
     }
   }
 
-  private def mismatchAfterConflictEnd(cxt: MsgIterationContext,
-                                       state: IterationState.StateInProgress): MessagesMergeOption = {
+  private def diffAfterConflictEnd(cxt: MsgIterationContext,
+                                   state: IterationState.StateInProgress): MessagesMergeDiff = {
     import IterationState._
     state match {
       case MatchInProgress(_, startMasterMsg, _, startSlaveMsg) =>
-        MessagesMergeOption.Keep(
-          firstMasterMsg      = startMasterMsg,
-          lastMasterMsg       = cxt.prevMm.get,
-          firstSlaveMsgOption = Some(startSlaveMsg),
-          lastSlaveMsgOption  = cxt.prevSm
+        MessagesMergeDiff.Match(
+          firstMasterMsg = startMasterMsg,
+          lastMasterMsg  = cxt.prevMm.get,
+          firstSlaveMsg  = startSlaveMsg,
+          lastSlaveMsg   = cxt.prevSm.get
         )
       case RetentionInProgress(_, startMasterMsg, _) =>
-        MessagesMergeOption.Keep(
-          firstMasterMsg      = startMasterMsg,
-          lastMasterMsg       = cxt.prevMm.get,
-          firstSlaveMsgOption = None,
-          lastSlaveMsgOption  = None
+        MessagesMergeDiff.Retain(
+          firstMasterMsg = startMasterMsg,
+          lastMasterMsg  = cxt.prevMm.get,
         )
       case AdditionInProgress(prevMasterMsgOption, prevSlaveMsgOption, startSlaveMsg) =>
         assert(cxt.prevMm == prevMasterMsgOption) // Master stream hasn't advanced
         assert(cxt.prevSm.isDefined)
-        MessagesMergeOption.Add(
+        MessagesMergeDiff.Add(
           firstSlaveMsg = startSlaveMsg,
           lastSlaveMsg  = cxt.prevSm.get
         )
       case ConflictInProgress(prevMasterMsgOption, startMasterMsg, prevSlaveMsgOption, startSlaveMsg) =>
         assert(cxt.prevMm.isDefined && cxt.prevSm.isDefined)
-        MessagesMergeOption.Replace(
+        MessagesMergeDiff.Replace(
           firstMasterMsg = startMasterMsg,
           lastMasterMsg  = cxt.prevMm.get,
           firstSlaveMsg  = startSlaveMsg,
@@ -118,7 +116,7 @@ class DatasetMerger(
   private def iterate(
       cxt: MsgIterationContext,
       state: IterationState,
-      onMismatch: MessagesMergeOption => Unit
+      onConflictEnd: MessagesMergeDiff => Unit
   ): Unit = {
     import IterationState._
 
@@ -135,8 +133,8 @@ class DatasetMerger(
       case (None, None, NoState) =>
         ()
       case (None, None, state: StateInProgress) =>
-        val mismatch = mismatchAfterConflictEnd(cxt, state)
-        onMismatch(mismatch)
+        val diff = diffAfterConflictEnd(cxt, state)
+        onConflictEnd(diff)
 
       //
       // NoState
@@ -145,7 +143,7 @@ class DatasetMerger(
       case (Some(mm), Some(sm), NoState) if matchesDisregardingContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
         // Matching subsequence starts
         val state2 = MatchInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
-        iterate(cxt.advanceBoth(), state2, onMismatch)
+        iterate(cxt.advanceBoth(), state2, onConflictEnd)
       case (Some(mm), Some(sm), NoState)
         if mm.typed.service.flatten.flatMap(_.asMessage.sealedValueOptional.groupMigrateFrom).isDefined &&
            sm.typed.service.flatten.flatMap(_.asMessage.sealedValueOptional.groupMigrateFrom).isDefined &&
@@ -158,8 +156,8 @@ class DatasetMerger(
         // We register this one conflict and proceed in clean state.
         // This is dirty but relatively easy to do.
         val singleConflictState = ConflictInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
-        onMismatch(mismatchAfterConflictEnd(cxt.advanceBoth(), singleConflictState))
-        iterate(cxt.advanceBoth(), NoState, onMismatch)
+        onConflictEnd(diffAfterConflictEnd(cxt.advanceBoth(), singleConflictState))
+        iterate(cxt.advanceBoth(), NoState, onConflictEnd)
       case (Some(mm), Some(sm), NoState) if mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption =>
         // Checking if there's a timestamp shift
         if (matchesDisregardingContent(mm.copy(timestamp = sm.timestamp).asInstanceOf[TaggedMessage.M], cxt.mCwd, sm, cxt.sCwd)) {
@@ -180,15 +178,15 @@ class DatasetMerger(
         // Conflict started
         // (Conflicts are only detectable if data source supply source IDs)
         val state2 = ConflictInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
-        iterate(cxt.advanceBoth(), state2, onMismatch)
+        iterate(cxt.advanceBoth(), state2, onConflictEnd)
       case (_, Some(sm), NoState) if cxt.cmpMasterSlave() > 0 =>
         // Addition started
         val state2 = AdditionInProgress(cxt.prevMm, cxt.prevSm, sm)
-        iterate(cxt.advanceSlave(), state2, onMismatch)
+        iterate(cxt.advanceSlave(), state2, onConflictEnd)
       case (Some(mm), _, NoState) if cxt.cmpMasterSlave() < 0 =>
         // Retention started
         val state2 = RetentionInProgress(cxt.prevMm, mm, cxt.prevSm)
-        iterate(cxt.advanceMaster(), state2, onMismatch)
+        iterate(cxt.advanceMaster(), state2, onConflictEnd)
 
       //
       // AdditionInProgress
@@ -197,11 +195,11 @@ class DatasetMerger(
       case (_, Some(sm), state: AdditionInProgress)
           if state.prevMasterMsgOption == cxt.prevMm && cxt.cmpMasterSlave() > 0 =>
         // Addition continues
-        iterate(cxt.advanceSlave(), state, onMismatch)
+        iterate(cxt.advanceSlave(), state, onConflictEnd)
       case (_, _, state: AdditionInProgress) =>
         // Addition ended
-        onMismatch(mismatchAfterConflictEnd(cxt, state))
-        iterate(cxt, NoState, onMismatch)
+        onConflictEnd(diffAfterConflictEnd(cxt, state))
+        iterate(cxt, NoState, onConflictEnd)
 
       //
       // MatchInProgress
@@ -209,11 +207,11 @@ class DatasetMerger(
 
       case (Some(mm), Some(sm), state: MatchInProgress) if matchesDisregardingContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
         // Matching subsequence continues
-        iterate(cxt.advanceBoth(), state, onMismatch)
+        iterate(cxt.advanceBoth(), state, onConflictEnd)
       case (_, _, state: MatchInProgress) =>
         // Matching subsequence ends
-        onMismatch(mismatchAfterConflictEnd(cxt, state))
-        iterate(cxt, NoState, onMismatch)
+        onConflictEnd(diffAfterConflictEnd(cxt, state))
+        iterate(cxt, NoState, onConflictEnd)
 
       //
       // RetentionInProgress
@@ -222,11 +220,11 @@ class DatasetMerger(
       case (Some(mm), _, RetentionInProgress(_, _, prevSlaveMsgOption))
           if (cxt.prevSm == prevSlaveMsgOption) && cxt.cmpMasterSlave() < 0 =>
         // Retention continues
-        iterate(cxt.advanceMaster(), state, onMismatch)
+        iterate(cxt.advanceMaster(), state, onConflictEnd)
       case (_, _, state: RetentionInProgress) =>
         // Retention ended
-        onMismatch(mismatchAfterConflictEnd(cxt, state))
-        iterate(cxt, NoState, onMismatch)
+        onConflictEnd(diffAfterConflictEnd(cxt, state))
+        iterate(cxt, NoState, onConflictEnd)
 
       //
       // ConflictInProgress
@@ -235,11 +233,13 @@ class DatasetMerger(
       case (Some(mm), Some(sm), state: ConflictInProgress)
           if (mm.asInstanceOf[Message], masterRoot, cxt.mCwd) !=~= (sm, slaveRoot, cxt.sCwd) =>
         // Conflict continues
-        iterate(cxt.advanceBoth(), state, onMismatch)
+        iterate(cxt.advanceBoth(), state, onConflictEnd)
       case (_, _, state: ConflictInProgress) =>
         // Conflict ended
-        onMismatch(mismatchAfterConflictEnd(cxt, state))
-        iterate(cxt, NoState, onMismatch)
+        onConflictEnd(diffAfterConflictEnd(cxt, state))
+        iterate(cxt, NoState, onConflictEnd)
+
+      case other => unexpectedCase(other)
     }
   }
 
@@ -325,21 +325,52 @@ class DatasetMerger(
                 .map(_.map(fixupMessageWithMembers(scwd, finalUsers)))
                 .map(mb => (slaveDao.datasetRoot(slaveDs.uuid), mb))
             case ChatMergeOption.Combine(mc, sc, resolution) =>
-              resolution.map {
-                case MessagesMergeOption.Keep(firstMasterMsg, lastMasterMsg, _, _) =>
-                  // In case of a Keep, we completely ignore slave messages.
-                  batchLoadMsgsUntilInc(finalUsers, masterDao, masterDs, cmo.masterCwdOption.get, firstMasterMsg, lastMasterMsg)
-                case MessagesMergeOption.Add(firstSlaveMsg, lastSlaveMsg) =>
-                  batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
-                case MessagesMergeOption.Replace(firstMasterMsg, lastMasterMsg, firstSlaveMsg, lastSlaveMsg) =>
-                  // Treat exactly as Add
-                  // TODO: Should we analyze content and make sure nothing is lost?
-                  batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
-                case _ => throw new MatchError("Impossible!")
-              }.toStream.flatten
+              val res: Seq[Stream[(DatasetRoot, IndexedSeq[Message])]] =
+                resolution.map {
+                  case MessagesMergeDiff.Retain(firstMasterMsg, lastMasterMsg) =>
+                    batchLoadMsgsUntilInc(finalUsers, masterDao, masterDs, cmo.masterCwdOption.get, firstMasterMsg, lastMasterMsg)
+                  case MessagesMergeDiff.Add(firstSlaveMsg, lastSlaveMsg) =>
+                    batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
+                  case MessagesMergeDiff.Replace(firstMasterMsg, lastMasterMsg, firstSlaveMsg, lastSlaveMsg) =>
+                    // Treat exactly as Add
+                    // TODO: Should we analyze content and make sure nothing is lost?
+                    batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
+                  case MessagesMergeDiff.DontReplace(firstMasterMsg, lastMasterMsg, firstSlaveMsg, lastSlaveMsg) =>
+                    // Treat exactly as Retain
+                    // TODO: Should we analyze content and make sure nothing is lost?
+                    batchLoadMsgsUntilInc(finalUsers, masterDao, masterDs, cmo.masterCwdOption.get, firstMasterMsg, lastMasterMsg)
+                  case MessagesMergeDiff.Match(firstMasterMsg, lastMasterMsg, firstSlaveMsg, lastSlaveMsg) =>
+                    // Keep master messages unless slave has new content but matches otherwise.
+                    val masterStream =
+                      batchLoadMsgsUntilInc(finalUsers, masterDao, masterDs, cmo.masterCwdOption.get, firstMasterMsg, lastMasterMsg)
+                    val slaveStream =
+                      batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
+                    val mixedFlatStream: Stream[(DatasetRoot, Message)] =
+                      masterStream.zip(slaveStream).flatMap { case ((mDsRoot, mMsgs), (sDsRoot, sMsgs)) =>
+                        assert(mMsgs.length == sMsgs.length)
+                        mMsgs.zip(sMsgs).map { case (mMsg, sMsg) =>
+                          // Only use slave message if master message content is missing. This allows us to never lose content.
+                          if (mMsg.files(mDsRoot).exists(_.exists)) {
+                            (mDsRoot, mMsg)
+                          } else {
+                            (sDsRoot, sMsg)
+                          }
+                        }
+                      }
+
+                    def groupConsecutivePairs[A, B](stream: Stream[(A, B)]): Stream[(A, IndexedSeq[B])] =
+                      if (stream.isEmpty) Stream.empty else {
+                        val key = stream.head._1
+                        val (matching, rest) = stream.span(_._1 == key)
+                        val segment = matching.map(_._2).toIndexedSeq
+                        (key, segment) #:: groupConsecutivePairs(rest)
+                      }
+
+                    groupConsecutivePairs(mixedFlatStream)
+                }
+              res.toStream.flatten
           }
 
-          val toRootFile = masterDao.datasetRoot(newDs.uuid)
           for ((srcDsRoot, mb) <- messageBatches) {
             // Also copies files
             masterDao.insertMessages(srcDsRoot, chat, mb)
@@ -557,7 +588,7 @@ object DatasetMerger {
         masterCwd: ChatWithDetails,
         slaveCwd: ChatWithDetails,
         /** Serves as either mismatches (all options after analysis) or resolution (mismatches filtered by user) */
-        messageMergeOptions: IndexedSeq[MessagesMergeOption]
+        messageMergeOptions: IndexedSeq[MessagesMergeDecision]
     ) extends ChatMergeOption(Some(masterCwd), Some(slaveCwd))
   }
 
@@ -573,47 +604,78 @@ object DatasetMerger {
     type S = Message with MessageTag.SlaveMessageTag
   }
 
-  /** Represents a single merge decision: a messages that should be added, retained, merged (or skipped otherwise) */
-  sealed trait MessagesMergeOption {
+  /** Represents a single merge resolution decision - same as `MessagesMergeDiff`, but with `DontReplace` added */
+  sealed trait MessagesMergeDecision {
     def firstMasterMsgOption: Option[TaggedMessage.M]
     def lastMasterMsgOption:  Option[TaggedMessage.M]
     def firstSlaveMsgOption:  Option[TaggedMessage.S]
     def lastSlaveMsgOption:   Option[TaggedMessage.S]
   }
-  object MessagesMergeOption {
-    case class Keep(
+
+  /** Represents a single merge diff: a messages that should be added, retained, merged (or skipped otherwise) */
+  sealed trait MessagesMergeDiff extends MessagesMergeDecision
+
+  object MessagesMergeDiff {
+    /** Content is only present in master */
+    case class Retain(
         firstMasterMsg: TaggedMessage.M,
-        lastMasterMsg: TaggedMessage.M,
-        firstSlaveMsgOption: Option[TaggedMessage.S],
-        lastSlaveMsgOption: Option[TaggedMessage.S]
-    ) extends MessagesMergeOption {
-      assert(firstSlaveMsgOption.isDefined == lastSlaveMsgOption.isDefined, (firstSlaveMsgOption, lastSlaveMsgOption))
+        lastMasterMsg: TaggedMessage.M
+    ) extends MessagesMergeDiff {
       override def firstMasterMsgOption: Option[TaggedMessage.M] = Some(firstMasterMsg)
       override def lastMasterMsgOption:  Option[TaggedMessage.M] = Some(lastMasterMsg)
+      override def firstSlaveMsgOption:  Option[TaggedMessage.S] = None
+      override def lastSlaveMsgOption:   Option[TaggedMessage.S] = None
     }
 
+    /** Content is only present in slave */
     case class Add(
         firstSlaveMsg: TaggedMessage.S,
         lastSlaveMsg: TaggedMessage.S
-    ) extends MessagesMergeOption {
+    ) extends MessagesMergeDiff {
       override def firstMasterMsgOption: Option[TaggedMessage.M] = None
       override def lastMasterMsgOption:  Option[TaggedMessage.M] = None
       override def firstSlaveMsgOption:  Option[TaggedMessage.S] = Some(firstSlaveMsg)
       override def lastSlaveMsgOption:   Option[TaggedMessage.S] = Some(lastSlaveMsg)
     }
 
+    /** Content is present in both */
     case class Replace(
         firstMasterMsg: TaggedMessage.M,
         lastMasterMsg: TaggedMessage.M,
         firstSlaveMsg: TaggedMessage.S,
         lastSlaveMsg: TaggedMessage.S
-    ) extends MessagesMergeOption {
+    ) extends MessagesMergeDiff {
       override def firstMasterMsgOption: Option[TaggedMessage.M] = Some(firstMasterMsg)
       override def lastMasterMsgOption:  Option[TaggedMessage.M] = Some(lastMasterMsg)
       override def firstSlaveMsgOption:  Option[TaggedMessage.S] = Some(firstSlaveMsg)
       override def lastSlaveMsgOption:   Option[TaggedMessage.S] = Some(lastSlaveMsg)
 
-      def asKeep: Keep = Keep(firstMasterMsg, lastMasterMsg, firstSlaveMsgOption, lastSlaveMsgOption)
+      def asDontReplace: DontReplace = DontReplace(firstMasterMsg, lastMasterMsg, firstSlaveMsg, lastSlaveMsg)
+    }
+
+    case class DontReplace(
+        firstMasterMsg: TaggedMessage.M,
+        lastMasterMsg: TaggedMessage.M,
+        firstSlaveMsg: TaggedMessage.S,
+        lastSlaveMsg: TaggedMessage.S
+    ) extends MessagesMergeDecision {
+      override def firstMasterMsgOption: Option[TaggedMessage.M] = Some(firstMasterMsg)
+      override def lastMasterMsgOption:  Option[TaggedMessage.M] = Some(lastMasterMsg)
+      override def firstSlaveMsgOption:  Option[TaggedMessage.S] = Some(firstSlaveMsg)
+      override def lastSlaveMsgOption:   Option[TaggedMessage.S] = Some(lastSlaveMsg)
+    }
+
+    /** Master and slave has matching messages (possibly except for content) */
+    case class Match(
+        firstMasterMsg: TaggedMessage.M,
+        lastMasterMsg: TaggedMessage.M,
+        firstSlaveMsg: TaggedMessage.S,
+        lastSlaveMsg: TaggedMessage.S
+    ) extends MessagesMergeDiff {
+      override def firstMasterMsgOption: Option[TaggedMessage.M] = Some(firstMasterMsg)
+      override def lastMasterMsgOption:  Option[TaggedMessage.M] = Some(lastMasterMsg)
+      override def firstSlaveMsgOption:  Option[TaggedMessage.S] = Some(firstSlaveMsg)
+      override def lastSlaveMsgOption:   Option[TaggedMessage.S] = Some(lastSlaveMsg)
     }
   }
 }

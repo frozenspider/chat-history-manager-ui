@@ -68,8 +68,12 @@ class SelectMergeUsersDialog(
       val merges: Seq[RowData[UserWithDao]] =
         for (su <- slaveUsers if activeUserIds contains su.id) yield {
           masterUsersMap.get(su.id) match {
-            case None     => RowData.InSlaveOnly(UserWithDao(su, slaveDao))
-            case Some(mu) => RowData.InBoth(UserWithDao(mu, masterDao), UserWithDao(su, slaveDao))
+            case None =>
+              RowData.InSlaveOnly(UserWithDao(su, slaveDao), selectable = false)
+            case Some(mu) =>
+              // Only selectable if user content differs
+              val selectable = mu != su.copy(dsUuid = mu.dsUuid)
+              RowData.InBoth(UserWithDao(mu, masterDao), UserWithDao(su, slaveDao), selectable)
           }
         }
 
@@ -77,17 +81,17 @@ class SelectMergeUsersDialog(
 
       // 1) Combined and unchanged users
       val combinesMasterToDataMap: Map[User, RowData.InBoth[UserWithDao]] =
-        merges.collect { case rd @ RowData.InBoth(mu, su) => (mu.user, rd) }.toMap
+        merges.collect { case rd @ RowData.InBoth(mu, su, _) => (mu.user, rd) }.toMap
       for (mu <- masterUsers if activeUserIds contains mu.id) {
         combinesMasterToDataMap.get(mu) match {
           case Some(rd) => mergesAcc = mergesAcc :+ rd
-          case None     => mergesAcc = mergesAcc :+ RowData.InMasterOnly(UserWithDao(mu, masterDao))
+          case None     => mergesAcc = mergesAcc :+ RowData.InMasterOnly(UserWithDao(mu, masterDao), selectable = false)
         }
       }
 
       // 2) Added users
       val additionsSlaveToDataMap: Map[User, RowData.InSlaveOnly[UserWithDao]] =
-        merges.collect { case rd @ RowData.InSlaveOnly(su) => (su.user, rd) }.toMap
+        merges.collect { case rd @ RowData.InSlaveOnly(su, _) => (su.user, rd) }.toMap
       for (su <- slaveUsers if additionsSlaveToDataMap.contains(su)) {
         mergesAcc = mergesAcc :+ additionsSlaveToDataMap(su)
       }
@@ -114,20 +118,14 @@ class SelectMergeUsersDialog(
       }
     }
 
-    /** Only selectable if user content differs */
-    override protected def isInBothSelectable(mu: UserWithDao, su: UserWithDao): Boolean =
-      mu.user != su.user.copy(dsUuid = mu.user.dsUuid)
-    override protected def isInSlaveSelectable(su: UserWithDao):  Boolean = false
-    override protected def isInMasterSelectable(mu: UserWithDao): Boolean = false
-
     override protected def rowDataToResultOption(
         rd: RowData[UserWithDao],
         isSelected: Boolean
     ): Option[UserMergeOption] = {
       Some(rd match {
-        case RowData.InMasterOnly(muwd) => UserMergeOption.Keep(muwd.user)
-        case RowData.InSlaveOnly(suwd)  => UserMergeOption.Add(suwd.user)
-        case RowData.InBoth(muwd, suwd) =>
+        case RowData.InMasterOnly(muwd, _) => UserMergeOption.Keep(muwd.user)
+        case RowData.InSlaveOnly(suwd, _)  => UserMergeOption.Add(suwd.user)
+        case RowData.InBoth(muwd, suwd, _) =>
           if (isSelected) UserMergeOption.Replace(muwd.user, suwd.user) else UserMergeOption.Keep(muwd.user)
       })
     }

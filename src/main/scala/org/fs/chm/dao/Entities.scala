@@ -192,6 +192,16 @@ object Entities {
     }
   }
 
+  implicit object ContentOptionPracticallyEquals extends PracticallyEquals[(Option[Content], DatasetRoot)] {
+    override def practicallyEquals(v1: (Option[Content], DatasetRoot), v2: (Option[Content], DatasetRoot)): Boolean = {
+      (v1._1, v2._1) match {
+        case (Some(c1), Some(c2)) => (c1, v1._2) =~= (c2, v2._2)
+        case (None, None)         => true
+        case _                    => false
+      }
+    }
+  }
+
   implicit object MessageRegularPracticallyEquals extends PracticallyEquals[(MessageRegular, DatasetRoot)] {
     override def practicallyEquals(v1: (MessageRegular, DatasetRoot), v2: (MessageRegular, DatasetRoot)): Boolean = {
       val contentEquals = (v1._1.contentOption, v2._1.contentOption) match {

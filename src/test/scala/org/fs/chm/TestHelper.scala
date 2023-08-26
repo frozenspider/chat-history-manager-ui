@@ -26,17 +26,18 @@ trait TestHelper { self: TestSuite =>
     val expectedFilesWithContent = expectedFiles.toSeq map (withFetchedContent) sortBy (_._2.mkString)
     val actualFilesWithContent   = actualFiles  .toSeq map (withFetchedContent) sortBy (_._2.mkString)
 
-    assert(expectedFilesWithContent.size === actualFilesWithContent.size)
+    assert(actualFilesWithContent.size === expectedFilesWithContent.size)
 
     (expectedFilesWithContent zip actualFilesWithContent).foreach {
       case ((src, srcBytes), (dst, dstBytes)) =>
         assert(src.exists, s"File ${src} (source) isn't found! Bug in test?")
         assert(dst.exists, s"File ${dst} wasn't copied from ${src}!")
         assert(!srcBytes.isEmpty, s"Source file ${src} was empty! Bug in test?")
-        assert(srcBytes === dstBytes, s"Content of ${dst} didn't match its source ${src}!")
+        val contentEquals = srcBytes === dstBytes
+        assert(contentEquals, s"Content of ${dst} didn't match its source ${src}!")
     }
 
-    assert(expectedFilesWithContent.map(_._1) =~= actualFilesWithContent.map(_._1))
+    assert(actualFilesWithContent.map(_._1) =~= expectedFilesWithContent.map(_._1))
   }
 
   implicit object MessageSeqPracticallyEquals extends PracticallyEquals[(Seq[Message], DatasetRoot, ChatWithDetails)] {
