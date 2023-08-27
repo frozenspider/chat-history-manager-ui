@@ -213,22 +213,19 @@ class H2ChatHistoryDaoSpec //
   }
 
   test("message fetching corner cases") {
-    freeH2Dao()
-
     val localTgDao = TestUtils.createSimpleDao(isMaster = false, "TG", {
       (3 to 7) map (TestUtils.createRegularMessage(_, 1))
     }, 2)
     val localDsUuid = localTgDao.datasets.head.uuid
     val chat        = localTgDao.chats(localDsUuid).head.chat
     val msgs        = localTgDao.firstMessages(chat, 999999)
-    h2dir = Files.createTempDirectory("java_chm-h2_").toFile
 
-    h2dao = manager.create(h2dir)
-    h2dao.copyAllFrom(localTgDao)
+    val newDao = createH2Dao()
+    newDao.copyAllFrom(localTgDao)
 
     val dsUuid = localTgDao.datasets.head.uuid
     for {
-      dao  <- Seq(localTgDao, h2dao)
+      dao  <- Seq(localTgDao, newDao)
       chat <- dao.chats(localDsUuid).map(_.chat).sortBy(_.id)
     } {
       val clue                        = s"Dao is ${dao.getClass.getSimpleName}"

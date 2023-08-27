@@ -3,14 +3,13 @@ package org.fs.chm.ui.swing
 import java.awt.Desktop
 import java.awt.Toolkit
 import java.awt.event.AdjustmentEvent
-import java.io.File
+import java.io.{File => JFile}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.annotation.tailrec
 import scala.collection.immutable.ListMap
-import scala.concurrent.CancellationException
+import scala.concurrent._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 import scala.swing._
 
 import com.github.nscala_time.time.Imports._
@@ -45,6 +44,7 @@ import org.fs.chm.utility.InterruptableFuture._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.SimpleConfigAware
 import org.fs.utility.Imports._
+import org.fs.utility.StopWatch
 import org.slf4s.Logging
 
 class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
@@ -62,7 +62,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
   private val MsgBatchLoadSize       = 100
   private val MinScrollToTriggerLoad = 1000
 
-  private var initialFileOption: Option[File] = None
+  private var initialFileOption: Option[JFile] = None
 
   private var loadedDaos: ListMap[ChatHistoryDao, Map[Chat, ChatCache]] = ListMap.empty
 
@@ -259,7 +259,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
   def showOpenDbDialog(): Unit = {
     val chooser = DataLoaders.openChooser
     for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
-      val lastFile = new File(lastFileString)
+      val lastFile = new JFile(lastFileString)
       chooser.peer.setCurrentDirectory(lastFile.nearestExistingDir)
       chooser.selectedFile = lastFile
     }
@@ -273,7 +273,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     }
   }
 
-  def openDb(file: File): Unit = {
+  def openDb(file: JFile): Unit = {
     checkEdt()
     freezeTheWorld("Loading data...")
     config.update(DataLoaders.LastFileKey, file.getAbsolutePath)
@@ -290,8 +290,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
       } catch {
         case th: Throwable =>
           Swing.onEDT { unfreezeTheWorld() }
-          log.error("Exception while opening a database:", th)
-          showError(th.getMessage)
+          handleException(th)
       }
     }
   }
@@ -315,29 +314,19 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     }
   }
 
-  def showSaveDbAsDialog(srcDao: ChatHistoryDao): Unit = {
+  def showPickH2Dialog(callback: JFile => Unit): Unit = {
     val chooser = DataLoaders.saveAsChooser
     for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
-      val lastFile = new File(lastFileString)
+      val lastFile = new JFile(lastFileString)
       chooser.peer.setCurrentDirectory(lastFile.nearestExistingDir)
     }
     chooser.showOpenDialog(null) match {
       case FileChooser.Result.Cancel => // NOOP
-      case FileChooser.Result.Error  => // Mostly means that dialog was dismissed, also NOOP
+      case FileChooser.Result.Error => // Mostly means that dialog was dismissed, also NOOP
       case FileChooser.Result.Approve => {
-        freezeTheWorld("Saving data...")
         config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
-        Future { // To release UI lock
-          try {
-            val dstDao = DataLoaders.saveAs(srcDao, chooser.selectedFile)
-            Swing.onEDTWait {
-              loadDaoInEDT(dstDao, Some(srcDao))
-            }
-          } finally {
-            Swing.onEDT {
-              unfreezeTheWorld()
-            }
-          }
+        worldFreezingIFuture("Saving data...") {
+          callback(chooser.selectedFile)
         }
       }
     }
@@ -394,23 +383,35 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
       selectDsDialog.visible = true
       selectDsDialog.selection foreach {
         case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
-          val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
-          selectChatsDialog.visible = true
-          selectChatsDialog.selection foreach { chatsToMerge =>
-            val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
-            val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge)
-            val activeUserIds = chatsToMerge
-              .flatMap(ctm => Seq(ctm.masterCwdOption, ctm.slaveCwdOption))
-              .yieldDefined
-              .flatMap(_.chat.memberIds)
-              .toSet
-            val selectUsersDialog = new SelectMergeUsersDialog(masterDao, masterDs, slaveDao, slaveDs, activeUserIds)
-            selectUsersDialog.visible = true
-            selectUsersDialog.selection match {
-              case Some(usersToMerge) =>
-                analyzeChatsF.future.foreach(analyzed => mergeDatasets(merger, analyzed, usersToMerge))
-              case None =>
-                analyzeChatsF.cancel()
+          val storagePath = masterDao.storagePath
+          Dialog.showInput(
+            title   = "Merge datasets",
+            message = "Choose a name for a new database",
+            initial = storagePath.getName
+          ) foreach { newDbName =>
+            val newDbPath = new JFile(storagePath.getParentFile, newDbName)
+            if (newDbPath.exists) {
+              showError(s"Database exists: ${newDbPath.getAbsolutePath}")
+            } else {
+              val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
+              selectChatsDialog.visible = true
+              selectChatsDialog.selection foreach { chatsToMerge =>
+                val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
+                val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge)
+                val activeUserIds = chatsToMerge
+                  .flatMap(ctm => Seq(ctm.masterCwdOption, ctm.slaveCwdOption))
+                  .yieldDefined
+                  .flatMap(_.chat.memberIds)
+                  .toSet
+                val selectUsersDialog = new SelectMergeUsersDialog(masterDao, masterDs, slaveDao, slaveDs, activeUserIds)
+                selectUsersDialog.visible = true
+                selectUsersDialog.selection match {
+                  case Some(usersToMerge) =>
+                    analyzeChatsF.future.foreach(analyzed => mergeDatasets(merger, analyzed, usersToMerge, newDbPath))
+                  case None =>
+                    analyzeChatsF.cancel()
+                }
+              }
             }
           }
       }
@@ -439,46 +440,96 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
   def mergeDatasets(
       merger: DatasetMerger,
       analyzed: Seq[ChatMergeOption],
-      usersToMerge: Seq[UserMergeOption]
+      usersToMerge: Seq[UserMergeOption],
+      newDbPath: JFile
   ): Unit = {
-    // TODO: Make async, with other chats merging working in the background while users makes the choice
     worldFreezingIFuture("Combining chats...") {
-      val (resolved, cancelled) = analyzed.foldLeft((Seq.empty[ChatMergeOption], false)) {
-        case ((res, stop), _) if stop =>
-          (res, true)
-        case ((res, _), (cmo @ ChatMergeOption.Combine(mcwd, scwd, diffs))) =>
-          setStatus(s"Combining '${scwd.chat.nameOrUnnamed}' (${scwd.chat.msgCount} messages)...")
-          // Resolve mismatches
-          if (diffs.forall(_.isInstanceOf[MessagesMergeDiff.Match])) {
-            // User has no choice - pass them as-is
-            (res :+ cmo, false)
-          } else {
-            val dialog = onEdtReturning {
-              new SelectMergeMessagesDialog(merger.masterDao, mcwd, merger.slaveDao, scwd, diffs, htmlKit)
+      type MergeModel = SelectMergeMessagesDialog.SelectMergeMessagesModel
+      type LazyModel = () => MergeModel
+
+      def cmoToTitle(cmo: ChatMergeOption.Combine) =
+        s"'${cmo.slaveCwd.chat.nameOrUnnamed}' (${cmo.slaveCwd.chat.msgCount} messages)"
+
+      val (_resolved, cmosWithLazyModels) =
+        analyzed.foldLeft((Seq.empty[ChatMergeOption], Seq.empty[(ChatMergeOption.Combine, LazyModel)])) {
+          case ((resolved, cmosWithLazyModels), (cmo @ ChatMergeOption.Combine(mcwd, scwd, diffs))) =>
+            // Resolve mismatches
+            if (diffs.forall(_.isInstanceOf[MessagesMergeDiff.Match])) {
+              // User has no choice - pass them as-is
+              (resolved :+ cmo, cmosWithLazyModels)
+            } else {
+              val next = (cmo, () => {
+                if (Thread.interrupted()) throw new InterruptedException("Cancelled")
+                StopWatch.measureAndCall {
+                  // I *HOPE* that creating model alone outside of EDT doesn't cause issues
+                  new MergeModel(merger.masterDao, mcwd, merger.slaveDao, scwd, diffs, htmlKit)
+                }((_, t) => log.info(s"Model for chats merge ${cmoToTitle(cmo)} created in $t ms"))
+              })
+              (resolved, cmosWithLazyModels :+ next)
             }
-            dialog.visible = true
-            dialog.selection
-              .map(resolution => (res :+ (cmo.copy(messageMergeOptions = resolution)), false))
-              .getOrElse((res, true))
-          }
-        case ((res, _), cmo) =>
-          (res :+ cmo, false)
+          case ((resolved, cmosWithLazyModels), cmo) =>
+            (resolved :+ cmo, cmosWithLazyModels)
       }
-      if (cancelled) None else Some(resolved)
-    }.future map { chatsMergeResolutionsOption: Option[Seq[ChatMergeOption]] =>
-      chatsMergeResolutionsOption foreach { chatsMergeResolutions =>
-        // Merge
-        worldFreezingIFuture("Merging...") {
-          MutationLock.synchronized {
-            merger.merge(usersToMerge, chatsMergeResolutions)
-            Swing.onEDTWait {
-              chatList.replaceWith(loadedDaos.keys.toSeq)
-              chatsOuterPanel.revalidate()
-              chatsOuterPanel.repaint()
-            }
-          }
+
+      // Since model creation is costly, next model is made asynchronously
+
+      def evaluate(element: (ChatMergeOption.Combine, LazyModel)) = {
+        (element._1, Future.interruptibly { element._2() })
+      }
+
+      var resolved = _resolved.toIndexedSeq
+      var nextModelFutureOption = cmosWithLazyModels.headOption map evaluate
+      var i = 1
+      var cancelled = false
+      while (!cancelled && nextModelFutureOption.isDefined) {
+        val (cmo, futureModel) = nextModelFutureOption.get
+        setStatus(s"Processing ${cmoToTitle(cmo)}...")
+
+        nextModelFutureOption = if (cmosWithLazyModels.length <= i) {
+          None
+        } else {
+          Some(evaluate(cmosWithLazyModels(i)))
+        }
+
+        val model = Await.result(futureModel.future, duration.Duration.Inf)
+
+        val dialog = onEdtReturning {
+          new SelectMergeMessagesDialog(model)
+        }
+        dialog.visible = true
+        cancelled = dialog.selection match {
+          case Some(resolution) =>
+            resolved = resolved :+ cmo.copy(messageMergeOptions = resolution)
+            false
+          case None =>
+            nextModelFutureOption.map(_._2.cancel())
+            true
+        }
+
+        i += 1
+      }
+
+      if (!cancelled) {
+        Future.successful(resolved)
+      } else {
+        Future.failed(new CancellationException("Cancelled"))
+      }
+    }.future.flatten.map((chatsMergeResolutions: Seq[ChatMergeOption]) => {
+      // Merge
+      worldFreezingIFuture("Merging...") {
+        newDbPath.mkdir()
+        val newDao = DataLoaders.createH2(newDbPath)
+
+        merger.merge(usersToMerge, chatsMergeResolutions, newDao)
+        Swing.onEDTWait {
+          loadDaoInEDT(newDao)
+          chatsOuterPanel.revalidate()
+          chatsOuterPanel.repaint()
         }
       }
+    }).failed.map {
+      case _: CancellationException => showWarning("Cancelled")
+      case th: Throwable            => handleException(th)
     }
   }
 
@@ -502,10 +553,19 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
   }
 
   def daoListChanged(): Unit = {
+    def saveAs(dao: ChatHistoryDao): Unit = {
+      showPickH2Dialog { file =>
+        val dstDao = DataLoaders.saveAsH2(dao, file)
+        Swing.onEDTWait {
+          loadDaoInEDT(dstDao, Some(dao))
+        }
+      }
+    }
+
     dbEmbeddedMenu.clear()
     for (dao <- loadedDaos.keys) {
       val daoMenu = new Menu(dao.name) {
-        contents += menuItem("Save As...")(showSaveDbAsDialog(dao))
+        contents += menuItem("Save As...")(saveAs(dao))
         contents += menuItem("Close")(closeDb(dao))
       }
       dbEmbeddedMenu.append(daoMenu)
@@ -868,10 +928,8 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
         }
       } catch {
         case ex: Exception =>
-          SwingUtils.showError(ex.getMessage)
-          Swing.onEDT {
-            unfreezeTheWorld()
-          }
+          Swing.onEDT { unfreezeTheWorld() }
+          handleException(ex)
       }
     }
   }
@@ -894,7 +952,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
 
   override def startup(args: Array[String]): Unit = {
     try {
-      initialFileOption = CliUtils.parse(args, "db", true).map(new File(_))
+      initialFileOption = CliUtils.parse(args, "db", true).map(new JFile(_))
     } catch {
       case ex: Throwable => handleException(ex)
     }
@@ -977,7 +1035,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
       peer.addChoosableFileFilter(gts5610Ff)
     }
 
-    def load(file: File): ChatHistoryDao = {
+    def load(file: JFile): ChatHistoryDao = {
       val f = file.getParentFile
       if (h2ff.accept(file)) {
         h2.loadData(f)
@@ -1008,7 +1066,11 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
       peer.setAcceptAllFileFilterUsed(false)
     }
 
-    def saveAs(srcDao: ChatHistoryDao, dir: File): ChatHistoryDao = {
+    def createH2(dir: JFile): MutableChatHistoryDao = {
+      h2.create(dir)
+    }
+
+    def saveAsH2(srcDao: ChatHistoryDao, dir: JFile): MutableChatHistoryDao = {
       val dstDao = h2.create(dir)
       dstDao.copyAllFrom(srcDao)
       dstDao

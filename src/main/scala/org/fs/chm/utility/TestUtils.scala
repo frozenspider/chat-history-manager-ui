@@ -153,6 +153,8 @@ object TestUtils {
     msgs.bySrcId(id)
 
   trait EagerMutableDaoTrait extends MutableChatHistoryDao {
+    override def storagePath: File = ???
+
     override def insertDataset(ds: Dataset): Unit = ???
 
     override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = ???

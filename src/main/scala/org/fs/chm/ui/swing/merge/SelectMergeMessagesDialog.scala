@@ -1,6 +1,5 @@
 package org.fs.chm.ui.swing.merge
 
-import scala.annotation.tailrec
 import scala.swing._
 
 import com.github.nscala_time.time.Imports._
@@ -19,6 +18,8 @@ import org.fs.chm.ui.swing.messages.impl.MessagesDocumentService
 import org.fs.chm.utility.EntityUtils._
 import org.fs.utility.Imports._
 
+import SelectMergeMessagesDialog._
+
 /**
  * Show dialog for merging chat messages.
  * Unlike other merge dialogs, this one does not perform a mismatch analysis, and relies on the provided one instead.
@@ -30,39 +31,17 @@ import org.fs.utility.Imports._
  * This means that master messages coverage should not change in the output
  */
 class SelectMergeMessagesDialog(
-    masterDao: ChatHistoryDao,
-    masterCwd: ChatWithDetails,
-    slaveDao: ChatHistoryDao,
-    slaveCwd: ChatWithDetails,
-    _diffs: IndexedSeq[MessagesMergeDecision], // Type is a hack!
-    htmlKit: HTMLEditorKit
+    model: SelectMergeMessagesModel
 ) extends CustomDialog[IndexedSeq[MessagesMergeDecision]](takeFullHeight = true) {
   import SelectMergeMessagesDialog._
 
-  // Values here are lazy because they are used from the parent init code.
-
-  private lazy val diffs = {
-    require(_diffs.forall(_.isInstanceOf[MessagesMergeDiff]))
-    _diffs.asInstanceOf[IndexedSeq[MessagesMergeDiff]]
-  }
-
-  private lazy val MaxMessageWidth = 500
-
-  private lazy val originalTitle =
-    s"Select messages to merge (${masterCwd.chat.nameOrUnnamed})"
-
-  private lazy val masterRoot = masterDao.datasetRoot(masterCwd.dsUuid)
-  private lazy val slaveRoot  = slaveDao.datasetRoot(slaveCwd.dsUuid)
-
   {
-    title = originalTitle
+    title = s"Select messages to merge (${model.name})"
   }
-
-  private lazy val models = new Models
 
   private lazy val table = {
     checkEdt()
-    new SelectMergesTable[RenderableDiff, MessagesMergeDecision](models)
+    new SelectMergesTable[RenderableDiff, MessagesMergeDecision](model)
   }
 
   override protected lazy val dialogComponent: Component = {
@@ -72,10 +51,36 @@ class SelectMergeMessagesDialog(
   override protected def validateChoices(): Option[IndexedSeq[MessagesMergeDecision]] = {
     Some(table.selected.toIndexedSeq)
   }
+}
+
+object SelectMergeMessagesDialog {
+  private val MaxContinuousMsgsLength = 20
+  private val MaxCutoffMsgsPartLength = 7
 
   import SelectMergesTable._
 
-  private class Models extends MergeModels[RenderableDiff, MessagesMergeDecision] {
+  class SelectMergeMessagesModel(
+    masterDao: ChatHistoryDao,
+    masterCwd: ChatWithDetails,
+    slaveDao: ChatHistoryDao,
+    slaveCwd: ChatWithDetails,
+    _diffs: IndexedSeq[MessagesMergeDecision], // Type is a hack!
+    htmlKit: HTMLEditorKit
+  ) extends MergeModels[RenderableDiff, MessagesMergeDecision] {
+    // Values here are lazy because they are used from the parent init code.
+
+    val name: String = masterCwd.chat.nameOrUnnamed
+
+    private lazy val diffs = {
+      require(_diffs.forall(_.isInstanceOf[MessagesMergeDiff]))
+      _diffs.asInstanceOf[IndexedSeq[MessagesMergeDiff]]
+    }
+
+    private lazy val MaxMessageWidth = 500
+
+    private lazy val masterRoot = masterDao.datasetRoot(masterCwd.dsUuid)
+    private lazy val slaveRoot  = slaveDao.datasetRoot(slaveCwd.dsUuid)
+
     override val allElems: Seq[RowData[RenderableDiff]] = {
       require(diffs.nonEmpty)
 
@@ -105,7 +110,7 @@ class SelectMergeMessagesDialog(
 
     override val cellsAreInteractive = true
 
-    override lazy val renderer = (renderable: ListItemRenderable[RenderableDiff]) => {
+    override lazy val renderer: ListItemRenderer[RenderableDiff, _] = (renderable: ListItemRenderable[RenderableDiff]) => {
       // FIXME: Figure out what to do with a shitty layout!
       checkEdt()
       val msgAreaContainer = new MessagesAreaContainer(htmlKit)
@@ -169,7 +174,7 @@ class SelectMergeMessagesDialog(
     }
   }
 
-  private case class RenderableDiff(
+  case class RenderableDiff(
     /** Note that diff is the same for lhs and rhs */
     diff: MessagesMergeDiff,
     /** Messages to be rendered, or number of messages abbreviated out */
@@ -240,11 +245,6 @@ class SelectMergeMessagesDialog(
       }
     }
   }
-}
-
-private object SelectMergeMessagesDialog {
-  private val MaxContinuousMsgsLength = 20
-  private val MaxCutoffMsgsPartLength = 7
 
   def main(args: Array[String]): Unit = {
     import java.awt.Desktop
@@ -337,8 +337,9 @@ private object SelectMergeMessagesDialog {
       )
     )
 
+    val model = new SelectMergeMessagesModel(mDao, mCwd, sDao, sCwd, mismatches, htmlKit)
     Swing.onEDTWait {
-      val dialog = new SelectMergeMessagesDialog(mDao, mCwd, sDao, sCwd, mismatches, htmlKit)
+      val dialog = new SelectMergeMessagesDialog(model)
       dialog.visible = true
       dialog.peer.setLocationRelativeTo(null)
       println(dialog.selection map (_.mkString("\n  ", "\n  ", "\n")))

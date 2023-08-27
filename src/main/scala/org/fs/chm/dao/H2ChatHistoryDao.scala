@@ -28,7 +28,7 @@ import org.fs.chm.utility.PerfUtils._
 import org.fs.utility.StopWatch
 
 class H2ChatHistoryDao(
-    dataPathRoot: JFile,
+    override val storagePath: JFile,
     txctr: Transactor.Aux[IO, _],
     closeTransactor: () => Unit
 ) extends MutableChatHistoryDao
@@ -42,7 +42,7 @@ class H2ChatHistoryDao(
   private var _backupsEnabled = true
   private var _closed = false
 
-  override def name: String = s"${dataPathRoot.getName} database"
+  override def name: String = s"${storagePath.getName} database"
 
   def preload(): Unit = {
     assert(queries.noop.transact(txctr).unsafeRunSync() == 1)
@@ -53,7 +53,7 @@ class H2ChatHistoryDao(
   }
 
   override def datasetRoot(dsUuid: PbUuid): DatasetRoot = {
-    new JFile(dataPathRoot, dsUuid.value.toLowerCase).getAbsoluteFile.asInstanceOf[DatasetRoot]
+    new JFile(storagePath, dsUuid.value.toLowerCase).getAbsoluteFile.asInstanceOf[DatasetRoot]
   }
 
   override def datasetFiles(dsUuid: PbUuid): Set[JFile] = {
@@ -463,7 +463,7 @@ class H2ChatHistoryDao(
   }
 
   protected[dao] def getBackupPath(): JFile = {
-    val backupDir = new JFile(dataPathRoot, BackupsDir)
+    val backupDir = new JFile(storagePath, BackupsDir)
     backupDir.mkdir()
     backupDir
   }
@@ -497,8 +497,8 @@ class H2ChatHistoryDao(
       }
     }
 
-  override def isLoaded(dataPathRoot: JFile): Boolean = {
-    dataPathRoot != null && this.dataPathRoot == dataPathRoot
+  override def isLoaded(storagePath: JFile): Boolean = {
+    storagePath != null && this.storagePath == storagePath
   }
 
   object queries {
@@ -1431,11 +1431,11 @@ class H2ChatHistoryDao(
   }
 
   override def equals(that: Any): Boolean = that match {
-    case that: H2ChatHistoryDao => this.name == that.name && that.isLoaded(this.dataPathRoot)
+    case that: H2ChatHistoryDao => this.name == that.name && that.isLoaded(this.storagePath)
     case _                      => false
   }
 
-  override def hashCode: Int = this.name.hashCode + 17 * this.dataPathRoot.hashCode
+  override def hashCode: Int = this.name.hashCode + 17 * this.storagePath.hashCode
 }
 
 object H2ChatHistoryDao {

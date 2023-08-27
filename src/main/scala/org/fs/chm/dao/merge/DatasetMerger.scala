@@ -1,6 +1,6 @@
 package org.fs.chm.dao.merge
 
-import java.io.File
+import java.io.{File => JFile}
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -15,7 +15,7 @@ import org.fs.utility.StopWatch
 import org.slf4s.Logging
 
 class DatasetMerger(
-    val masterDao: MutableChatHistoryDao,
+    val masterDao: ChatHistoryDao,
     val masterDs: Dataset,
     val slaveDao: ChatHistoryDao,
     val slaveDs: Dataset
@@ -32,20 +32,24 @@ class DatasetMerger(
    */
   def analyzeChatHistoryMerge[T <: ChatMergeOption](merge: T): T = merge match {
     case merge @ ChatMergeOption.Combine(mCwd, sCwd, _) =>
-      var diffs = ArrayBuffer.empty[MessagesMergeDiff]
-      iterate(
-        MsgIterationContext(
-          mmStream = messagesStream(masterDao, mCwd.chat, None),
-          prevMm   = None,
-          mCwd     = mCwd,
-          smStream = messagesStream(slaveDao, sCwd.chat, None),
-          prevSm   = None,
-          sCwd     = sCwd,
-        ),
-        IterationState.NoState,
-        (mm => diffs += mm)
-      )
-      merge.copy(messageMergeOptions = diffs.toVector).asInstanceOf[T]
+      val title = s"'${sCwd.chat.nameOrUnnamed}' (${sCwd.chat.msgCount} messages)"
+      log.info(s"Analyzing chat ${title}...")
+      StopWatch.measureAndCall {
+        var diffs = ArrayBuffer.empty[MessagesMergeDiff]
+        iterate(
+          MsgIterationContext(
+            mmStream = messagesStream(masterDao, mCwd.chat, None),
+            prevMm   = None,
+            mCwd     = mCwd,
+            smStream = messagesStream(slaveDao, sCwd.chat, None),
+            prevSm   = None,
+            sCwd     = sCwd,
+          ),
+          IterationState.NoState,
+          (mm => diffs += mm)
+        )
+        merge.copy(messageMergeOptions = diffs.toIndexedSeq).asInstanceOf[T]
+      }((_, t) => log.info(s"Chat $title analyzed in $t ms"))
     case _ => merge
   }
 
@@ -245,18 +249,21 @@ class DatasetMerger(
 
   def merge(
       explicitUsersToMerge: Seq[UserMergeOption],
-      chatsToMerge: Seq[ChatMergeOption]
+      chatsToMerge: Seq[ChatMergeOption],
+      newDao: MutableChatHistoryDao
   ): Dataset = {
     StopWatch.measureAndCall {
       try {
-        masterDao.backup()
-        masterDao.disableBackups()
+        if (newDao.datasets.nonEmpty) {
+          newDao.backup()
+        }
+        newDao.disableBackups()
         val newDs = Dataset(
           uuid       = randomUuid,
           alias      = masterDs.alias + " (merged)",
           sourceType = masterDs.sourceType
         )
-        masterDao.insertDataset(newDs)
+        newDao.insertDataset(newDs)
 
         // Account for users who were skipped from usersToMerge due to their chat merge skipped, treated as Keep
         val usersToMerge: Seq[UserMergeOption] = {
@@ -289,9 +296,9 @@ class DatasetMerger(
         )
         for (sourceUser <- usersToMerge) {
           val user2 = sourceUser.userToInsert.copy(dsUuid = newDs.uuid)
-          masterDao.insertUser(user2, user2.id == masterSelf.id)
+          newDao.insertUser(user2, user2.id == masterSelf.id)
         }
-        val finalUsers = masterDao.users(newDs.uuid)
+        val finalUsers = newDao.users(newDs.uuid)
 
         // Chats
         for (cmo <- chatsToMerge) {
@@ -312,7 +319,7 @@ class DatasetMerger(
                 (f, c2.copy(dsUuid = newDs.uuid))
             }
           }
-          masterDao.insertChat(dsRoot, chat)
+          newDao.insertChat(dsRoot, chat)
 
           // Messages
           val messageBatches: Stream[(DatasetRoot, IndexedSeq[Message])] = cmo match {
@@ -371,15 +378,16 @@ class DatasetMerger(
               res.toStream.flatten
           }
 
+          println(s"Chat ${chat}:     ${messageBatches.head._2.headOption}")
           for ((srcDsRoot, mb) <- messageBatches) {
             // Also copies files
-            masterDao.insertMessages(srcDsRoot, chat, mb)
+            newDao.insertMessages(srcDsRoot, chat, mb)
           }
         }
 
         newDs
       } finally {
-        masterDao.enableBackups()
+        newDao.enableBackups()
       }
     } ((_, t) => log.info(s"Datasets merged in ${t} ms"))
   }

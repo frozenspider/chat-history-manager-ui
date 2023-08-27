@@ -43,6 +43,8 @@ class EagerChatHistoryDao(
   // Sanity check: all chat members should have users.
   _chatsWithMessages.keys.foreach(c => chatMembers(c))
 
+  override def storagePath: File = _dataRootFile
+
   override def datasets: Seq[Dataset] = Seq(dataset)
 
   override def datasetRoot(dsUuid: PbUuid): DatasetRoot = _dataRootFile.getAbsoluteFile.asInstanceOf[DatasetRoot]
@@ -189,8 +191,8 @@ class EagerChatHistoryDao(
     ).mkString("\n")
   }
 
-  override def isLoaded(dataPathRoot: File): Boolean = {
-    dataPathRoot != null && this._dataRootFile == dataPathRoot
+  override def isLoaded(storagePath: File): Boolean = {
+    storagePath != null && this._dataRootFile == storagePath
   }
 
   override def equals(that: Any): Boolean = that match {

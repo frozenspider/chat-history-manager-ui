@@ -9,6 +9,7 @@ import org.fs.chm.TestHelper
 import org.fs.chm.WithH2Dao
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
+import org.fs.chm.dao.H2ChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
@@ -49,10 +50,10 @@ class DatasetMergerMergeSpec //
         UserMergeOption.Keep(helper.d1users.byId(1)),
         UserMergeOption.Add(helper.d2users.byId(2)),
         UserMergeOption.Replace(helper.d1users.byId(3), helper.d2users.byId(3))
-      ), Seq.empty
+      ), Seq.empty, helper.dao3
     )
-    assert(helper.dao1.chats(newDs.uuid).isEmpty)
-    val newUsers = helper.dao1.users(newDs.uuid)
+    assert(helper.dao3.chats(newDs.uuid).isEmpty)
+    val newUsers = helper.dao3.users(newDs.uuid)
     assert(newUsers.size === 5)
     assert(newUsers.byId(1) === helper.d1users.byId(1).copy(dsUuid = newDs.uuid))
     assert(newUsers.byId(2) === helper.d2users.byId(2).copy(dsUuid = newDs.uuid))
@@ -68,14 +69,20 @@ class DatasetMergerMergeSpec //
       ChatMergeOption.Keep(helper.d1cwd)
     )
     assert(helper.dao1.datasets.size === 1)
-    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
-    assert(helper.dao1.datasets.size === 2)
-    val newChats = helper.dao1.chats(newDs.uuid)
-    assert(helper.dao1.chats(newDs.uuid).size === 1)
-    val newMessages = helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+    assert(helper.dao2.datasets.size === 1)
+    assert(helper.dao3.datasets.size === 0)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges, helper.dao3)
+    assert(helper.dao1.datasets.size === 1)
+    assert(helper.dao2.datasets.size === 1)
+    assert(helper.dao3.datasets.size === 1)
+    val newChats = helper.dao3.chats(newDs.uuid)
+    assert(helper.dao3.chats(newDs.uuid).size === 1)
+
+    val newRoot = helper.dao3.datasetRoot(newDs.uuid)
+    val newMessages = helper.dao3.firstMessages(newChats.head.chat, Int.MaxValue)
     assert(newMessages.size === 1)
-    assert((newMessages.head, helper.d1root, newChats.head) =~= (helper.d1msgs.head, helper.d1root, helper.d1cwd))
-    assertFiles(helper.dao1, newDs, msgsPaths(helper.dao1, helper.d1ds, helper.d1msgs))
+    assert((newMessages.head, newRoot, newChats.head) =~= (helper.d1msgs.head, helper.d1root, helper.d1cwd))
+    assertFiles(helper.dao3, newDs, msgsPaths(helper.dao1, helper.d1ds, helper.d1msgs))
   }
 
   test("merge chats - keep single animation, content preserved") {
@@ -182,19 +189,23 @@ class DatasetMergerMergeSpec //
       if (amendMasterMessagesOnly) addAnimationToMasterMessage else addAnimationToAnyMessage
     )
     assert(helper.dao1.datasets.size === 1)
+    assert(helper.dao2.datasets.size === 1)
+    assert(helper.dao3.datasets.size === 0)
     val chatMerges = makeChatMerges(helper)
-    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
-    val newRoot = helper.dao1.datasetRoot(newDs.uuid)
-    assert(helper.dao1.datasets.size === 2)
-    val newChats = helper.dao1.chats(newDs.uuid)
-    assert(helper.dao1.chats(newDs.uuid).size === 1)
-    val newMessages = helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges, helper.dao3)
+    val newRoot = helper.dao3.datasetRoot(newDs.uuid)
+    assert(helper.dao1.datasets.size === 1)
+    assert(helper.dao2.datasets.size === 1)
+    assert(helper.dao3.datasets.size === 1)
+    val newChats = helper.dao3.chats(newDs.uuid)
+    assert(helper.dao3.chats(newDs.uuid).size === 1)
+    val newMessages = helper.dao3.firstMessages(newChats.head.chat, Int.MaxValue)
     assert(newMessages.size === 1)
     val paths1 = msgsPaths(helper.dao1, helper.d1ds, helper.d1msgs)
-    val paths2 = msgsPaths(helper.dao1, helper.d2ds, helper.d2msgs)
+    val paths2 = msgsPaths(helper.dao2, helper.d2ds, helper.d2msgs)
     assert(paths1.size === 2)
     assert(paths2.size === (if (amendMasterMessagesOnly) 0 else 2))
-    assertFiles(helper.dao1, newDs, paths1)
+    assertFiles(helper.dao3, newDs, paths1)
     assert((newMessages.head, newRoot, newChats.head) =~= (helper.d1msgs.head, helper.d1root, helper.d1cwd))
 
     // As a final step, reset DAO to initial state
@@ -228,16 +239,20 @@ class DatasetMergerMergeSpec //
     )
 
     assert(helper.dao1.datasets.size === 1)
-    val newDs = helper.merger.merge(helper.d1users.map(UserMergeOption.Keep), chatMerges)
-    assert(helper.dao1.datasets.size === 2)
-    val newRoot = helper.dao1.datasetRoot(newDs.uuid)
-    val newChats = helper.dao1.chats(newDs.uuid)
+    assert(helper.dao2.datasets.size === 1)
+    assert(helper.dao3.datasets.size === 0)
+    val newDs = helper.merger.merge(helper.d1users.map(UserMergeOption.Keep), chatMerges, helper.dao3)
+    assert(helper.dao1.datasets.size === 1)
+    assert(helper.dao2.datasets.size === 1)
+    assert(helper.dao3.datasets.size === 1)
+    val newRoot = helper.dao3.datasetRoot(newDs.uuid)
+    val newChats = helper.dao3.chats(newDs.uuid)
     assert(newChats.size === 1)
     assert(newChats.head.chat.nameOption === usersA(1).prettyNameOption)
-    val newMessages = helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+    val newMessages = helper.dao3.firstMessages(newChats.head.chat, Int.MaxValue)
     assert(newMessages.size === 1)
     assert((newMessages.head, newRoot, newChats.head) =~= (helper.d2msgs.head, helper.d2root, helper.d2cwd))
-    assertFiles(helper.dao1, newDs, msgsPaths(helper.dao2, helper.d2ds, helper.d2msgs))
+    assertFiles(helper.dao3, newDs, msgsPaths(helper.dao2, helper.d2ds, helper.d2msgs))
   }
 
   test("merge chats - keep two messages") {
@@ -248,17 +263,17 @@ class DatasetMergerMergeSpec //
     val chatMerges = Seq[ChatMergeOption](
       ChatMergeOption.Keep(helper.d1cwd)
     )
-    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges, helper.dao3)
     val newMessages = {
-      val newChats = helper.dao1.chats(newDs.uuid)
-      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+      val newChats = helper.dao3.chats(newDs.uuid)
+      helper.dao3.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     assert(newMessages.size === helper.d1msgs.size)
     for ((nm, om) <- (newMessages zip helper.d1msgs)) {
       assert((nm, helper.d1root, helper.d1cwd) =~= (om, helper.d1root, helper.d1cwd))
     }
 
-    assertFiles(helper.dao1, newDs, msgsPaths(helper.dao1, helper.d1ds, newMessages))
+    assertFiles(helper.dao3, newDs, msgsPaths(helper.dao1, helper.d1ds, newMessages))
   }
 
   test("merge chats - add two messages") {
@@ -270,15 +285,15 @@ class DatasetMergerMergeSpec //
       ChatMergeOption.Add(helper.d2cwd)
     )
 
-    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
-    val newRoot = helper.dao1.datasetRoot(newDs.uuid)
-    val newChats = helper.dao1.chats(newDs.uuid)
-    val newMessages = helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges, helper.dao3)
+    val newRoot = helper.dao3.datasetRoot(newDs.uuid)
+    val newChats = helper.dao3.chats(newDs.uuid)
+    val newMessages = helper.dao3.firstMessages(newChats.head.chat, Int.MaxValue)
     assert(newMessages.size === 2)
     assert((newMessages(0), newRoot, newChats.head) =~= (helper.d2msgs.bySrcId(3), helper.d2root, helper.d2cwd))
     assert((newMessages(1), newRoot, newChats.head) =~= (helper.d2msgs.bySrcId(4), helper.d2root, helper.d2cwd))
 
-    assertFiles(helper.dao1, newDs, msgsPaths(helper.dao2, helper.d2ds, helper.d2msgs))
+    assertFiles(helper.dao3, newDs, msgsPaths(helper.dao2, helper.d2ds, helper.d2msgs))
   }
 
   /**
@@ -307,18 +322,18 @@ class DatasetMergerMergeSpec //
         )
       )
     )
-    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
-    val newRoot = helper.dao1.datasetRoot(newDs.uuid)
-    val newChats = helper.dao1.chats(newDs.uuid)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges, helper.dao3)
+    val newRoot = helper.dao3.datasetRoot(newDs.uuid)
+    val newChats = helper.dao3.chats(newDs.uuid)
     val newMessages = {
-      val newChats = helper.dao1.chats(newDs.uuid)
-      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+      val newChats = helper.dao3.chats(newDs.uuid)
+      helper.dao3.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     assert(newMessages.size === 2)
     assert((newMessages(0), newRoot, newChats.head) =~= (helper.d2msgs.bySrcId(3), helper.d2root, helper.d2cwd))
     assert((newMessages(1), newRoot, newChats.head) =~= (helper.d2msgs.bySrcId(4), helper.d2root, helper.d2cwd))
 
-    assertFiles(helper.dao1, newDs, msgsPaths(helper.dao2, helper.d2ds, helper.d2msgs.slice(2, 4)))
+    assertFiles(helper.dao3, newDs, msgsPaths(helper.dao2, helper.d2ds, helper.d2msgs.slice(2, 4)))
   }
 
   /**
@@ -365,12 +380,12 @@ class DatasetMergerMergeSpec //
         )
       )
     )
-    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
-    val newRoot = helper.dao1.datasetRoot(newDs.uuid)
-    val newChats = helper.dao1.chats(newDs.uuid)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges, helper.dao3)
+    val newRoot = helper.dao3.datasetRoot(newDs.uuid)
+    val newChats = helper.dao3.chats(newDs.uuid)
     val newMessages = {
-      val newChats = helper.dao1.chats(newDs.uuid)
-      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+      val newChats = helper.dao3.chats(newDs.uuid)
+      helper.dao3.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     assert(newMessages.size === helper.d1msgs.size - 2)
     assert((newMessages(0), newRoot, newChats.head) =~= (helper.d2msgs.bySrcId(2), helper.d2root, helper.d2cwd))
@@ -392,7 +407,7 @@ class DatasetMergerMergeSpec //
       assert(m1withRooot =~= (newMsg, newRoot, newChats.head), (m1withRooot._1, newMsg))
     }
 
-    assertFiles(helper.dao1, newDs, expectedFiles)
+    assertFiles(helper.dao3, newDs, expectedFiles)
   }
 
   test("merge chats - group messages with 'members' field should adapt to user renames applied/skipped") {
@@ -574,10 +589,10 @@ class DatasetMergerMergeSpec //
     assert(expectedMembers !== slaveUsers.map(_.prettyName), clue)
 
     val chatMerges = makeChatMerges(helper)
-    val newDs = helper.merger.merge(usersResolution, chatMerges)
+    val newDs = helper.merger.merge(usersResolution, chatMerges, helper.dao3)
     val newMessages = {
-      val newChats = helper.dao1.chats(newDs.uuid)
-      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+      val newChats = helper.dao3.chats(newDs.uuid)
+      helper.dao3.firstMessages(newChats.head.chat, Int.MaxValue)
     }
     // New messages will be 4 messages no matter what
     def serviceValue(m: Message) =
@@ -633,11 +648,11 @@ class DatasetMergerMergeSpec //
       )
     )
 
-    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
-    val newRoot = helper.dao1.datasetRoot(newDs.uuid)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges, helper.dao3)
+    val newRoot = helper.dao3.datasetRoot(newDs.uuid)
     val newMsgs = {
-      val newChats = helper.dao1.chats(newDs.uuid)
-      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+      val newChats = helper.dao3.chats(newDs.uuid)
+      helper.dao3.firstMessages(newChats.head.chat, Int.MaxValue)
     }
 
     def getContentOption(m: Message) = m.typed.regular.get.contentOption
@@ -680,11 +695,11 @@ class DatasetMergerMergeSpec //
       )
     )
 
-    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges)
-    val newRoot = helper.dao1.datasetRoot(newDs.uuid)
+    val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges, helper.dao3)
+    val newRoot = helper.dao3.datasetRoot(newDs.uuid)
     val newMsgs = {
-      val newChats = helper.dao1.chats(newDs.uuid)
-      helper.dao1.firstMessages(newChats.head.chat, Int.MaxValue)
+      val newChats = helper.dao3.chats(newDs.uuid)
+      helper.dao3.firstMessages(newChats.head.chat, Int.MaxValue)
     }
 
     def getContentOption(m: Message) = m.typed.regular.get.contentOption
@@ -758,6 +773,8 @@ class DatasetMergerMergeSpec //
       val (ds, root, users, chat, msgs) = getSimpleDaoEntities(dao)
       (dao, ds, root, users, chat, msgs.asInstanceOf[IndexedSeq[TaggedMessage.S]])
     }
+    val dao3: H2ChatHistoryDao =
+      createH2Dao()
 
     def merger: DatasetMerger =
       new DatasetMerger(dao1, d1ds, dao2, d2ds)

@@ -224,7 +224,7 @@ object SelectMergesTable extends Logging {
         c  <- 0 until tableModel.getColumnCount
         cr = tableModel.getValueAt(r, c) if cr.isInstanceOf[ListItemRenderable[_]]
       } yield {
-        renderer.getTableCellRendererComponent(null, cr, false, false, r, c)
+        renderer.getTableCellRendererComponent(null, cr, isSelected = false, hasFocus = false, r, c)
       }
       val sizes     = uiItems.map(_.getPreferredSize)
       val maxHeight = sizes.maxBy(_.height).height
@@ -232,7 +232,7 @@ object SelectMergesTable extends Logging {
       (maxHeight, maxWidth)
     }
 
-    val selectionModel = new DefaultListSelectionModel {
+    lazy val selectionModel = new DefaultListSelectionModel {
       setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
 
       override def setSelectionInterval(idx1: Int, idx2: Int): Unit = () // Suppress selection
@@ -244,7 +244,7 @@ object SelectMergesTable extends Logging {
       })
       addColumn(new TableColumn(1) {
         // To make sure header fits
-        val w = new Label(tableModel.getColumnName(1)).preferredWidth + 2
+        private val w = new Label(tableModel.getColumnName(1)).preferredWidth + 2
         setMinWidth(w)
         setPreferredWidth(w)
         setMaxWidth(w)
@@ -252,7 +252,7 @@ object SelectMergesTable extends Logging {
       addColumn(new TableColumn(2) {
         setMinWidth(maxItemWidth)
       })
-      import scala.collection.JavaConverters._
+      import scala.jdk.CollectionConverters._
       getColumns.asScala.toSeq foreachWithIndex ((tc, i) => {
         tc.setResizable(false)
         tc.setHeaderValue(tableModel.getColumnName(i))
@@ -363,7 +363,7 @@ object SelectMergesTable extends Logging {
         row: Int,
         column: Int
     ): AwtComponent = {
-      renderer.getTableCellRendererComponent(table, value, isSelected, true, row, column)
+      renderer.getTableCellRendererComponent(table, value, isSelected, hasFocus = true, row, column)
     }
 
     override def getCellEditorValue:                              AnyRef  = null

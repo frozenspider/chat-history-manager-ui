@@ -21,6 +21,9 @@ trait ChatHistoryDao extends AutoCloseable {
   /** User-friendly name of a loaded data */
   def name: String
 
+  /** Directory which stores eveything - including database itself at the root level. */
+  def storagePath: JFile
+
   def datasets: Seq[Dataset]
 
   /** Directory which stores eveything in the dataset. All files are guaranteed to have this as a prefix */
@@ -97,7 +100,7 @@ trait ChatHistoryDao extends AutoCloseable {
   override def close(): Unit = {}
 
   /** Whether given data path is the one loaded in this DAO */
-  def isLoaded(dataPathRoot: JFile): Boolean
+  def isLoaded(storagePath: JFile): Boolean
 }
 
 trait MutableChatHistoryDao extends ChatHistoryDao {
