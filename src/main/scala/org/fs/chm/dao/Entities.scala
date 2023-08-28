@@ -297,6 +297,8 @@ object Entities {
 
   implicit class ExtendedChat(c: Chat) {
     def nameOrUnnamed: String = c.nameOption getOrElse Unnamed
+
+    def qualifiedName: String = s"'$nameOrUnnamed' (#${c.id})"
   }
 
   //

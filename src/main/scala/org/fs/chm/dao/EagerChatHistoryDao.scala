@@ -82,7 +82,7 @@ class EagerChatHistoryDao(
     val me = myself(chat.dsUuid)
     me +: (chat.memberIds
       .filter(_ != me.id)
-      .map(mId => users1.find(_.id == mId).getOrElse(throw new IllegalStateException(s"No member with id ${mId} found for chat ${chat}")))
+      .map(mId => users1.find(_.id == mId).getOrElse(throw new IllegalStateException(s"No member with id ${mId} found for chat ${chat.qualifiedName}")))
       .toSeq
       .sortBy(_.id))
   }

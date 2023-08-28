@@ -378,7 +378,6 @@ class DatasetMerger(
               res.toStream.flatten
           }
 
-          println(s"Chat ${chat}:     ${messageBatches.head._2.headOption}")
           for ((srcDsRoot, mb) <- messageBatches) {
             // Also copies files
             newDao.insertMessages(srcDsRoot, chat, mb)
@@ -396,6 +395,7 @@ class DatasetMerger(
   // Helpers
   //
 
+  // FIXME: This is stupid!
   /**
    * Treats master and slave messages as equal if their content mismatches, unless slave message has content and master message doesn't.
    * Needed for matching sequences.

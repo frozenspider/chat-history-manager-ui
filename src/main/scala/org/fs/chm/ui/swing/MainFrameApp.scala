@@ -514,7 +514,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
       } else {
         Future.failed(new CancellationException("Cancelled"))
       }
-    }.future.flatten.map((chatsMergeResolutions: Seq[ChatMergeOption]) => {
+    }.future.flatten.flatMap((chatsMergeResolutions: Seq[ChatMergeOption]) => {
       // Merge
       worldFreezingIFuture("Merging...") {
         newDbPath.mkdir()
@@ -523,10 +523,8 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
         merger.merge(usersToMerge, chatsMergeResolutions, newDao)
         Swing.onEDTWait {
           loadDaoInEDT(newDao)
-          chatsOuterPanel.revalidate()
-          chatsOuterPanel.repaint()
         }
-      }
+      }.future
     }).failed.map {
       case _: CancellationException => showWarning("Cancelled")
       case th: Throwable            => handleException(th)

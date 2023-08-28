@@ -4,7 +4,7 @@ import java.io.{File => JFile}
 
 import scala.util.Random
 
-import org.fs.chm.dao.Entities.ChatWithDetails
+import org.fs.chm.dao.Entities._
 import org.fs.chm.loader.telegram._
 
 object GRPCConsistencyVerifierMain extends App {
@@ -64,11 +64,11 @@ object GRPCConsistencyVerifierMain extends App {
       while (nProcessedMessages < gc.msgCount) {
         val gMsgs = grpcMgr.scrollMessages(gc, nProcessedMessages, pageSize)
         val lMsgs = localMgr.scrollMessages(lc, nProcessedMessages, pageSize)
-        assert(gMsgs.length == lMsgs.length, s"For chat ${gc.nameOption.getOrElse(gc.id)}, nProcessedMessages = ${nProcessedMessages}, pageSize = ${pageSize}, mismatching # messages!")
+        assert(gMsgs.length == lMsgs.length, s"For chat ${gc.qualifiedName}, nProcessedMessages = ${nProcessedMessages}, pageSize = ${pageSize}, mismatching # messages!")
         nProcessedMessages += gMsgs.length
 
         for ((gm, lm) <- gMsgs zip lMsgs) {
-          assert(gm == lm, s"Chat ${gc.nameOption.getOrElse(gc.id)}: ${gm} == ${lm}")
+          assert(gm == lm, s"Chat ${gc.qualifiedName}: ${gm} == ${lm}")
         }
       }
     }

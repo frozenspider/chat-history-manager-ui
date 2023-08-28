@@ -10,6 +10,7 @@ import cats.effect.IO
 import doobie.Transactor
 import org.flywaydb.core.Flyway
 import org.fs.chm.dao.H2ChatHistoryDao
+import org.fs.chm.utility.LangUtils._
 import org.fs.utility.StopWatch
 import org.h2.jdbcx.JdbcConnectionPool
 
@@ -77,6 +78,9 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
   private def daoFromUrlPath(url: String, path: File): H2ChatHistoryDao = {
     Class.forName("org.h2.Driver")
     val connPool = JdbcConnectionPool.create(url, "sa", "")
+    tryWith(connPool.getConnection) { con =>
+      // To simplify manual tweaks
+    }
     val execCxt: ExecutionContext = ExecutionContext.global
     val txctr = Transactor.fromDataSource[IO](connPool, execCxt)
     new H2ChatHistoryDao(storagePath = path.getParentFile, txctr = txctr, () => txctr.kernel.dispose())

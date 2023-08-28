@@ -293,10 +293,10 @@ class H2ChatHistoryDao(
               val messages2 = lastMessages(cwd2.chat, cwd2.chat.msgCount + 1)
               assert(
                 messages1.size == messages1.size,
-                s"Messages size for chat ${cwd1.chat} (#$i) differs:\nWas    ${messages1.size}\nBecame ${messages2.size}")
+                s"Messages size for chat ${cwd1.chat.qualifiedName} (#$i) differs:\nWas    ${messages1.size}\nBecame ${messages2.size}")
               for (((m1, m2), j) <- messages1.zip(messages2).zipWithIndex) {
                 assert((m1, srcDsRoot, cwd1) =~= (m2, dstDsRoot, cwd2),
-                       s"Message #$j for chat ${cwd1.chat} (#$i) differs:\nWas    $m1\nBecame $m2")
+                       s"Message #$j for chat ${cwd1.chat.qualifiedName} (#$i) differs:\nWas    $m1\nBecame $m2")
               }
             }((_, t) => log.info(s"Chat checked in $t ms"))
           }
@@ -435,17 +435,25 @@ class H2ChatHistoryDao(
       Lock.synchronized {
         _usersCacheOption = None
       }
-    }((_, t) => log.info(s"Chat ${chat.nameOption.getOrElse("#" + chat.id)} deleted in $t ms"))
+    }((_, t) => log.info(s"Chat ${chat.qualifiedName} deleted in $t ms"))
   }
 
   override def insertMessages(srcDsRoot: JFile, chat: Chat, msgs: Seq[Message]): Unit = {
     if (msgs.nonEmpty) {
       val dsRoot = datasetRoot(chat.dsUuid)
       require(dsRoot.exists, s"Dataset root path ${dsRoot.getAbsolutePath} does not exist!")
-      val query = msgs
-        .map(msg => queries.messages.insert(chat.dsUuid, srcDsRoot, dsRoot, chat.id, msg))
-        .reduce((q1, q2) => q1 flatMap (_ => q2))
-      query.transact(txctr).unsafeRunSync()
+      try {
+        val query = msgs
+          .map(msg => queries.messages.insert(chat.dsUuid, srcDsRoot, dsRoot, chat.id, msg))
+          .reduce((q1, q2) => q1 flatMap (_ => q2))
+        query.transact(txctr).unsafeRunSync()
+      } catch {
+        case ex: Exception =>
+          log.error(s"Failed to insert messaged for a chat ${chat.qualifiedName}")
+          log.error(s"Messages were (${msgs.size} total):")
+          msgs.foreach(m => log.error(s"  ${m}"))
+          throw ex
+      }
       backup()
     }
   }
@@ -492,7 +500,7 @@ class H2ChatHistoryDao(
   override def close(): Unit =
     Lock.synchronized {
       if (!_closed) {
-        _closed = true;
+        _closed = true
         closeTransactor()
       }
     }
