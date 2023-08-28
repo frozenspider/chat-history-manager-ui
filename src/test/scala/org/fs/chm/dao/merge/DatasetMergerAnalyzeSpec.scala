@@ -1,5 +1,8 @@
 package org.fs.chm.dao.merge
 
+import java.io.File
+import java.nio.file.Files
+
 import org.fs.chm.TestHelper
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger._
@@ -564,20 +567,30 @@ class DatasetMergerAnalyzeSpec //
   }
 
   // "not found" should NOT conflict with "not downloaded" and vice versa
-  test("combine - photo not found vs photo not downloaded") {
+  test("combine - content preset vs absent vs not downloaded") {
     val userIds = Seq(rndUserId, rndUserId, rndUserId, rndUserId)
 
-    val photoNotFound = ContentPhoto(
+    val notFound = ContentPhoto(
       pathOption = Some("non/existent/path.jpg"),
       width      = 100500,
       height     = 100600
     )
-    val photoNotDownloaded =
-      photoNotFound.copy(pathOption = None)
 
-    def makeRegularMsgPhoto(idx: Int, regular: Boolean, notDownloaded: Boolean) = {
-      val photo = if (notDownloaded) photoNotDownloaded else photoNotFound
+    val notDownloaded = notFound.copy(pathOption = None)
 
+    val placeholder1 = ContentPhoto(
+      pathOption = Some("placeholder-1"),
+      width      = -1,
+      height     = -1
+    )
+
+    val placeholder2 = placeholder1.copy(pathOption = Some("placeholder-2"))
+
+    val tmpDir = makeTempDir()
+    val placeholder1File1 = createRandomFile(tmpDir)
+    val placeholder1File2 = createRandomFile(tmpDir)
+
+    def makeRegularMsgPhoto(idx: Int, regular: Boolean, photo: ContentPhoto) = {
       val typed: Message.Typed = if (regular) {
         Message.Typed.Regular(MessageRegular(
           editTimestampOption    = Some(baseDate.plusMinutes(10 + idx).unixTimestamp),
@@ -593,7 +606,7 @@ class DatasetMergerAnalyzeSpec //
         internalId       = NoInternalId,
         sourceIdOption   = Some((100L + idx).asInstanceOf[MessageSourceId]),
         timestamp        = baseDate.unixTimestamp,
-        fromId           = userIds(idx - 1),
+        fromId           = userIds.head,
         searchableString = Some(makeSearchableString(text, typed)),
         text             = text,
         typed            = typed
@@ -601,28 +614,94 @@ class DatasetMergerAnalyzeSpec //
     }
 
     val msgsA = Seq(
-      makeRegularMsgPhoto(1, regular = true, notDownloaded = false),
-      makeRegularMsgPhoto(2, regular = true, notDownloaded = true),
-      makeRegularMsgPhoto(3, regular = false, notDownloaded = false),
-      makeRegularMsgPhoto(4, regular = false, notDownloaded = true)
+      makeRegularMsgPhoto(1,  regular = true,  notFound),
+      makeRegularMsgPhoto(2,  regular = true,  notDownloaded),
+      makeRegularMsgPhoto(3,  regular = false, notFound),
+      makeRegularMsgPhoto(4,  regular = false, notDownloaded),
+
+      makeRegularMsgPhoto(4,  regular = true,  placeholder1),
+      makeRegularMsgPhoto(5,  regular = true,  placeholder1),
+      makeRegularMsgPhoto(6,  regular = true,  placeholder1),
+      makeRegularMsgPhoto(7,  regular = true,  placeholder1),
+      makeRegularMsgPhoto(8,  regular = true,  notDownloaded),
+      makeRegularMsgPhoto(9,  regular = true,  notFound),
+
+      makeRegularMsgPhoto(10, regular = false, placeholder1),
+      makeRegularMsgPhoto(11, regular = false, placeholder1),
+      makeRegularMsgPhoto(12, regular = false, placeholder1),
+      makeRegularMsgPhoto(13, regular = false, placeholder1),
+      makeRegularMsgPhoto(14, regular = false, notDownloaded),
+      makeRegularMsgPhoto(15, regular = false, notFound),
     )
     val msgsB = Seq(
-      makeRegularMsgPhoto(1, regular = true, notDownloaded = true),
-      makeRegularMsgPhoto(2, regular = true, notDownloaded = false),
-      makeRegularMsgPhoto(3, regular = false, notDownloaded = true),
-      makeRegularMsgPhoto(4, regular = false, notDownloaded = false)
+      makeRegularMsgPhoto(1,  regular = true,  notDownloaded),
+      makeRegularMsgPhoto(2,  regular = true,  notFound),
+      makeRegularMsgPhoto(3,  regular = false, notDownloaded),
+      makeRegularMsgPhoto(4,  regular = false, notFound),
+
+      makeRegularMsgPhoto(4,  regular = true,  placeholder1),
+      makeRegularMsgPhoto(5,  regular = true,  notDownloaded),
+      makeRegularMsgPhoto(6,  regular = true,  notFound),
+      makeRegularMsgPhoto(7,  regular = true,  placeholder2),
+      makeRegularMsgPhoto(8,  regular = true,  placeholder1),
+      makeRegularMsgPhoto(9,  regular = true,  placeholder1),
+
+      makeRegularMsgPhoto(10, regular = false, placeholder1),
+      makeRegularMsgPhoto(11, regular = false, notDownloaded),
+      makeRegularMsgPhoto(12, regular = false, notFound),
+      makeRegularMsgPhoto(13, regular = false, placeholder2),
+      makeRegularMsgPhoto(14, regular = false, placeholder1),
+      makeRegularMsgPhoto(15, regular = false, placeholder1),
     )
-    val helper = new MergerHelper(msgsA, msgsB)
+    val helper = new MergerHelper(msgsA, msgsB, ((isMaster, path, msg) => {
+      def transformContent(photo: ContentPhoto): ContentPhoto = photo match {
+        case `notFound` | `notDownloaded` => photo
+        case `placeholder1` =>
+          val file = new File(path, placeholder1File1.getName)
+          if (!file.exists) Files.copy(placeholder1File1.toPath, file.toPath)
+          photo.copy(pathOption = Some(file.toRelativePath(path)))
+        case `placeholder2` =>
+          val file = new File(path, placeholder1File2.getName)
+          if (!file.exists) Files.copy(placeholder1File2.toPath, file.toPath)
+          photo.copy(pathOption = Some(file.toRelativePath(path)))
+      }
+
+      msg.copy(typed = msg.typed match {
+        case Message.Typed.Regular(msg) =>
+          Message.Typed.Regular(msg.copy(contentOption = msg.contentOption map (c => transformContent(c.asInstanceOf[ContentPhoto]))))
+        case Message.Typed.Service(Some(MessageServiceGroupEditPhoto(photo, _))) =>
+          Message.Typed.Service(Some(MessageServiceGroupEditPhoto(transformContent(photo))))
+      })
+    }))
+
     val combine = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
     val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
           firstMasterMsg = helper.d1msgs.bySrcId(101L),
-          lastMasterMsg  = helper.d1msgs.bySrcId(104L),
+          lastMasterMsg  = helper.d1msgs.bySrcId(106L),
           firstSlaveMsg  = helper.d2msgs.bySrcId(101L),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(104L)
-        )
+          lastSlaveMsg   = helper.d2msgs.bySrcId(106L)
+        ),
+        MessagesMergeDiff.Replace(
+          firstMasterMsg = helper.d1msgs.bySrcId(107L),
+          lastMasterMsg  = helper.d1msgs.bySrcId(109L),
+          firstSlaveMsg  = helper.d2msgs.bySrcId(107L),
+          lastSlaveMsg   = helper.d2msgs.bySrcId(109L)
+        ),
+        MessagesMergeDiff.Match(
+          firstMasterMsg = helper.d1msgs.bySrcId(110L),
+          lastMasterMsg  = helper.d1msgs.bySrcId(112L),
+          firstSlaveMsg  = helper.d2msgs.bySrcId(110L),
+          lastSlaveMsg   = helper.d2msgs.bySrcId(112L)
+        ),
+        MessagesMergeDiff.Replace(
+          firstMasterMsg = helper.d1msgs.bySrcId(113L),
+          lastMasterMsg  = helper.d1msgs.bySrcId(115L),
+          firstSlaveMsg  = helper.d2msgs.bySrcId(113L),
+          lastSlaveMsg   = helper.d2msgs.bySrcId(115L)
+        ),
       )
     )
   }
@@ -631,15 +710,20 @@ class DatasetMergerAnalyzeSpec //
   // Helpers
   //
 
-  class MergerHelper(msgs1: Seq[Message], msgs2: Seq[Message]) {
+  class MergerHelper(msgs1: Seq[Message],
+                     msgs2: Seq[Message],
+                     amendMessage: ((Boolean, DatasetRoot, Message) => Message) = ((_, _, m) => m)) {
     val (dao1, d1ds, d1root, d1users, d1cwd, d1msgs) = createDaoAndEntities(isMaster = true, "One", msgs1, maxUserId)
     val (dao2, d2ds, d2root, d2users, d2cwd, d2msgs) = createDaoAndEntities(isMaster = false, "Two", msgs2, maxUserId)
 
     def merger: DatasetMerger =
       new DatasetMerger(dao1, d1ds, dao2, d2ds)
 
-    private def createDaoAndEntities(isMaster: Boolean, nameSuffix: String, srcMsgs: Seq[Message], numUsers: Int) = {
-      val dao                          = createSimpleDao(isMaster, nameSuffix, srcMsgs, numUsers)
+    private def createDaoAndEntities(isMaster: Boolean,
+                                     nameSuffix: String,
+                                     srcMsgs: Seq[Message],
+                                     numUsers: Int) = {
+      val dao                          = createSimpleDao(isMaster, nameSuffix, srcMsgs, numUsers, amendMessage)
       val (ds, root, users, cwd, msgs) = getSimpleDaoEntities(dao)
       (dao, ds, root, users, cwd, msgs)
     }

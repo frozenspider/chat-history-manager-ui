@@ -23,7 +23,7 @@ class DatasetMerger(
   import DatasetMerger._
 
   private val masterRoot = masterDao.datasetRoot(masterDs.uuid)
-  private val slaveRoot  = masterDao.datasetRoot(slaveDs.uuid)
+  private val slaveRoot  = slaveDao.datasetRoot(slaveDs.uuid)
 
   /**
    * Analyze dataset mergeability, amending `ChatMergeOption.Combine` with mismatches in order.
@@ -144,7 +144,7 @@ class DatasetMerger(
       // NoState
       //
 
-      case (Some(mm), Some(sm), NoState) if matchesDisregardingContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
+      case (Some(mm), Some(sm), NoState) if equalsWithNoNewContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
         // Matching subsequence starts
         val state2 = MatchInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
         iterate(cxt.advanceBoth(), state2, onConflictEnd)
@@ -164,7 +164,7 @@ class DatasetMerger(
         iterate(cxt.advanceBoth(), NoState, onConflictEnd)
       case (Some(mm), Some(sm), NoState) if mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption =>
         // Checking if there's a timestamp shift
-        if (matchesDisregardingContent(mm.copy(timestamp = sm.timestamp).asInstanceOf[TaggedMessage.M], cxt.mCwd, sm, cxt.sCwd)) {
+        if (equalsWithNoNewContent(mm.copy(timestamp = sm.timestamp).asInstanceOf[TaggedMessage.M], cxt.mCwd, sm, cxt.sCwd)) {
           val (aheadBehind, diffSec) = {
             val tsDiff = sm.timestamp - mm.timestamp
             assert(tsDiff != 0)
@@ -209,7 +209,7 @@ class DatasetMerger(
       // MatchInProgress
       //
 
-      case (Some(mm), Some(sm), state: MatchInProgress) if matchesDisregardingContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
+      case (Some(mm), Some(sm), state: MatchInProgress) if equalsWithNoNewContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
         // Matching subsequence continues
         iterate(cxt.advanceBoth(), state, onConflictEnd)
       case (_, _, state: MatchInProgress) =>
@@ -395,34 +395,29 @@ class DatasetMerger(
   // Helpers
   //
 
-  // FIXME: This is stupid!
-  /**
-   * Treats master and slave messages as equal if their content mismatches, unless slave message has content and master message doesn't.
-   * Needed for matching sequences.
-   */
-  private def matchesDisregardingContent(mm: TaggedMessage.M,
-                                         mCwd: ChatWithDetails,
-                                         sm: TaggedMessage.S,
-                                         sCwd: ChatWithDetails): Boolean = {
-    def hasNewContent(mc: WithPathFileOption, sc: WithPathFileOption): Boolean = {
-       mc.pathFileOption(masterRoot).isEmpty && sc.pathFileOption(slaveRoot).isDefined && sc.pathFileOption(slaveRoot).get.exists
+  /** Treats master and slave messages as equal if slave has missing content */
+  private def equalsWithNoNewContent(mm: TaggedMessage.M,
+                                     mCwd: ChatWithDetails,
+                                     sm: TaggedMessage.S,
+                                     sCwd: ChatWithDetails): Boolean = {
+    def hasContent(c: WithPathFileOption, root: DatasetRoot): Boolean = {
+      c.pathFileOption(root).exists(_.exists)
     }
-    (mm.typed, sm.typed) match {
+
+    if ((mm.asInstanceOf[Message], masterRoot, mCwd) =~= (sm, slaveRoot, sCwd)) {
+      true
+    } else (mm.typed, sm.typed) match {
       case (mmRegular: Message.Typed.Regular, smRegular: Message.Typed.Regular) =>
         (mmRegular.value.contentOption, smRegular.value.contentOption) match {
-          case (Some(mc), Some(sc)) if mc.hasPath && sc.hasPath && hasNewContent(mc, sc) =>
-            // New information available, treat this as a mismatch
-            false
+          case (Some(mc), Some(sc)) if mc.getClass == sc.getClass && mc.hasPath =>
+            !hasContent(sc, slaveRoot)
           case _ =>
-            val mmCmp = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(contentOption = None)))
-            val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(contentOption = None)))
-            (mmCmp, masterRoot, mCwd) =~= (smCmp, slaveRoot, sCwd)
+            false
         }
-      case (Message.Typed.Service(Some(MessageServiceGroupEditPhoto(mmPhoto, _))),
+      case (Message.Typed.Service(Some(MessageServiceGroupEditPhoto(_, _))),
             Message.Typed.Service(Some(MessageServiceGroupEditPhoto(smPhoto, _)))) =>
-        !hasNewContent(mmPhoto, smPhoto)
-      case _ =>
-        (mm.asInstanceOf[Message], masterRoot, mCwd) =~= (sm, slaveRoot, sCwd)
+        !hasContent(smPhoto, slaveRoot)
+      case _ => false
     }
   }
 

@@ -23,7 +23,7 @@ object TestUtils {
   val rnd      = new Random()
 
   def makeTempDir(): File =
-    Files.createTempDirectory("chm-tmp").toFile
+    Files.createTempDirectory("java_chm-tmp_").toFile
 
   def createUser(dsUuid: PbUuid, idx: Int): User =
     User(
@@ -84,10 +84,16 @@ object TestUtils {
     )
   }
 
-  def createSimpleDao(isMaster: Boolean, nameSuffix: String, msgs: Seq[Message], numUsers: Int): MutableChatHistoryDao = {
-    val chat  = createGroupChat(noUuid, 1, "One", (1L to numUsers).toSet, msgs.size)
+  def createSimpleDao(
+      isMaster: Boolean,
+      nameSuffix: String,
+      msgs: Seq[Message],
+      numUsers: Int,
+      amendMessage: ((Boolean, DatasetRoot, Message) => Message) = ((_, _, m) => m)
+  ): MutableChatHistoryDao = {
+    val chat = createGroupChat(noUuid, 1, "One", (1L to numUsers).toSet, msgs.size)
     val users = (1 to numUsers).map(i => createUser(noUuid, i))
-    createDao(isMaster, nameSuffix, users, ListMap(chat -> msgs.toIndexedSeq))
+    createDao(isMaster, nameSuffix, users, ListMap(chat -> msgs.toIndexedSeq), amendMessage)
   }
 
   def createDao(
