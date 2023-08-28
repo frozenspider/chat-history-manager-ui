@@ -233,7 +233,10 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
       body
     }
     ifuture.future onComplete { res =>
-      res.failed.foreach(handleException)
+      res.failed.toOption foreach {
+        case _: CancellationException => showWarning("Cancelled")
+        case th: Throwable            => handleException(th)
+      }
       Swing.onEDT {
         unfreezeTheWorld()
       }
@@ -509,12 +512,11 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
         i += 1
       }
 
-      if (!cancelled) {
-        Future.successful(resolved)
-      } else {
-        Future.failed(new CancellationException("Cancelled"))
-      }
-    }.future.flatten.flatMap((chatsMergeResolutions: Seq[ChatMergeOption]) => {
+      if (cancelled)
+        throw new CancellationException("Cancelled")
+
+      resolved
+    }.future.flatMap((chatsMergeResolutions: Seq[ChatMergeOption]) => {
       // Merge
       worldFreezingIFuture("Merging...") {
         newDbPath.mkdir()
@@ -525,10 +527,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
           loadDaoInEDT(newDao)
         }
       }.future
-    }).failed.map {
-      case _: CancellationException => showWarning("Cancelled")
-      case th: Throwable            => handleException(th)
-    }
+    })
   }
 
   def loadDaoInEDT(dao: ChatHistoryDao, daoToReplaceOption: Option[ChatHistoryDao] = None): Unit = {

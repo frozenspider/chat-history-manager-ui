@@ -80,9 +80,12 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
     val connPool = JdbcConnectionPool.create(url, "sa", "")
     tryWith(connPool.getConnection) { con =>
       // To simplify manual tweaks
+      // con.createStatement.executeUpdate("""
+      // """)
     }
     val execCxt: ExecutionContext = ExecutionContext.global
     val txctr = Transactor.fromDataSource[IO](connPool, execCxt)
+    log.info(s"Loading database at ${path.getAbsolutePath} (url ${url})")
     new H2ChatHistoryDao(storagePath = path.getParentFile, txctr = txctr, () => txctr.kernel.dispose())
   }
 }
