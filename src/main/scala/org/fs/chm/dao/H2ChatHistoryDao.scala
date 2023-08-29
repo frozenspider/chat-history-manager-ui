@@ -402,7 +402,7 @@ class H2ChatHistoryDao(
     }
   }
 
-  override def insertChat(srcDsRoot: JFile, chat: Chat): Unit = {
+  override def insertChat(srcDsRoot: DatasetRoot, chat: Chat): Unit = {
     require(chat.id > 0, "ID should be positive!")
     require(chat.memberIds.nonEmpty, "Chat should have more than one member!")
     val me = myself(chat.dsUuid)
@@ -432,13 +432,22 @@ class H2ChatHistoryDao(
       } yield u
       val deletedUsersNum = query.transact(txctr).unsafeRunSync()
       log.info(s"Deleted ${deletedUsersNum} orphaned users")
+
+      val dataRelPath = chatRootRelPath(chat.id)
+      val srcDataDir = new JFile(datasetRoot(chat.dsUuid), dataRelPath)
+      if (srcDataDir.exists()) {
+        val dstDataDir = new JFile(getBackupPath(), "deleted/" + dataRelPath)
+        dstDataDir.getParentFile.mkdirs()
+        Files.move(srcDataDir.toPath, dstDataDir.toPath)
+      }
+
       Lock.synchronized {
         _usersCacheOption = None
       }
     }((_, t) => log.info(s"Chat ${chat.qualifiedName} deleted in $t ms"))
   }
 
-  override def insertMessages(srcDsRoot: JFile, chat: Chat, msgs: Seq[Message]): Unit = {
+  override def insertMessages(srcDsRoot: DatasetRoot, chat: Chat, msgs: Seq[Message]): Unit = {
     if (msgs.nonEmpty) {
       val dsRoot = datasetRoot(chat.dsUuid)
       require(dsRoot.exists, s"Dataset root path ${dsRoot.getAbsolutePath} does not exist!")
@@ -631,7 +640,7 @@ class H2ChatHistoryDao(
       def select(dsUuid: PbUuid, id: ChatId): ConnectionIO[Option[Chat]] =
         (selectFr(dsUuid) ++ fr"AND c.id = ${id}").query[RawChat].option.map(_ map Raws.toChat)
 
-      def insert(srcDsRoot: JFile, dstDsRoot: JFile, c: Chat) = {
+      def insert(srcDsRoot: DatasetRoot, dstDsRoot: DatasetRoot, c: Chat) = {
         val rc = Raws.fromChat(srcDsRoot, dstDsRoot, c)
         (fr"INSERT INTO chats (" ++ colsFr ++ fr") VALUES ("
           ++ fr"${rc.dsUuid}, ${rc.id}, ${rc.nameOption}, ${rc.tpe}, ${rc.imgPathOption}"
@@ -681,8 +690,8 @@ class H2ChatHistoryDao(
       /** Inserts a message, overriding it's internal ID. */
       def insert(
           dsUuid: PbUuid,
-          srcDsRoot: JFile,
-          dstDsRoot: JFile,
+          srcDsRoot: DatasetRoot,
+          dstDsRoot: DatasetRoot,
           chatId: Long,
           msg: Message,
       ): ConnectionIO[MessageInternalId] = {
@@ -1141,8 +1150,8 @@ class H2ChatHistoryDao(
       }
     }
 
-    def copyFileFrom(srcDsRoot: JFile,
-                     dstDsRoot: JFile,
+    def copyFileFrom(srcDsRoot: DatasetRoot,
+                     dstDsRoot: DatasetRoot,
                      chatId: ChatId)(subpath: Subpath, thumbnailForOption: Option[String])(srcRelPath: String): Option[String] = {
       val srcFile = new JFile(srcDsRoot, srcRelPath)
       if (!srcFile.exists) {
@@ -1167,7 +1176,7 @@ class H2ChatHistoryDao(
         }
         require(name.nonEmpty, s"Filename empty: ${srcFile.getAbsolutePath}")
 
-        val dstRelPath = s"chats/chat_${chatId}/${subpath.fragment}${name}"
+        val dstRelPath = s"${chatRootRelPath(chatId)}/${subpath.fragment}${name}"
         val dstFile = new JFile(dstDsRoot, dstRelPath)
         require(dstFile.getParentFile.exists || dstFile.getParentFile.mkdirs(),
           s"Can't create dataset root path ${dstFile.getParentFile.getAbsolutePath}")
@@ -1183,7 +1192,7 @@ class H2ChatHistoryDao(
       }
     }
 
-    def fromChat(srcDsRoot: JFile, dstDsRoot: JFile, c: Chat): RawChat = {
+    def fromChat(srcDsRoot: DatasetRoot, dstDsRoot: DatasetRoot, c: Chat): RawChat = {
       RawChat(
         dsUuid          = c.dsUuid,
         id              = c.id,
@@ -1197,8 +1206,8 @@ class H2ChatHistoryDao(
 
     def fromMessage(
         dsUuid: PbUuid,
-        srcDsRoot: JFile,
-        dstDsRoot: JFile,
+        srcDsRoot: DatasetRoot,
+        dstDsRoot: DatasetRoot,
         chatId: ChatId,
         msg: Message
     ): RawMessage = {
@@ -1341,8 +1350,8 @@ class H2ChatHistoryDao(
 
     def fromMessageAdditional(
         dsUuid: PbUuid,
-        srcDsRoot: JFile,
-        dstDsRoot: JFile,
+        srcDsRoot: DatasetRoot,
+        dstDsRoot: DatasetRoot,
         chatId: ChatId,
         internalId: MessageInternalId,
         msg: Message
@@ -1362,8 +1371,8 @@ class H2ChatHistoryDao(
     }
 
     def fromContent(dsUuid: PbUuid,
-                    srcDsRoot: JFile,
-                    dstDsRoot: JFile,
+                    srcDsRoot: DatasetRoot,
+                    dstDsRoot: DatasetRoot,
                     chatId: ChatId,
                     msgId: MessageInternalId)(c: Content): RawContent = {
       val copy = copyFileFrom(srcDsRoot, dstDsRoot, chatId) _
@@ -1488,6 +1497,9 @@ object H2ChatHistoryDao {
 
   val BackupsDir = "_backups"
   val MaxBackups = 3
+
+  def chatRootRelPath(chatId: ChatId): String =
+    s"chats/chat_${chatId}"
 
   /** Subpath inside a directory, suffixed by "/" to be concatenated. */
   sealed abstract class Subpath(val fragment: String, val useHashing: Boolean = false)

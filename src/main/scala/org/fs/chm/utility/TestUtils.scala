@@ -175,11 +175,11 @@ object TestUtils {
 
     override def mergeUsers(baseUser: User, absorbedUser: User): Unit = ???
 
-    override def insertChat(srcDsRoot: File, chat: Chat): Unit = ???
+    override def insertChat(srcDsRoot: DatasetRoot, chat: Chat): Unit = ???
 
     override def deleteChat(chat: Chat): Unit = ???
 
-    override def insertMessages(srcDsRoot: File, chat: Chat, msgs: Seq[Message]): Unit = ???
+    override def insertMessages(srcDsRoot: DatasetRoot, chat: Chat, msgs: Seq[Message]): Unit = ???
 
     override def disableBackups(): Unit = ???
 
