@@ -457,7 +457,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
         analyzed.foldLeft((Seq.empty[ChatMergeOption], Seq.empty[(ChatMergeOption.Combine, LazyModel)])) {
           case ((resolved, cmosWithLazyModels), (cmo @ ChatMergeOption.Combine(mcwd, scwd, diffs))) =>
             // Resolve mismatches
-            if (diffs.forall(_.isInstanceOf[MessagesMergeDiff.Match])) {
+            if (diffs.forall(d => d.isInstanceOf[MessagesMergeDiff.Match] || d.isInstanceOf[MessagesMergeDiff.Retain])) {
               // User has no choice - pass them as-is
               (resolved :+ cmo, cmosWithLazyModels)
             } else {

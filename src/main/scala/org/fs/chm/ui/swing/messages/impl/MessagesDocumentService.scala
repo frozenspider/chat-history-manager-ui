@@ -8,6 +8,7 @@ import javax.swing.text.html.HTML
 import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
 
+import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf._
@@ -99,7 +100,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
   //
 
   def renderMessageHtml(dao: ChatHistoryDao, cwd: ChatWithDetails, dsRoot: DatasetRoot, m: Message, isQuote: Boolean = false): String = {
-    val msgHtml: String = m.typed match {
+    val (msgHtml: String, editDtOption: Option[DateTime]) = m.typed match {
       case Message.Typed.Regular(rm) =>
         val textHtmlOption = RichTextHtmlRenderer.render(m.text)
         val contentHtmlOption = rm.contentOption map { ct =>
@@ -111,13 +112,17 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         } else {
           rm.replyToMessageIdTypedOption map (id => renderSourceMessage(dao, cwd, dsRoot, id))
         }
-        Seq(fwdFromHtmlOption, replySrcHtmlOption, textHtmlOption, contentHtmlOption).yieldDefined.mkString
+        (Seq(fwdFromHtmlOption, replySrcHtmlOption, textHtmlOption, contentHtmlOption).yieldDefined.mkString, rm.editTimeOption)
       case Message.Typed.Service(Some(sm)) =>
-        ServiceMessageHtmlRenderer.render(dao, cwd, dsRoot, m, sm)
+        (ServiceMessageHtmlRenderer.render(dao, cwd, dsRoot, m, sm), None)
+    }
+    val editTimeHtml = editDtOption match {
+      case Some(dt) => s""" <span style="color: gray;">(edited ${dt.toString("yyyy-MM-dd HH:mm")})</span>"""
+      case None     => ""
     }
     val titleNameHtml = renderTitleName(cwd, Some(m.fromId), None)
     val titleHtml =
-      s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})"""
+      s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})$editTimeHtml"""
     val sourceIdAttr = m.sourceIdOption map (id => s"""message_source_id="$id"""") getOrElse ""
     // "date" attribute is used by overlay to show topmost message date
     s"""
