@@ -970,6 +970,14 @@ class H2ChatHistoryDao(
             durationSecOption   = rm.durationSecOption,
             discardReasonOption = rm.discardReasonOption
           )))
+        case "service_suggest_profile_photo" =>
+          Message.Typed.Service(Some(MessageServiceSuggestProfilePhoto(
+            ContentPhoto(
+              pathOption = rm.pathOption,
+              width      = rm.widthOption.get,
+              height     = rm.heightOption.get
+            )
+          )))
         case "service_pin_message" =>
           Message.Typed.Service(Some(MessageServicePinMessage(
             messageId = rm.pinnedMessageIdOption.get
@@ -1228,6 +1236,14 @@ class H2ChatHistoryDao(
             messageType         = "service_phone_call",
             durationSecOption   = m.durationSecOption,
             discardReasonOption = m.discardReasonOption
+          )
+        case Message.Typed.Service(Some(m: MessageServiceSuggestProfilePhoto)) =>
+          val photo = m.photo
+          template.copy(
+            messageType  = "service_suggest_profile_photo",
+            pathOption   = photo.pathOption flatMap copyFileFrom(srcDsRoot, dstDsRoot, chatId)(Subpath.Photos, None),
+            widthOption  = Some(photo.width),
+            heightOption = Some(photo.height)
           )
         case Message.Typed.Service(Some(m: MessageServicePinMessage)) =>
           template.copy(

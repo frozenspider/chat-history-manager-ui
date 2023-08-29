@@ -189,18 +189,19 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     def render(dao: ChatHistoryDao, cwd: ChatWithDetails, dsRoot: DatasetRoot, m: Message, sm: MessageService): String = {
       val textHtmlOption = RichTextHtmlRenderer.render(m.text)
       val content = sm match {
-        case sm: MessageServicePhoneCall          => renderPhoneCall(sm)
-        case sm: MessageServicePinMessage         => "Pinned message" + renderSourceMessage(dao, cwd, dsRoot, sm.messageIdTyped)
-        case sm: MessageServiceClearHistory       => "History cleared"
-        case sm: MessageServiceGroupCreate        => renderCreateGroupMessage(cwd, sm)
-        case sm: MessageServiceGroupEditTitle     => renderEditTitleMessage(sm)
-        case sm: MessageServiceGroupEditPhoto     => renderEditPhotoMessage(sm, dsRoot)
-        case sm: MessageServiceGroupDeletePhoto   => "Deleted group photo"
-        case sm: MessageServiceGroupInviteMembers => renderGroupInviteMembersMessage(cwd, sm)
-        case sm: MessageServiceGroupRemoveMembers => renderGroupRemoveMembersMessage(cwd, sm)
-        case sm: MessageServiceGroupMigrateFrom   => renderMigratedFrom(sm)
-        case sm: MessageServiceGroupMigrateTo     => "Migrated to another group"
-        case sm: MessageServiceGroupCall          => renderGroupCallMessage(cwd, sm)
+        case sm: MessageServicePhoneCall           => renderPhoneCall(sm)
+        case sm: MessageServiceSuggestProfilePhoto => renderSuggestPhotoMessage(sm, dsRoot)
+        case sm: MessageServicePinMessage          => "Pinned message" + renderSourceMessage(dao, cwd, dsRoot, sm.messageIdTyped)
+        case sm: MessageServiceClearHistory        => "History cleared"
+        case sm: MessageServiceGroupCreate         => renderCreateGroupMessage(cwd, sm)
+        case sm: MessageServiceGroupEditTitle      => renderEditTitleMessage(sm)
+        case sm: MessageServiceGroupEditPhoto      => renderEditPhotoMessage(sm, dsRoot)
+        case sm: MessageServiceGroupDeletePhoto    => "Deleted group photo"
+        case sm: MessageServiceGroupInviteMembers  => renderGroupInviteMembersMessage(cwd, sm)
+        case sm: MessageServiceGroupRemoveMembers  => renderGroupRemoveMembersMessage(cwd, sm)
+        case sm: MessageServiceGroupMigrateFrom    => renderMigratedFrom(sm)
+        case sm: MessageServiceGroupMigrateTo      => "Migrated to another group"
+        case sm: MessageServiceGroupCall           => renderGroupCallMessage(cwd, sm)
       }
       Seq(Some(s"""<div class="system-message">$content</div>"""), textHtmlOption).yieldDefined.mkString
     }
@@ -221,6 +222,15 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
     private def renderEditTitleMessage(sm: MessageServiceGroupEditTitle) = {
       s"Changed group title to <b>${sm.title}</b>"
+    }
+
+    private def renderSuggestPhotoMessage(sm: MessageServiceSuggestProfilePhoto, dsRoot: DatasetRoot) = {
+      val image = renderImage(
+        sm.photo.pathFileOption(dsRoot),
+        Some(sm.photo.width),
+        Some(sm.photo.height),
+        None, "Photo")
+      s"Suggested profile photo<br>$image"
     }
 
     private def renderEditPhotoMessage(sm: MessageServiceGroupEditPhoto, dsRoot: DatasetRoot) = {

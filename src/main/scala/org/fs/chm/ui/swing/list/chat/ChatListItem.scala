@@ -171,18 +171,19 @@ class ChatListItem(
         }
       case Message.Typed.Service(Some(service)) =>
         service match {
-          case _: MessageServicePhoneCall          => "(phone call)"
-          case _: MessageServicePinMessage         => "(message pinned)"
-          case _: MessageServiceClearHistory       => "(history cleared)"
-          case _: MessageServiceGroupCreate        => "(group created)"
-          case _: MessageServiceGroupEditTitle     => "(title changed)"
-          case _: MessageServiceGroupEditPhoto     => "(photo changed)"
-          case _: MessageServiceGroupDeletePhoto   => "(photo deleted)"
-          case _: MessageServiceGroupInviteMembers => "(invited members)"
-          case _: MessageServiceGroupRemoveMembers => "(removed members)"
-          case _: MessageServiceGroupMigrateFrom   => "(migrated from group)"
-          case _: MessageServiceGroupMigrateTo     => "(migrated to group)"
-          case _: MessageServiceGroupCall          => "(group call)"
+          case _: MessageServicePhoneCall           => "(phone call)"
+          case _: MessageServiceSuggestProfilePhoto => "(suggested photo)"
+          case _: MessageServicePinMessage          => "(message pinned)"
+          case _: MessageServiceClearHistory        => "(history cleared)"
+          case _: MessageServiceGroupCreate         => "(group created)"
+          case _: MessageServiceGroupEditTitle      => "(title changed)"
+          case _: MessageServiceGroupEditPhoto      => "(photo changed)"
+          case _: MessageServiceGroupDeletePhoto    => "(photo deleted)"
+          case _: MessageServiceGroupInviteMembers  => "(invited members)"
+          case _: MessageServiceGroupRemoveMembers  => "(removed members)"
+          case _: MessageServiceGroupMigrateFrom    => "(migrated from group)"
+          case _: MessageServiceGroupMigrateTo      => "(migrated to group)"
+          case _: MessageServiceGroupCall           => "(group call)"
         }
       case Message.Typed.Empty | Message.Typed.Service(None) =>
         unexpectedCase(msg)

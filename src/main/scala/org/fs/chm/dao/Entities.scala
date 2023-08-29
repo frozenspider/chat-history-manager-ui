@@ -314,24 +314,25 @@ object Entities {
       if (v1._1.getClass != v2._1.getClass) {
         false
       } else (v1._1, v2._1) match {
-        case (m1: MessageServicePhoneCall,          m2: MessageServicePhoneCall)          => m1 == m2
-        case (m1: MessageServicePinMessage,         m2: MessageServicePinMessage)         => m1 == m2
-        case (m1: MessageServiceClearHistory,       m2: MessageServiceClearHistory)       => m1 == m2
-        case (m1: MessageServiceGroupCreate,        m2: MessageServiceGroupCreate)        =>
+        case (m1: MessageServicePhoneCall,           m2: MessageServicePhoneCall)           => m1 == m2
+        case (m1: MessageServiceSuggestProfilePhoto, m2: MessageServiceSuggestProfilePhoto) => (m1.photo, v1._2) =~= (m2.photo, v2._2)
+        case (m1: MessageServicePinMessage,          m2: MessageServicePinMessage)          => m1 == m2
+        case (m1: MessageServiceClearHistory,        m2: MessageServiceClearHistory)        => m1 == m2
+        case (m1: MessageServiceGroupCreate,         m2: MessageServiceGroupCreate)         =>
           m1.copy(members = Seq.empty) == m2.copy(members = Seq.empty) &&
             membersPracticallyEquals(m1.members, v1._3, m2.members, v2._3)
-        case (m1: MessageServiceGroupEditTitle,     m2: MessageServiceGroupEditTitle)     => m1 == m2
-        case (m1: MessageServiceGroupEditPhoto,     m2: MessageServiceGroupEditPhoto)     => (m1.photo, v1._2) =~= (m2.photo, v2._2)
-        case (m1: MessageServiceGroupDeletePhoto,   m2: MessageServiceGroupDeletePhoto)   => m1 == m2
-        case (m1: MessageServiceGroupInviteMembers, m2: MessageServiceGroupInviteMembers) =>
+        case (m1: MessageServiceGroupEditTitle,      m2: MessageServiceGroupEditTitle)      => m1 == m2
+        case (m1: MessageServiceGroupEditPhoto,      m2: MessageServiceGroupEditPhoto)      => (m1.photo, v1._2) =~= (m2.photo, v2._2)
+        case (m1: MessageServiceGroupDeletePhoto,    m2: MessageServiceGroupDeletePhoto)    => m1 == m2
+        case (m1: MessageServiceGroupInviteMembers,  m2: MessageServiceGroupInviteMembers)  =>
           m1.copy(members = Seq.empty) == m2.copy(members = Seq.empty) &&
             membersPracticallyEquals(m1.members, v1._3, m2.members, v2._3)
-        case (m1: MessageServiceGroupRemoveMembers, m2: MessageServiceGroupRemoveMembers) =>
+        case (m1: MessageServiceGroupRemoveMembers,  m2: MessageServiceGroupRemoveMembers)  =>
           m1.copy(members = Seq.empty) == m2.copy(members = Seq.empty) &&
             membersPracticallyEquals(m1.members, v1._3, m2.members, v2._3)
-        case (m1: MessageServiceGroupMigrateFrom,   m2: MessageServiceGroupMigrateFrom)   => m1 == m2
-        case (m1: MessageServiceGroupMigrateTo,     m2: MessageServiceGroupMigrateTo)     => m1 == m2
-        case (m1: MessageServiceGroupCall,          m2: MessageServiceGroupCall)          =>
+        case (m1: MessageServiceGroupMigrateFrom,    m2: MessageServiceGroupMigrateFrom)    => m1 == m2
+        case (m1: MessageServiceGroupMigrateTo,      m2: MessageServiceGroupMigrateTo)      => m1 == m2
+        case (m1: MessageServiceGroupCall,           m2: MessageServiceGroupCall)           =>
           m1.copy(members = Seq.empty) == m2.copy(members = Seq.empty) &&
             membersPracticallyEquals(m1.members, v1._3, m2.members, v2._3)
       }
@@ -414,18 +415,19 @@ object Entities {
           }
         case Message.Typed.Service(Some(ms)) =>
           ms match {
-            case _: MessageServicePhoneCall          => Set.empty
-            case _: MessageServicePinMessage         => Set.empty
-            case _: MessageServiceClearHistory       => Set.empty
-            case _: MessageServiceGroupCreate        => Set.empty
-            case _: MessageServiceGroupEditTitle     => Set.empty
-            case m: MessageServiceGroupEditPhoto     => Set(m.photo.pathOption)
-            case _: MessageServiceGroupDeletePhoto   => Set.empty
-            case _: MessageServiceGroupInviteMembers => Set.empty
-            case _: MessageServiceGroupRemoveMembers => Set.empty
-            case _: MessageServiceGroupMigrateFrom   => Set.empty
-            case _: MessageServiceGroupMigrateTo     => Set.empty
-            case _: MessageServiceGroupCall          => Set.empty
+            case _: MessageServicePhoneCall           => Set.empty
+            case m: MessageServiceSuggestProfilePhoto => Set(m.photo.pathOption)
+            case _: MessageServicePinMessage          => Set.empty
+            case _: MessageServiceClearHistory        => Set.empty
+            case _: MessageServiceGroupCreate         => Set.empty
+            case _: MessageServiceGroupEditTitle      => Set.empty
+            case m: MessageServiceGroupEditPhoto      => Set(m.photo.pathOption)
+            case _: MessageServiceGroupDeletePhoto    => Set.empty
+            case _: MessageServiceGroupInviteMembers  => Set.empty
+            case _: MessageServiceGroupRemoveMembers  => Set.empty
+            case _: MessageServiceGroupMigrateFrom    => Set.empty
+            case _: MessageServiceGroupMigrateTo      => Set.empty
+            case _: MessageServiceGroupCall           => Set.empty
           }
         case Message.Typed.Empty | Message.Typed.Service(None) =>
           unexpectedCase(msg)

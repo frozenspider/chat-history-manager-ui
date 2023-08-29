@@ -417,6 +417,9 @@ class DatasetMerger(
       case (Message.Typed.Service(Some(MessageServiceGroupEditPhoto(_, _))),
             Message.Typed.Service(Some(MessageServiceGroupEditPhoto(smPhoto, _)))) =>
         !hasContent(smPhoto, slaveRoot)
+      case (Message.Typed.Service(Some(MessageServiceSuggestProfilePhoto(_, _))),
+            Message.Typed.Service(Some(MessageServiceSuggestProfilePhoto(smPhoto, _)))) =>
+        !hasContent(smPhoto, slaveRoot)
       case _ => false
     }
   }
