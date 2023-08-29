@@ -371,6 +371,10 @@ object Entities {
   //
   //
 
+  implicit class ExtendedId(id: Long) {
+    def toReadableId: String = id.toString.reverse.grouped(3).mkString(" ").reverse
+  }
+
   implicit class ExtendedUser(u: User) {
     def firstNameOrUnnamed: String = u.firstNameOption getOrElse Unnamed
 

@@ -10,6 +10,7 @@ import javax.swing.SwingUtilities
 import javax.swing.border.MatteBorder
 
 import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.User
 import org.fs.chm.ui.swing.Callbacks
 import org.fs.chm.ui.swing.general.SwingUtils._
@@ -31,7 +32,7 @@ class UserDetailsPane(
 
   {
     val data: Seq[(String, Component)] = Seq(
-      ("ID:", new TextComponent(user.id.toString, false)),
+      ("ID:", new TextComponent(user.id.toReadableId, false)),
       ("First Name:", firstNameC),
       ("Last Name:", lastNameC),
       ("Username:", usernameC),

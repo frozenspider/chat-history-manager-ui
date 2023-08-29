@@ -19,7 +19,7 @@ class ChatDetailsPane(
       ("Name:", Some(cwd.chat.nameOrUnnamed)),
       ("Type:", Some(cwd.chat.tpe match {
         case ChatType.Personal     =>
-          val userId = cwd.chat.memberIds.find(_ != dao.myself(cwd.dsUuid).id).getOrElse(Unknown)
+          val userId = cwd.chat.memberIds.find(_ != dao.myself(cwd.dsUuid).id).map(_.toReadableId).getOrElse(Unknown)
           s"Personal (User ID #$userId)"
         case ChatType.PrivateGroup =>
           "Private Group"
@@ -33,7 +33,7 @@ class ChatDetailsPane(
       ("Image:", Some(if (cwd.chat.imgPathOption.isDefined) "(Yes)" else "(None)")),
       ("Messages:", Some(cwd.chat.msgCount.toString)),
       ("", Some("")),
-      ("ID:", Some(cwd.chat.id.toString)),
+      ("ID:", Some(cwd.chat.id.toReadableId)),
       ("Dataset ID:", Some(cwd.chat.dsUuid.value)),
       ("Dataset:", Some(dao.datasets.find(_.uuid == cwd.chat.dsUuid).get.alias)),
       ("Database:", Some(dao.name))
