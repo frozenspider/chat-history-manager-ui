@@ -103,6 +103,91 @@ object Entities {
     s.replaceAll("[\\s\\p{Cf}\n]+", " ").trim
 
   //
+  // Content
+  //
+
+  trait WithPathFileOption {
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile]
+  }
+
+  implicit class ExtendedContent(c: Content) extends WithPathFileOption {
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = {
+      require(hasPath, "No path available!")
+      c match {
+        case c: ContentSticker    => c.pathFileOption(datasetRoot)
+        case c: ContentPhoto      => c.pathFileOption(datasetRoot)
+        case c: ContentVoiceMsg   => c.pathFileOption(datasetRoot)
+        case c: ContentVideoMsg   => c.pathFileOption(datasetRoot)
+        case c: ContentAnimation  => c.pathFileOption(datasetRoot)
+        case c: ContentFile       => c.pathFileOption(datasetRoot)
+        case c                    => None
+      }
+    }
+
+    def hasPath: Boolean =
+      c match {
+        case _: ContentSticker   => true
+        case _: ContentPhoto     => true
+        case _: ContentVoiceMsg  => true
+        case _: ContentVideoMsg  => true
+        case _: ContentAnimation => true
+        case _: ContentFile      => true
+        case _                   => false
+      }
+  }
+
+  implicit class ExtendedContentSticker(c: ContentSticker) extends WithPathFileOption {
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
+
+    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
+  }
+
+  implicit class ExtendedContentPhoto(c: ContentPhoto) extends WithPathFileOption {
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
+  }
+
+  implicit class ExtendedContentVoiceMsg(c: ContentVoiceMsg) extends WithPathFileOption {
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
+  }
+
+  implicit class ExtendedContentVideoMsg(c: ContentVideoMsg) extends WithPathFileOption {
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
+
+    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
+  }
+
+  implicit class ExtendedContentAnimation(c: ContentAnimation) extends WithPathFileOption {
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
+
+    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
+  }
+
+  implicit class ExtendedContentFile(c: ContentFile) extends WithPathFileOption {
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
+
+    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
+  }
+
+  implicit class ExtendedContentLocation(c: ContentLocation) {
+    def lat: BigDecimal = BigDecimal(c.latStr)
+
+    def lon: BigDecimal = BigDecimal(c.lonStr)
+  }
+
+  implicit class ExtendedContentSharedContact(c: ContentSharedContact) {
+    def vcardFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.vcardPathOption.map(_.toFile(datasetRoot))
+
+    // Same as ExtendedUser
+    lazy val prettyNameOption: Option[String] = {
+      val parts = Seq(c.firstNameOption, c.lastNameOption).yieldDefined
+      if (parts.isEmpty) None else Some(parts.mkString(" ").trim)
+    }
+
+    lazy val prettyName: String =
+      prettyNameOption getOrElse Unnamed
+  }
+
+  //
   // PracticallyEquals implementation
   //
 
@@ -157,8 +242,11 @@ object Entities {
   }
 
   implicit object ContentLocationPracticallyEquals extends PracticallyEquals[(ContentLocation, DatasetRoot)] {
-    override def practicallyEquals(v1: (ContentLocation, DatasetRoot), v2: (ContentLocation, DatasetRoot)): Boolean =
-      v1._1 == v2._1
+    override def practicallyEquals(v1: (ContentLocation, DatasetRoot), v2: (ContentLocation, DatasetRoot)): Boolean = {
+      // lat/lon are strings, trailing zeros should be ignored,
+      v1._1.lat == v2._1.lat && v1._1.lon == v2._1.lon &&
+        v1._1.copy(latStr = "", lonStr = "") == v2._1.copy(latStr = "", lonStr = "")
+    }
   }
 
   implicit object ContentPollPracticallyEquals extends PracticallyEquals[(ContentPoll, DatasetRoot)] {
@@ -427,90 +515,5 @@ object Entities {
         case None    => ""
         case Some(s) => s
       }
-  }
-
-  //
-  // Content
-  //
-
-  trait WithPathFileOption {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile]
-  }
-
-  implicit class ExtendedContent(c: Content) extends WithPathFileOption {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = {
-      require(hasPath, "No path available!")
-      c match {
-        case c: ContentSticker    => c.pathFileOption(datasetRoot)
-        case c: ContentPhoto      => c.pathFileOption(datasetRoot)
-        case c: ContentVoiceMsg   => c.pathFileOption(datasetRoot)
-        case c: ContentVideoMsg   => c.pathFileOption(datasetRoot)
-        case c: ContentAnimation  => c.pathFileOption(datasetRoot)
-        case c: ContentFile       => c.pathFileOption(datasetRoot)
-        case c                    => None
-      }
-    }
-
-    def hasPath: Boolean =
-      c match {
-        case _: ContentSticker   => true
-        case _: ContentPhoto     => true
-        case _: ContentVoiceMsg  => true
-        case _: ContentVideoMsg  => true
-        case _: ContentAnimation => true
-        case _: ContentFile      => true
-        case _                   => false
-      }
-  }
-
-  implicit class ExtendedContentSticker(c: ContentSticker) extends WithPathFileOption {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
-
-    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
-  }
-
-  implicit class ExtendedContentPhoto(c: ContentPhoto) extends WithPathFileOption {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
-  }
-
-  implicit class ExtendedContentVoiceMsg(c: ContentVoiceMsg) extends WithPathFileOption {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
-  }
-
-  implicit class ExtendedContentVideoMsg(c: ContentVideoMsg) extends WithPathFileOption {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
-
-    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
-  }
-
-  implicit class ExtendedContentAnimation(c: ContentAnimation) extends WithPathFileOption {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
-
-    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
-  }
-
-  implicit class ExtendedContentFile(c: ContentFile) extends WithPathFileOption {
-    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
-
-    def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
-  }
-
-  implicit class ExtendedContentLocation(c: ContentLocation) {
-    def lat: BigDecimal = BigDecimal(c.latStr)
-
-    def lon: BigDecimal = BigDecimal(c.lonStr)
-  }
-
-  implicit class ExtendedContentSharedContact(c: ContentSharedContact) {
-    def vcardFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.vcardPathOption.map(_.toFile(datasetRoot))
-
-    // Same as ExtendedUser
-    lazy val prettyNameOption: Option[String] = {
-      val parts = Seq(c.firstNameOption, c.lastNameOption).yieldDefined
-      if (parts.isEmpty) None else Some(parts.mkString(" ").trim)
-    }
-
-    lazy val prettyName: String =
-      prettyNameOption getOrElse Unnamed
   }
 }
