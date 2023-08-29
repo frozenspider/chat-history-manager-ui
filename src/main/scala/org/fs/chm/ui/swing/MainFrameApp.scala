@@ -1004,8 +1004,6 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
     val LastFileKey = "last_database_file"
 
     private val h2       = new H2DataManager
-    private val tgFull   = new TelegramFullDataLoader
-    private val tgSingle = new TelegramSingleChatDataLoader
     private val gts5610  = new GTS5610DataLoader
 
     /** Initializes DAOs to speed up subsequent calls */
@@ -1038,16 +1036,14 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
         h2.loadData(f)
       } else if (tgFf.accept(file)) {
         val loadersWithErrors =
-          Seq(grpcDataLoader, tgFull, tgSingle).map(l => (l, l.doesLookRight(f)))
+          Seq(grpcDataLoader).map(l => (l, l.doesLookRight(f)))
         loadersWithErrors.find(_._2.isEmpty) match {
           case Some((loader, _)) => loader.loadData(f)
           case None => {
             val errors = loadersWithErrors.map(_._1).toIndexedSeq
             throw new IllegalStateException(
               "Not a telegram format: Errors:\n"
-                + s"(from gRPC loader) ${errors(0)}\n"
-                + s"(as a full history) ${errors(1)}\n"
-                + s"(as a single chat) ${errors(2)}")
+                + s"(from gRPC loader) ${errors(0)}\n")
           }
         }
       } else if (gts5610Ff.accept(file)) {

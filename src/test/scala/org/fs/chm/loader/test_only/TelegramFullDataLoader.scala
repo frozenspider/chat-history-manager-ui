@@ -1,4 +1,4 @@
-package org.fs.chm.loader.telegram
+package org.fs.chm.loader.test_only
 
 import java.io.File
 import java.io.FileNotFoundException
@@ -7,6 +7,7 @@ import scala.collection.immutable.ListMap
 
 import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
+import org.fs.chm.loader.telegram.TelegramDataLoader
 import org.fs.chm.protobuf.PbUuid
 import org.fs.chm.protobuf.User
 import org.fs.chm.utility.PerfUtils._
@@ -23,7 +24,6 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
   /** Path should point to the folder with `result.json` and other stuff */
   override protected def loadDataInner(rootFile: File, createNew: Boolean): EagerChatHistoryDao = {
     require(!createNew, "Creating new dataset is not supported for Telegram (as it makes no sense)")
-    implicit val dummyTracker = new FieldUsageTracker
     logPerformance {
       val resultJsonFile: File = new File(rootFile, "result.json").getAbsoluteFile
       if (!resultJsonFile.exists()) {
@@ -43,7 +43,7 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
         logPerformance {
           val messagesRes = (for {
             message <- getCheckedField[IndexedSeq[JValue]](chat, "messages")
-          } yield MessageParser.parseMessageOption(message, rootFile)).yieldDefined
+          } yield MessageParser.parseMessageOption(message)).yieldDefined
 
           val memberIds = (myself.id +: messagesRes.toStream.map(_.fromId)).toSet
 
@@ -69,35 +69,27 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
   //
 
   private def parseMyself(jv: JValue, dsUuid: PbUuid): User = {
-    implicit val tracker = new FieldUsageTracker
-    tracker.markUsed("bio") // Ignoring bio
-    tracker.ensuringUsage(jv) {
-      normalize(User(
-        dsUuid             = dsUuid,
-        id                 = getCheckedField[Long](jv, "user_id"),
-        firstNameOption    = getStringOpt(jv, "first_name", true),
-        lastNameOption     = getStringOpt(jv, "last_name", true),
-        usernameOption     = getStringOpt(jv, "username", true),
-        phoneNumberOption  = getStringOpt(jv, "phone_number", true),
-      ))
-    }
+    normalize(User(
+      dsUuid             = dsUuid,
+      id                 = getCheckedField[Long](jv, "user_id"),
+      firstNameOption    = getStringOpt(jv, "first_name", true),
+      lastNameOption     = getStringOpt(jv, "last_name", true),
+      usernameOption     = getStringOpt(jv, "username", true),
+      phoneNumberOption  = getStringOpt(jv, "phone_number", true),
+    ))
   }
 
   private def parseUser(jv: JValue, dsUuid: PbUuid): User = {
-    implicit val tracker = new FieldUsageTracker
-    tracker.markUsed("date") // Ignoring last seen time
     // Before 2021-05, Telegram has "user_id" field that was largely rudimentary - it was always 0
     val idOption = getFieldOpt[Long](jv, "user_id", false)
-    tracker.ensuringUsage(jv) {
-      normalize(User(
-        dsUuid             = dsUuid,
-        id                 = idOption.getOrElse(0L),
-        firstNameOption    = getStringOpt(jv, "first_name", true),
-        lastNameOption     = getStringOpt(jv, "last_name", true),
-        usernameOption     = None,
-        phoneNumberOption  = getStringOpt(jv, "phone_number", true)
-      ))
-    }
+    normalize(User(
+      dsUuid             = dsUuid,
+      id                 = idOption.getOrElse(0L),
+      firstNameOption    = getStringOpt(jv, "first_name", true),
+      lastNameOption     = getStringOpt(jv, "last_name", true),
+      usernameOption     = None,
+      phoneNumberOption  = getStringOpt(jv, "phone_number", true)
+    ))
   }
 
   /**
@@ -105,8 +97,6 @@ class TelegramFullDataLoader extends TelegramDataLoader with TelegramDataLoaderC
    * Returns `(myself, users)`
    */
   private def parseAndCombineUsers(parsed: JValue, dsUuid: PbUuid): (User, Seq[User]) = {
-    implicit val dummyTracker = new FieldUsageTracker
-
     val myself = parseMyself(getRawField(parsed, "personal_information", true), dsUuid)
 
     val contactUsers = for {

@@ -9,7 +9,7 @@ import org.fs.chm.TestHelper
 import org.fs.chm.WithH2Dao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.loader.H2DataManager
-import org.fs.chm.loader.telegram.TelegramFullDataLoader
+import org.fs.chm.loader.test_only.TelegramFullDataLoader
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.TestUtils
