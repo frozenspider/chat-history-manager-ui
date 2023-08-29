@@ -410,7 +410,9 @@ class DatasetMerger(
       case (mmRegular: Message.Typed.Regular, smRegular: Message.Typed.Regular) =>
         (mmRegular.value.contentOption, smRegular.value.contentOption) match {
           case (Some(mc), Some(sc)) if mc.getClass == sc.getClass && mc.hasPath =>
-            !hasContent(sc, slaveRoot)
+            val mmCmp = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(contentOption = None)))
+            val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(contentOption = None)))
+            !hasContent(sc, slaveRoot) && (mmCmp, masterRoot, mCwd) =~= (smCmp, slaveRoot, sCwd)
           case _ =>
             false
         }
