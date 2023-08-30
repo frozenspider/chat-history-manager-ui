@@ -22,8 +22,11 @@ object TestUtils {
   val baseDate = DateTime.parse("2019-01-02T11:15:21")
   val rnd      = new Random()
 
-  def makeTempDir(): File =
-    Files.createTempDirectory("java_chm-tmp_").toFile
+  def makeTempDir(suffix: String = "tmp"): File = {
+    val dir = Files.createTempDirectory(s"java_chm-${suffix}_").toFile
+    dir.deleteOnExit()
+    dir
+  }
 
   def createUser(dsUuid: PbUuid, idx: Int): User =
     User(
@@ -113,8 +116,7 @@ object TestUtils {
       sourceType = "test source"
     )
     val users1       = users map (_ copy (dsUuid = ds.uuid))
-    val dataPathRoot = Files.createTempDirectory("java_chm-eager_").toFile.asInstanceOf[DatasetRoot]
-    dataPathRoot.deleteOnExit()
+    val dataPathRoot = makeTempDir("eager").asInstanceOf[DatasetRoot]
     val amend2 = amendMessage.curried(isMaster)(dataPathRoot)
     new EagerChatHistoryDao(
       name               = "Dao " + nameSuffix,
@@ -128,9 +130,10 @@ object TestUtils {
     ) with EagerMutableDaoTrait
   }
 
-  def createRandomFile(parent: File): File = {
+  def createRandomTempFile(parent: File): File = {
     val file = new File(parent, rnd.alphanumeric.take(30).mkString("", "", ".bin"))
     Files.write(file.toPath, rnd.alphanumeric.take(256).mkString.getBytes)
+    file.deleteOnExit()
     file
   }
 

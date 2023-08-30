@@ -161,8 +161,8 @@ class DatasetMergerMergeSpec //
   def mergeFilesHelper(amendMasterMessagesOnly: Boolean,
                        makeChatMerges: H2MergerHelper => Seq[ChatMergeOption]): Unit = {
     def makeAnimationContent(path: File): Content = {
-      val file1 = createRandomFile(path)
-      val file2 = createRandomFile(path)
+      val file1 = createRandomTempFile(path)
+      val file2 = createRandomTempFile(path)
       ContentAnimation(
         pathOption          = Some(file1.toRelativePath(path)),
         width               = 111,
@@ -738,8 +738,8 @@ class DatasetMergerMergeSpec //
   def withRandomFileContent(path: File)(msg: Message): Message =
       msg.copy(typed = msg.typed match {
         case Message.Typed.Regular(msg) =>
-          val file1 = createRandomFile(path)
-          val file2 = createRandomFile(path)
+          val file1 = createRandomTempFile(path)
+          val file2 = createRandomTempFile(path)
           val content = ContentFile(
             pathOption          = Some(file1.toRelativePath(path)),
             thumbnailPathOption = Some(file2.toRelativePath(path)),

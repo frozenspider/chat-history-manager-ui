@@ -587,8 +587,8 @@ class DatasetMergerAnalyzeSpec //
     val placeholder2 = placeholder1.copy(pathOption = Some("placeholder-2"))
 
     val tmpDir = makeTempDir()
-    val placeholder1File1 = createRandomFile(tmpDir)
-    val placeholder1File2 = createRandomFile(tmpDir)
+    val placeholder1File1 = createRandomTempFile(tmpDir)
+    val placeholder1File2 = createRandomTempFile(tmpDir)
 
     def makeRegularMsgPhoto(idx: Int, regular: Boolean, photo: ContentPhoto) = {
       val typed: Message.Typed = if (regular) {
@@ -658,11 +658,17 @@ class DatasetMergerAnalyzeSpec //
         case `notFound` | `notDownloaded` => photo
         case `placeholder1` =>
           val file = new File(path, placeholder1File1.getName)
-          if (!file.exists) Files.copy(placeholder1File1.toPath, file.toPath)
+          if (!file.exists) {
+            file.deleteOnExit()
+            Files.copy(placeholder1File1.toPath, file.toPath)
+          }
           photo.copy(pathOption = Some(file.toRelativePath(path)))
         case `placeholder2` =>
           val file = new File(path, placeholder1File2.getName)
-          if (!file.exists) Files.copy(placeholder1File2.toPath, file.toPath)
+          if (!file.exists) {
+            file.deleteOnExit()
+            Files.copy(placeholder1File2.toPath, file.toPath)
+          }
           photo.copy(pathOption = Some(file.toRelativePath(path)))
       }
 
