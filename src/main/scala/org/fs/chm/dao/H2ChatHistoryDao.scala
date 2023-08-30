@@ -1418,16 +1418,16 @@ class H2ChatHistoryDao(
         case c: ContentVoiceMsg =>
           template.copy(
             elementType       = "voice_message",
-            pathOption        = c.pathOption flatMap copy(Subpath.Voices, None),
+            pathOption        = c.pathOption flatMap copy(Subpath.VoiceMessages, None),
             mimeTypeOption    = Some(c.mimeType),
             durationSecOption = c.durationSecOption
           )
         case c: ContentVideoMsg =>
-          val newPathOption = c.pathOption flatMap copy(Subpath.Videos, None)
+          val newPathOption = c.pathOption flatMap copy(Subpath.VideosMessages, None)
           template.copy(
             elementType         = "video_message",
             pathOption          = newPathOption,
-            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Videos, newPathOption),
+            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.VideosMessages, newPathOption),
             mimeTypeOption      = Some(c.mimeType),
             durationSecOption   = c.durationSecOption,
             widthOption         = Some(c.width),
@@ -1508,7 +1508,8 @@ object H2ChatHistoryDao {
     case object Root extends Subpath("")
     case object Photos extends Subpath("photos/", useHashing = true)
     case object Stickers extends Subpath("stickers/", useHashing = true)
-    case object Voices extends Subpath("voice_messages/")
+    case object VoiceMessages extends Subpath("voice_messages/")
+    case object VideosMessages extends Subpath("video_messages/")
     case object Videos extends Subpath("videos/", useHashing = true)
     case object Files extends Subpath("files/")
   }
