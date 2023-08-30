@@ -64,7 +64,7 @@ class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
           )
         }.toIndexedSeq))
       new EagerChatHistoryDao(
-        name               = "Telegram export data from " + root.getName,
+        name               = "Telegram (" + root.getName + ")",
         _dataRootFile      = root,
         dataset            = response.ds,
         myself1            = response.myself,

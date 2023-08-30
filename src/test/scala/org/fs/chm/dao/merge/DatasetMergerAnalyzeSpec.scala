@@ -686,20 +686,26 @@ class DatasetMergerAnalyzeSpec //
         ),
         MessagesMergeDiff.Replace(
           firstMasterMsg = helper.d1msgs.bySrcId(107L),
-          lastMasterMsg  = helper.d1msgs.bySrcId(109L),
+          lastMasterMsg  = helper.d1msgs.bySrcId(107L),
           firstSlaveMsg  = helper.d2msgs.bySrcId(107L),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(109L)
+          lastSlaveMsg   = helper.d2msgs.bySrcId(107L)
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(110L),
+          firstMasterMsg = helper.d1msgs.bySrcId(108L),
           lastMasterMsg  = helper.d1msgs.bySrcId(112L),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(110L),
+          firstSlaveMsg  = helper.d2msgs.bySrcId(108L),
           lastSlaveMsg   = helper.d2msgs.bySrcId(112L)
         ),
         MessagesMergeDiff.Replace(
           firstMasterMsg = helper.d1msgs.bySrcId(113L),
-          lastMasterMsg  = helper.d1msgs.bySrcId(115L),
+          lastMasterMsg  = helper.d1msgs.bySrcId(113L),
           firstSlaveMsg  = helper.d2msgs.bySrcId(113L),
+          lastSlaveMsg   = helper.d2msgs.bySrcId(113L)
+        ),
+        MessagesMergeDiff.Match(
+          firstMasterMsg = helper.d1msgs.bySrcId(114L),
+          lastMasterMsg  = helper.d1msgs.bySrcId(115L),
+          firstSlaveMsg  = helper.d2msgs.bySrcId(114L),
           lastSlaveMsg   = helper.d2msgs.bySrcId(115L)
         ),
       )

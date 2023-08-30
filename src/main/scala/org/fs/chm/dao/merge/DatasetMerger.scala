@@ -81,8 +81,8 @@ class DatasetMerger(
     }
   }
 
-  private def diffAfterConflictEnd(cxt: MsgIterationContext,
-                                   state: IterationState.StateInProgress): MessagesMergeDiff = {
+  private def concludeDiff(cxt: MsgIterationContext,
+                           state: IterationState.StateInProgress): MessagesMergeDiff = {
     import IterationState._
     state match {
       case MatchInProgress(_, startMasterMsg, _, startSlaveMsg) =>
@@ -120,7 +120,7 @@ class DatasetMerger(
   private def iterate(
       cxt: MsgIterationContext,
       state: IterationState,
-      onConflictEnd: MessagesMergeDiff => Unit
+      onDiffEnd: MessagesMergeDiff => Unit
   ): Unit = {
     import IterationState._
 
@@ -137,17 +137,16 @@ class DatasetMerger(
       case (None, None, NoState) =>
         ()
       case (None, None, state: StateInProgress) =>
-        val diff = diffAfterConflictEnd(cxt, state)
-        onConflictEnd(diff)
+        onDiffEnd(concludeDiff(cxt, state))
 
       //
       // NoState
       //
 
-      case (Some(mm), Some(sm), NoState) if equalsWithNoNewContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
+      case (Some(mm), Some(sm), NoState) if equalsWithNoMismatchingContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
         // Matching subsequence starts
         val state2 = MatchInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
-        iterate(cxt.advanceBoth(), state2, onConflictEnd)
+        iterate(cxt.advanceBoth(), state2, onDiffEnd)
       case (Some(mm), Some(sm), NoState)
         if mm.typed.service.flatten.flatMap(_.asMessage.sealedValueOptional.groupMigrateFrom).isDefined &&
            sm.typed.service.flatten.flatMap(_.asMessage.sealedValueOptional.groupMigrateFrom).isDefined &&
@@ -155,16 +154,15 @@ class DatasetMerger(
            mm.fromId < 0x100000000L && sm.fromId > 0x100000000L &&
            (mm.copy(fromId = sm.fromId), masterRoot, cxt.mCwd) =~= (sm, slaveRoot, cxt.sCwd) =>
 
-        // FIXME: Why does compiler report this as unreachable?!
         // Special handling for a service message mismatch which is expected when merging Telegram after 2020-10
         // We register this one conflict and proceed in clean state.
         // This is dirty but relatively easy to do.
         val singleConflictState = ConflictInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
-        onConflictEnd(diffAfterConflictEnd(cxt.advanceBoth(), singleConflictState))
-        iterate(cxt.advanceBoth(), NoState, onConflictEnd)
+        onDiffEnd(concludeDiff(cxt.advanceBoth(), singleConflictState))
+        iterate(cxt.advanceBoth(), NoState, onDiffEnd)
       case (Some(mm), Some(sm), NoState) if mm.sourceIdOption.isDefined && mm.sourceIdOption == sm.sourceIdOption =>
         // Checking if there's a timestamp shift
-        if (equalsWithNoNewContent(mm.copy(timestamp = sm.timestamp).asInstanceOf[TaggedMessage.M], cxt.mCwd, sm, cxt.sCwd)) {
+        if (equalsWithNoMismatchingContent(mm.copy(timestamp = sm.timestamp).asInstanceOf[TaggedMessage.M], cxt.mCwd, sm, cxt.sCwd)) {
           val (aheadBehind, diffSec) = {
             val tsDiff = sm.timestamp - mm.timestamp
             assert(tsDiff != 0)
@@ -182,15 +180,15 @@ class DatasetMerger(
         // Conflict started
         // (Conflicts are only detectable if data source supply source IDs)
         val state2 = ConflictInProgress(cxt.prevMm, mm, cxt.prevSm, sm)
-        iterate(cxt.advanceBoth(), state2, onConflictEnd)
+        iterate(cxt.advanceBoth(), state2, onDiffEnd)
       case (_, Some(sm), NoState) if cxt.cmpMasterSlave() > 0 =>
         // Addition started
         val state2 = AdditionInProgress(cxt.prevMm, cxt.prevSm, sm)
-        iterate(cxt.advanceSlave(), state2, onConflictEnd)
+        iterate(cxt.advanceSlave(), state2, onDiffEnd)
       case (Some(mm), _, NoState) if cxt.cmpMasterSlave() < 0 =>
         // Retention started
         val state2 = RetentionInProgress(cxt.prevMm, mm, cxt.prevSm)
-        iterate(cxt.advanceMaster(), state2, onConflictEnd)
+        iterate(cxt.advanceMaster(), state2, onDiffEnd)
 
       //
       // AdditionInProgress
@@ -199,23 +197,23 @@ class DatasetMerger(
       case (_, Some(sm), state: AdditionInProgress)
           if state.prevMasterMsgOption == cxt.prevMm && cxt.cmpMasterSlave() > 0 =>
         // Addition continues
-        iterate(cxt.advanceSlave(), state, onConflictEnd)
+        iterate(cxt.advanceSlave(), state, onDiffEnd)
       case (_, _, state: AdditionInProgress) =>
         // Addition ended
-        onConflictEnd(diffAfterConflictEnd(cxt, state))
-        iterate(cxt, NoState, onConflictEnd)
+        onDiffEnd(concludeDiff(cxt, state))
+        iterate(cxt, NoState, onDiffEnd)
 
       //
       // MatchInProgress
       //
 
-      case (Some(mm), Some(sm), state: MatchInProgress) if equalsWithNoNewContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
+      case (Some(mm), Some(sm), state: MatchInProgress) if equalsWithNoMismatchingContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
         // Matching subsequence continues
-        iterate(cxt.advanceBoth(), state, onConflictEnd)
+        iterate(cxt.advanceBoth(), state, onDiffEnd)
       case (_, _, state: MatchInProgress) =>
         // Matching subsequence ends
-        onConflictEnd(diffAfterConflictEnd(cxt, state))
-        iterate(cxt, NoState, onConflictEnd)
+        onDiffEnd(concludeDiff(cxt, state))
+        iterate(cxt, NoState, onDiffEnd)
 
       //
       // RetentionInProgress
@@ -224,24 +222,24 @@ class DatasetMerger(
       case (Some(mm), _, RetentionInProgress(_, _, prevSlaveMsgOption))
           if (cxt.prevSm == prevSlaveMsgOption) && cxt.cmpMasterSlave() < 0 =>
         // Retention continues
-        iterate(cxt.advanceMaster(), state, onConflictEnd)
+        iterate(cxt.advanceMaster(), state, onDiffEnd)
       case (_, _, state: RetentionInProgress) =>
         // Retention ended
-        onConflictEnd(diffAfterConflictEnd(cxt, state))
-        iterate(cxt, NoState, onConflictEnd)
+        onDiffEnd(concludeDiff(cxt, state))
+        iterate(cxt, NoState, onDiffEnd)
 
       //
       // ConflictInProgress
       //
 
       case (Some(mm), Some(sm), state: ConflictInProgress)
-          if (mm.asInstanceOf[Message], masterRoot, cxt.mCwd) !=~= (sm, slaveRoot, cxt.sCwd) =>
+          if !equalsWithNoMismatchingContent(mm, cxt.mCwd, sm, cxt.sCwd) =>
         // Conflict continues
-        iterate(cxt.advanceBoth(), state, onConflictEnd)
+        iterate(cxt.advanceBoth(), state, onDiffEnd)
       case (_, _, state: ConflictInProgress) =>
         // Conflict ended
-        onConflictEnd(diffAfterConflictEnd(cxt, state))
-        iterate(cxt, NoState, onConflictEnd)
+        onDiffEnd(concludeDiff(cxt, state))
+        iterate(cxt, NoState, onDiffEnd)
 
       case other => unexpectedCase(other)
     }
@@ -347,7 +345,8 @@ class DatasetMerger(
                     // TODO: Should we analyze content and make sure nothing is lost?
                     batchLoadMsgsUntilInc(finalUsers, masterDao, masterDs, cmo.masterCwdOption.get, firstMasterMsg, lastMasterMsg)
                   case MessagesMergeDiff.Match(firstMasterMsg, lastMasterMsg, firstSlaveMsg, lastSlaveMsg) =>
-                    // Keep master messages unless slave has new content but matches otherwise.
+                    // Note: while messages to match, our matching rules allow either master or slave to have missing content.
+                    // We keep master messages unless slave has new content.
                     val masterStream =
                       batchLoadMsgsUntilInc(finalUsers, masterDao, masterDs, cmo.masterCwdOption.get, firstMasterMsg, lastMasterMsg)
                     val slaveStream =
@@ -356,8 +355,9 @@ class DatasetMerger(
                       masterStream.zip(slaveStream).flatMap { case ((mDsRoot, mMsgs), (sDsRoot, sMsgs)) =>
                         assert(mMsgs.length == sMsgs.length)
                         mMsgs.zip(sMsgs).map { case (mMsg, sMsg) =>
-                          // Only use slave message if master message content is missing. This allows us to never lose content.
-                          if (mMsg.files(mDsRoot).exists(_.exists)) {
+                          val mFiles = mMsg.files(mDsRoot).filter(_.exists())
+                          val sFiles = sMsg.files(sDsRoot).filter(_.exists())
+                          if (mFiles.size >= sFiles.size) {
                             (mDsRoot, mMsg)
                           } else {
                             (sDsRoot, sMsg)
@@ -395,11 +395,11 @@ class DatasetMerger(
   // Helpers
   //
 
-  /** Treats master and slave messages as equal if slave has missing content */
-  private def equalsWithNoNewContent(mm: TaggedMessage.M,
-                                     mCwd: ChatWithDetails,
-                                     sm: TaggedMessage.S,
-                                     sCwd: ChatWithDetails): Boolean = {
+  /** Treats master and slave messages as equal if either of them has content - unless they both do and it's mismatching. */
+  private def equalsWithNoMismatchingContent(mm: TaggedMessage.M,
+                                             mCwd: ChatWithDetails,
+                                             sm: TaggedMessage.S,
+                                             sCwd: ChatWithDetails): Boolean = {
     def hasContent(c: WithPathFileOption, root: DatasetRoot): Boolean = {
       c.pathFileOption(root).exists(_.exists)
     }
@@ -412,16 +412,16 @@ class DatasetMerger(
           case (Some(mc), Some(sc)) if mc.getClass == sc.getClass && mc.hasPath =>
             val mmCmp = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(contentOption = None)))
             val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(contentOption = None)))
-            !hasContent(sc, slaveRoot) && (mmCmp, masterRoot, mCwd) =~= (smCmp, slaveRoot, sCwd)
+            (!hasContent(mc, masterRoot) || !hasContent(sc, slaveRoot)) && (mmCmp, masterRoot, mCwd) =~= (smCmp, slaveRoot, sCwd)
           case _ =>
             false
         }
-      case (Message.Typed.Service(Some(MessageServiceGroupEditPhoto(_, _))),
+      case (Message.Typed.Service(Some(MessageServiceGroupEditPhoto(mmPhoto, _))),
             Message.Typed.Service(Some(MessageServiceGroupEditPhoto(smPhoto, _)))) =>
-        !hasContent(smPhoto, slaveRoot)
-      case (Message.Typed.Service(Some(MessageServiceSuggestProfilePhoto(_, _))),
+        !hasContent(mmPhoto, masterRoot) || !hasContent(smPhoto, slaveRoot)
+      case (Message.Typed.Service(Some(MessageServiceSuggestProfilePhoto(mmPhoto, _))),
             Message.Typed.Service(Some(MessageServiceSuggestProfilePhoto(smPhoto, _)))) =>
-        !hasContent(smPhoto, slaveRoot)
+        !hasContent(mmPhoto, masterRoot) || !hasContent(smPhoto, slaveRoot)
       case _ => false
     }
   }
@@ -673,7 +673,7 @@ object DatasetMerger {
       override def lastSlaveMsgOption:   Option[TaggedMessage.S] = Some(lastSlaveMsg)
     }
 
-    /** Master and slave has matching messages (possibly except for content) */
+    /** Master and slave has matching messages - but allows content on one/both sides to be missing */
     case class Match(
         firstMasterMsg: TaggedMessage.M,
         lastMasterMsg: TaggedMessage.M,
