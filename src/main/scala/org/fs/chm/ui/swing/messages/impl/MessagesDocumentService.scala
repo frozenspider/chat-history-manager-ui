@@ -219,8 +219,15 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     private def renderPhoneCall(sm: MessageServicePhoneCall) = {
       Seq(
         Some("Phone call"),
-        sm.durationSecOption map (d => s"($d sec)"),
-        sm.discardReasonOption map (r => s"($r)")
+        sm.durationSecOption map {
+          case d if d < 60 =>
+            s"($d sec)"
+          case d if d < 3600 =>
+            s"(${(d * 1000).hhMmSsString.dropWhile(c => c == '0' || c == ':')})"
+          case d =>
+            s"(${(d * 1000).hhMmSsString})"
+        },
+        sm.discardReasonOption filter (_ != "hangup") map (r => s"($r)")
       ).yieldDefined.mkString(" ")
     }
 
