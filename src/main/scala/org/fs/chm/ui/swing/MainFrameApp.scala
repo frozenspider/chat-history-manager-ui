@@ -427,33 +427,31 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
 
   def analyzeChatsFuture(
       merger: DatasetMerger,
-      chatsToMerge: Seq[ChatMergeOption]
-  ): InterruptableFuture[Seq[ChatMergeOption]] =
+      chatsToMerge: Seq[SelectedChatMergeOption]
+  ): InterruptableFuture[Seq[AnalyzedChatMergeOption]] =
     worldFreezingIFuture("Analyzing chat messages...") {
       chatsToMerge.map { cmo =>
         if (Thread.interrupted()) {
           throw new InterruptedException()
         }
-        val chat = (cmo.slaveCwdOption orElse cmo.masterCwdOption).get.chat
         cmo match {
-          case cmo: ChatMergeOption.Combine =>
-            val title = s"'${chat.nameOrUnnamed}' (${chat.msgCount} messages)"
-            setStatus(s"Analyzing ${title}...")
-            val diffs = merger.analyze(cmo.masterCwd, cmo.slaveCwd, title)
+          case cmo: ChatMergeOption.SelectedCombine =>
+            setStatus(s"Analyzing ${cmo.title}...")
+            val diffs = merger.analyze(cmo.masterCwd, cmo.slaveCwd, cmo.title)
             // Sanity check
             if (diffs.size >= 10000) {
-              throw new IllegalStateException(s"Found ${diffs.size} mismatches for ${title}!")
+              throw new IllegalStateException(s"Found ${diffs.size} mismatches for ${cmo.title}!")
             }
-            cmo.copy(messageMergeOptions = diffs)
-          case cmo =>
-            cmo
+            cmo.analyzed(diffs)
+          case cmo: ChatMergeOption.Add => cmo
+          case cmo: ChatMergeOption.Keep => cmo
         }
       }
     }
 
   def mergeDatasets(
       merger: DatasetMerger,
-      analyzed: Seq[ChatMergeOption],
+      analyzed: Seq[AnalyzedChatMergeOption],
       usersToMerge: Seq[UserMergeOption],
       newDbPath: JFile
   ): Unit = {
@@ -461,36 +459,35 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
       type MergeModel = SelectMergeMessagesDialog.SelectMergeMessagesModel
       type LazyModel = () => MergeModel
 
-      def cmoToTitle(cmo: ChatMergeOption.Combine) =
-        s"'${cmo.slaveCwd.chat.nameOrUnnamed}' (${cmo.slaveCwd.chat.msgCount} messages)"
-
       val (_resolved, cmosWithLazyModels) =
-        analyzed.foldLeft((Seq.empty[ChatMergeOption], Seq.empty[(ChatMergeOption.Combine, LazyModel)])) {
-          case ((resolved, cmosWithLazyModels), (cmo @ ChatMergeOption.Combine(mcwd, scwd, diffs))) =>
+        analyzed.foldLeft((Seq.empty[ResolvedChatMergeOption], Seq.empty[(ChatMergeOption.AnalyzedCombine, LazyModel)])) {
+          case ((resolved, cmosWithLazyModels), (cmo @ ChatMergeOption.AnalyzedCombine(mcwd, scwd, diffs))) =>
             // Resolve mismatches
             if (diffs.forall(d => d.isInstanceOf[MessagesMergeDiff.Match] || d.isInstanceOf[MessagesMergeDiff.Retain])) {
               // User has no choice - pass them as-is
-              (resolved :+ cmo, cmosWithLazyModels)
+              (resolved :+ cmo.resolveAsIs, cmosWithLazyModels)
             } else if (diffs.forall(d => d.isInstanceOf[MessagesMergeDiff.Add])) {
               // We're adding a whole chat, choosing is pointless
-              (resolved :+ cmo, cmosWithLazyModels)
+              (resolved :+ cmo.resolveAsIs, cmosWithLazyModels)
             } else {
               val next = (cmo, () => {
                 if (Thread.interrupted()) throw new InterruptedException("Cancelled")
                 StopWatch.measureAndCall {
                   // I *HOPE* that creating model alone outside of EDT doesn't cause issues
                   new MergeModel(merger.masterDao, mcwd, merger.slaveDao, scwd, diffs, htmlKit)
-                }((_, t) => log.info(s"Model for chats merge ${cmoToTitle(cmo)} created in $t ms"))
+                }((_, t) => log.info(s"Model for chats merge ${cmo.title} created in $t ms"))
               })
               (resolved, cmosWithLazyModels :+ next)
             }
-          case ((resolved, cmosWithLazyModels), cmo) =>
+          case ((resolved, cmosWithLazyModels), cmo: ChatMergeOption.Add) =>
+            (resolved :+ cmo, cmosWithLazyModels)
+          case ((resolved, cmosWithLazyModels), cmo: ChatMergeOption.Keep) =>
             (resolved :+ cmo, cmosWithLazyModels)
       }
 
       // Since model creation is costly, next model is made asynchronously
 
-      def evaluate(element: (ChatMergeOption.Combine, LazyModel)) = {
+      def evaluate(element: (ChatMergeOption.AnalyzedCombine, LazyModel)) = {
         (element._1, Future.interruptibly { element._2() })
       }
 
@@ -500,7 +497,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
       var cancelled = false
       while (!cancelled && nextModelFutureOption.isDefined) {
         val (cmo, futureModel) = nextModelFutureOption.get
-        setStatus(s"Processing ${cmoToTitle(cmo)}...")
+        setStatus(s"Processing ${cmo.title}...")
 
         nextModelFutureOption = if (cmosWithLazyModels.length <= i) {
           None
@@ -516,7 +513,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
         dialog.visible = true
         cancelled = dialog.selection match {
           case Some(resolution) =>
-            resolved = resolved :+ cmo.copy(messageMergeOptions = resolution)
+            resolved = resolved :+ cmo.resolved(resolution)
             false
           case None =>
             nextModelFutureOption.map(_._2.cancel())
@@ -530,7 +527,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
         throw new CancellationException("Cancelled")
 
       resolved
-    }.future.flatMap((chatsMergeResolutions: Seq[ChatMergeOption]) => {
+    }.future.flatMap((chatsMergeResolutions: Seq[ResolvedChatMergeOption]) => {
       // Merge
       worldFreezingIFuture("Merging...") {
         newDbPath.mkdir()

@@ -29,7 +29,7 @@ class SelectMergeChatsDialog(
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset,
-) extends CustomDialog[Seq[ChatMergeOption]](takeFullHeight = true) {
+) extends CustomDialog[Seq[SelectedChatMergeOption]](takeFullHeight = true) {
   private lazy val originalTitle = "Select chats to merge"
 
   {
@@ -40,21 +40,21 @@ class SelectMergeChatsDialog(
 
   private lazy val table = {
     checkEdt()
-    new SelectMergesTable[(ChatHistoryDao, ChatWithDetails), ChatMergeOption](models)
+    new SelectMergesTable[(ChatHistoryDao, ChatWithDetails), SelectedChatMergeOption](models)
   }
 
   override protected lazy val dialogComponent: Component = {
     table.wrapInScrollpaneAndAdjustWidth()
   }
 
-  override protected def validateChoices(): Option[Seq[ChatMergeOption]] = {
+  override protected def validateChoices(): Option[Seq[SelectedChatMergeOption]] = {
     Some(table.selected)
   }
 
   import org.fs.chm.ui.swing.merge.SelectMergesTable._
 
   private class Models(masterChats: Seq[ChatWithDetails], slaveChats: Seq[ChatWithDetails])
-      extends MergeModels[(ChatHistoryDao, ChatWithDetails), ChatMergeOption] {
+      extends MergeModels[(ChatHistoryDao, ChatWithDetails), SelectedChatMergeOption] {
 
     override val allElems: Seq[RowData[(ChatHistoryDao, ChatWithDetails)]] = {
       val masterChatsMap = groupById(masterChats)
@@ -93,14 +93,13 @@ class SelectMergeChatsDialog(
     override protected def rowDataToResultOption(
         rd: RowData[(ChatHistoryDao, ChatWithDetails)],
         isSelected: Boolean
-    ): Option[ChatMergeOption] = {
+    ): Option[SelectedChatMergeOption] = {
       rd match {
         case RowData.InMasterOnly((_, mcwd), _) =>
           Some(ChatMergeOption.Keep(mcwd))
         case RowData.InBoth((_, mcwd), (_, scwd), true) =>
           if (isSelected) {
-            // Mismatches have to be analyzed by DatasetMerger
-            Some(ChatMergeOption.Combine(mcwd, scwd, IndexedSeq.empty))
+            Some(ChatMergeOption.SelectedCombine(mcwd, scwd))
           } else {
             Some(ChatMergeOption.Keep(mcwd))
           }

@@ -30,7 +30,7 @@ class DatasetMerger(
    * Other `ChatMergeOption`s are returned unchanged.
    * Note that we can only detect conflicts if data source supports source IDs.
    */
-  def analyze(masterCwd: ChatWithDetails, slaveCwd: ChatWithDetails, title: String): IndexedSeq[MessagesMergeDecision] ={
+  def analyze(masterCwd: ChatWithDetails, slaveCwd: ChatWithDetails, title: String): IndexedSeq[MessagesMergeDiff] ={
     StopWatch.measureAndCall {
       var diffs = ArrayBuffer.empty[MessagesMergeDiff]
       iterate(
@@ -243,7 +243,7 @@ class DatasetMerger(
 
   def merge(
       explicitUsersToMerge: Seq[UserMergeOption],
-      chatsToMerge: Seq[ChatMergeOption],
+      chatsToMerge: Seq[ResolvedChatMergeOption],
       newDao: MutableChatHistoryDao
   ): Dataset = {
     StopWatch.measureAndCall {
@@ -325,7 +325,7 @@ class DatasetMerger(
               messageBatchesStream[TaggedMessage.S](slaveDao, scwd.chat, None)
                 .map(_.map(fixupMessageWithMembers(scwd, finalUsers)))
                 .map(mb => (slaveDao.datasetRoot(slaveDs.uuid), mb))
-            case ChatMergeOption.Combine(mc, sc, resolution) =>
+            case ChatMergeOption.ResolvedCombine(mc, sc, resolution) =>
               val res: Seq[Stream[(DatasetRoot, IndexedSeq[Message])]] =
                 resolution.map {
                   case MessagesMergeDiff.Retain(firstMasterMsg, lastMasterMsg) =>
@@ -581,19 +581,50 @@ object DatasetMerger {
   }
 
   /** Represents a single merge decision: a chat that should be added, retained, merged (or skipped otherwise) */
-  sealed abstract class ChatMergeOption(
-     val masterCwdOption: Option[ChatWithDetails],
-     val slaveCwdOption:  Option[ChatWithDetails]
-  )
+  sealed trait ChatMergeOption {
+    def masterCwdOption: Option[ChatWithDetails]
+    def slaveCwdOption: Option[ChatWithDetails]
+    def title: String = {
+      val cwd = if (slaveCwdOption.isDefined) slaveCwdOption.get else masterCwdOption.get
+      s"'${cwd.chat.nameOrUnnamed}' (${cwd.chat.msgCount} messages)"
+    }
+  }
+  sealed trait SelectedChatMergeOption extends ChatMergeOption
+  sealed trait AnalyzedChatMergeOption extends ChatMergeOption
+  sealed trait ResolvedChatMergeOption extends ChatMergeOption
+
+  sealed abstract class AbstractChatMergeOption(
+     override val masterCwdOption: Option[ChatWithDetails],
+     override val slaveCwdOption:  Option[ChatWithDetails]
+  ) extends ChatMergeOption
   object ChatMergeOption {
-    case class Keep(masterCwd: ChatWithDetails) extends ChatMergeOption(Some(masterCwd), None)
-    case class Add(slaveCwd: ChatWithDetails)   extends ChatMergeOption(None, Some(slaveCwd))
-    case class Combine(
+    case class Keep(masterCwd: ChatWithDetails) extends AbstractChatMergeOption(Some(masterCwd), None)
+      with SelectedChatMergeOption with AnalyzedChatMergeOption with ResolvedChatMergeOption
+    case class Add(slaveCwd: ChatWithDetails) extends AbstractChatMergeOption(None, Some(slaveCwd))
+      with SelectedChatMergeOption with AnalyzedChatMergeOption with ResolvedChatMergeOption
+    case class SelectedCombine(
         masterCwd: ChatWithDetails,
         slaveCwd: ChatWithDetails,
-        /** Serves as either mismatches (all options after analysis) or resolution (mismatches filtered by user) */
-        messageMergeOptions: IndexedSeq[MessagesMergeDecision]
-    ) extends ChatMergeOption(Some(masterCwd), Some(slaveCwd))
+    ) extends AbstractChatMergeOption(Some(masterCwd), Some(slaveCwd)) with SelectedChatMergeOption {
+      def analyzed(analysis: IndexedSeq[MessagesMergeDiff]): AnalyzedCombine =
+        AnalyzedCombine(masterCwd, slaveCwd, analysis)
+    }
+    case class AnalyzedCombine(
+        masterCwd: ChatWithDetails,
+        slaveCwd: ChatWithDetails,
+        analysis: IndexedSeq[MessagesMergeDiff]
+    ) extends AbstractChatMergeOption(Some(masterCwd), Some(slaveCwd)) with AnalyzedChatMergeOption {
+      def resolved(resoluion: IndexedSeq[MessagesMergeDecision]): ResolvedCombine =
+        ResolvedCombine(masterCwd, slaveCwd, resoluion)
+
+      def resolveAsIs: ResolvedCombine =
+        resolved(analysis)
+    }
+    case class ResolvedCombine(
+        masterCwd: ChatWithDetails,
+        slaveCwd: ChatWithDetails,
+        resoluion: IndexedSeq[MessagesMergeDecision]
+    ) extends AbstractChatMergeOption(Some(masterCwd), Some(slaveCwd)) with ResolvedChatMergeOption
   }
 
   // Message tagged types

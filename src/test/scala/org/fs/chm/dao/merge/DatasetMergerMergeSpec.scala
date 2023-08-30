@@ -65,7 +65,7 @@ class DatasetMergerMergeSpec //
   test("merge chats - keep single message, basic checks") {
     val msgs   = Seq(createRegularMessage(1, 1))
     val helper = H2MergerHelper.fromMessages(msgs, msgs)
-    val chatMerges = Seq[ChatMergeOption](
+    val chatMerges = Seq[ResolvedChatMergeOption](
       ChatMergeOption.Keep(helper.d1cwd)
     )
     assert(helper.dao1.datasets.size === 1)
@@ -95,7 +95,7 @@ class DatasetMergerMergeSpec //
     ))
 
     mergeFilesHelper(amendMasterMessagesOnly = false, helper => Seq(
-      ChatMergeOption.Combine(
+      ChatMergeOption.ResolvedCombine(
         helper.d1cwd, helper.d2cwd, IndexedSeq(
           MessagesMergeDiff.DontReplace(
             firstMasterMsg = helper.d1msgs.head,
@@ -108,7 +108,7 @@ class DatasetMergerMergeSpec //
     ))
 
     mergeFilesHelper(amendMasterMessagesOnly = true, helper => Seq(
-      ChatMergeOption.Combine(
+      ChatMergeOption.ResolvedCombine(
         helper.d1cwd, helper.d2cwd, IndexedSeq(
           MessagesMergeDiff.DontReplace(
             firstMasterMsg = helper.d1msgs.head,
@@ -121,7 +121,7 @@ class DatasetMergerMergeSpec //
     ))
 
     mergeFilesHelper(amendMasterMessagesOnly = false, helper => Seq(
-      ChatMergeOption.Combine(
+      ChatMergeOption.ResolvedCombine(
         helper.d1cwd, helper.d2cwd, IndexedSeq(
           MessagesMergeDiff.Retain(
             firstMasterMsg = helper.d1msgs.head,
@@ -132,7 +132,7 @@ class DatasetMergerMergeSpec //
     ))
 
     mergeFilesHelper(amendMasterMessagesOnly = true, helper => Seq(
-      ChatMergeOption.Combine(
+      ChatMergeOption.ResolvedCombine(
         helper.d1cwd, helper.d2cwd, IndexedSeq(
           MessagesMergeDiff.Retain(
             firstMasterMsg = helper.d1msgs.head,
@@ -143,7 +143,7 @@ class DatasetMergerMergeSpec //
     ))
 
     mergeFilesHelper(amendMasterMessagesOnly = true, helper => Seq(
-      ChatMergeOption.Combine(
+      ChatMergeOption.ResolvedCombine(
         helper.d1cwd, helper.d2cwd, IndexedSeq(
           MessagesMergeDiff.Match(
             firstMasterMsg = helper.d1msgs.head,
@@ -159,7 +159,7 @@ class DatasetMergerMergeSpec //
   }
 
   def mergeFilesHelper(amendMasterMessagesOnly: Boolean,
-                       makeChatMerges: H2MergerHelper => Seq[ChatMergeOption]): Unit = {
+                       makeChatMerges: H2MergerHelper => Seq[ResolvedChatMergeOption]): Unit = {
     def makeAnimationContent(path: File): Content = {
       val file1 = createRandomTempFile(path)
       val file2 = createRandomTempFile(path)
@@ -223,8 +223,8 @@ class DatasetMergerMergeSpec //
 
     val helper = new H2MergerHelper(usersA, chatMsgsA, usersB, chatMsgsB)
 
-    val chatMerges = Seq[ChatMergeOption](
-      ChatMergeOption.Combine(
+    val chatMerges = Seq[ResolvedChatMergeOption](
+      ChatMergeOption.ResolvedCombine(
         helper.d1cwd,
         helper.d2cwd,
         IndexedSeq(
@@ -260,7 +260,7 @@ class DatasetMergerMergeSpec //
     val msgsA  = msgs.filter(Seq(3, 4) contains _.sourceIdOption.get)
     val msgsB  = changedMessages(msgs, _ => true)
     val helper = H2MergerHelper.fromMessages(msgsA, msgsB)
-    val chatMerges = Seq[ChatMergeOption](
+    val chatMerges = Seq[ResolvedChatMergeOption](
       ChatMergeOption.Keep(helper.d1cwd)
     )
     val newDs = helper.merger.merge(keepBothUsers(helper), chatMerges, helper.dao3)
@@ -281,7 +281,7 @@ class DatasetMergerMergeSpec //
     val msgsA  = msgs
     val msgsB  = changedMessages(msgs.filter(Seq(3, 4) contains _.sourceIdOption.get), _ => true)
     val helper = H2MergerHelper.fromMessages(msgsA, msgsB)
-    val chatMerges = Seq[ChatMergeOption](
+    val chatMerges = Seq[ResolvedChatMergeOption](
       ChatMergeOption.Add(helper.d2cwd)
     )
 
@@ -308,8 +308,8 @@ class DatasetMergerMergeSpec //
     val msgsA  = msgs
     val msgsB  = changedMessages(msgs, _ => true)
     val helper = H2MergerHelper.fromMessages(msgsA, msgsB)
-    val chatMerges = Seq[ChatMergeOption](
-      ChatMergeOption.Combine(
+    val chatMerges = Seq[ResolvedChatMergeOption](
+      ChatMergeOption.ResolvedCombine(
         helper.d1cwd,
         helper.d2cwd,
         IndexedSeq(
@@ -351,8 +351,8 @@ class DatasetMergerMergeSpec //
       H2MergerHelper.fromMessages(msgsA, msgsB)
     }
     val (bp1, bp2, bp3) = (maxId / 3, maxId / 2, maxId * 2 / 3)
-    val chatMerges = Seq[ChatMergeOption](
-      ChatMergeOption.Combine(
+    val chatMerges = Seq[ResolvedChatMergeOption](
+      ChatMergeOption.ResolvedCombine(
         helper.d1cwd,
         helper.d2cwd,
         IndexedSeq(
@@ -416,7 +416,7 @@ class DatasetMergerMergeSpec //
       populateOldMessages = true,
       populateNewMessages = true,
       makeChatMerges = helper => Seq(
-        ChatMergeOption.Combine(
+        ChatMergeOption.ResolvedCombine(
           helper.d1cwd, helper.d2cwd, IndexedSeq(
             MessagesMergeDiff.Replace(
               firstMasterMsg = helper.d1msgs.head,
@@ -434,7 +434,7 @@ class DatasetMergerMergeSpec //
       populateOldMessages = true,
       populateNewMessages = true,
       makeChatMerges = helper => Seq(
-        ChatMergeOption.Combine(
+        ChatMergeOption.ResolvedCombine(
           helper.d1cwd, helper.d2cwd, IndexedSeq(
             MessagesMergeDiff.DontReplace(
               firstMasterMsg = helper.d1msgs.head,
@@ -452,7 +452,7 @@ class DatasetMergerMergeSpec //
       populateOldMessages = true,
       populateNewMessages = true,
       makeChatMerges = helper => Seq(
-        ChatMergeOption.Combine(
+        ChatMergeOption.ResolvedCombine(
           helper.d1cwd, helper.d2cwd, IndexedSeq(
             MessagesMergeDiff.Match(
               firstMasterMsg = helper.d1msgs.head,
@@ -470,7 +470,7 @@ class DatasetMergerMergeSpec //
       populateOldMessages = false,
       populateNewMessages = true,
       makeChatMerges = helper => Seq(
-        ChatMergeOption.Combine(
+        ChatMergeOption.ResolvedCombine(
           helper.d1cwd, helper.d2cwd, IndexedSeq(
             MessagesMergeDiff.Add(
               firstSlaveMsg = helper.d2msgs.head,
@@ -486,7 +486,7 @@ class DatasetMergerMergeSpec //
       populateOldMessages = true,
       populateNewMessages = false,
       makeChatMerges = helper => Seq(
-        ChatMergeOption.Combine(
+        ChatMergeOption.ResolvedCombine(
           helper.d1cwd, helper.d2cwd, IndexedSeq(
             MessagesMergeDiff.Retain(
               firstMasterMsg = helper.d1msgs.head,
@@ -524,7 +524,7 @@ class DatasetMergerMergeSpec //
   def membersTestHelper(clue: String,
                         populateOldMessages: Boolean,
                         populateNewMessages: Boolean,
-                        makeChatMerges: H2MergerHelper => Seq[ChatMergeOption]): Unit = {
+                        makeChatMerges: H2MergerHelper => Seq[ResolvedChatMergeOption]): Unit = {
     def makeMessages(users: Seq[User], groupChatTitle: String) = {
       val members = users.map(_.prettyName)
       val typeds = Seq(
@@ -627,8 +627,8 @@ class DatasetMergerMergeSpec //
       })
     }
 
-    val chatMerges = Seq[ChatMergeOption](
-      ChatMergeOption.Combine(
+    val chatMerges = Seq[ResolvedChatMergeOption](
+      ChatMergeOption.ResolvedCombine(
         helper.d1cwd,
         helper.d2cwd,
         IndexedSeq(
@@ -680,8 +680,8 @@ class DatasetMergerMergeSpec //
       })
     }
 
-    val chatMerges = Seq[ChatMergeOption](
-      ChatMergeOption.Combine(
+    val chatMerges = Seq[ResolvedChatMergeOption](
+      ChatMergeOption.ResolvedCombine(
         helper.d1cwd,
         helper.d2cwd,
         IndexedSeq(
