@@ -6,7 +6,6 @@ import java.nio.file.Files
 import org.fs.chm.TestHelper
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger._
-import org.fs.chm.dao.merge.DatasetMerger.{ChatMergeOption => CMO}
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.TestUtils._
@@ -56,25 +55,10 @@ class DatasetMergerAnalyzeSpec //
     }
   }
 
-  test("keep - no messages") {
-    val helper   = new MergerHelper(Seq.empty, Seq.empty)
-    val keep     = CMO.Keep(helper.d1cwd)
-    val analyzed = helper.merger.analyzeChatHistoryMerge(keep)
-    assert(analyzed === keep)
-  }
-
-  test("add - no messages") {
-    val helper   = new MergerHelper(Seq.empty, Seq.empty)
-    val add      = CMO.Add(helper.d2cwd)
-    val analysis = helper.merger.analyzeChatHistoryMerge(add)
-    assert(analysis === add)
-  }
-
   test("match - same single message") {
     val msgs     = Seq(createRegularMessage(1, 1))
     val helper   = new MergerHelper(msgs, msgs)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
@@ -90,8 +74,7 @@ class DatasetMergerAnalyzeSpec //
   test("match - same multiple messages") {
     val msgs     = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val helper   = new MergerHelper(msgs, msgs)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
@@ -107,8 +90,7 @@ class DatasetMergerAnalyzeSpec //
   test("retain - no slave messages") {
     val msgs     = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val helper   = new MergerHelper(msgs, IndexedSeq.empty)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Retain(
@@ -123,8 +105,7 @@ class DatasetMergerAnalyzeSpec //
     val msgs     = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val msgs2    = msgs.filter(m => (5 to 10) contains m.sourceIdOption.get)
     val helper   = new MergerHelper(msgs, msgs2)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Retain(
@@ -150,8 +131,7 @@ class DatasetMergerAnalyzeSpec //
     val msgs123  = msgs
     val msgs13   = msgs123.filter(_.sourceIdOption.get != 2)
     val helper   = new MergerHelper(msgs13, msgs123)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
@@ -179,8 +159,7 @@ class DatasetMergerAnalyzeSpec //
     val msgsA    = msgs
     val msgsB    = changedMessages(msgsA, (_ == 2))
     val helper   = new MergerHelper(msgsA, msgsB)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
@@ -215,8 +194,7 @@ class DatasetMergerAnalyzeSpec //
     val msgs     = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val msgsL    = Seq(msgs.last)
     val helper   = new MergerHelper(msgsL, msgs)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Add(
@@ -244,8 +222,7 @@ class DatasetMergerAnalyzeSpec //
     val msgsA    = msgs
     val msgsB    = changedMessages(msgsA, (_ < maxId))
     val helper   = new MergerHelper(msgsA, msgsB)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Replace(
@@ -274,8 +251,7 @@ class DatasetMergerAnalyzeSpec //
     val msgs     = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val msgsFL   = Seq(msgs.head, msgs.last)
     val helper   = new MergerHelper(msgsFL, msgs)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
@@ -309,8 +285,7 @@ class DatasetMergerAnalyzeSpec //
     val msgsA    = msgs
     val msgsB    = changedMessages(msgsA, (id => id > 1 && id < maxId))
     val helper   = new MergerHelper(msgsA, msgsB)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
@@ -345,8 +320,7 @@ class DatasetMergerAnalyzeSpec //
     val msgs     = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
     val msgsF    = Seq(msgs.head)
     val helper   = new MergerHelper(msgsF, msgs)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
@@ -374,8 +348,7 @@ class DatasetMergerAnalyzeSpec //
     val msgsA    = msgs
     val msgsB    = changedMessages(msgsA, (_ > 1))
     val helper   = new MergerHelper(msgsA, msgsB)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
@@ -405,8 +378,7 @@ class DatasetMergerAnalyzeSpec //
     val msgsA    = msgs
     val msgsB    = changedMessages(msgsA, (_ => true))
     val helper   = new MergerHelper(msgsA, msgsB)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Replace(
@@ -430,8 +402,7 @@ class DatasetMergerAnalyzeSpec //
     val msgsA    = msgs
     val msgsB    = msgs.filter(Seq(2, 4) contains _.sourceIdOption.get)
     val helper   = new MergerHelper(msgsA, msgsB)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Retain(
@@ -476,8 +447,7 @@ class DatasetMergerAnalyzeSpec //
       (id => Seq(5, 6, 9, 10) contains id)
     )
     val helper   = new MergerHelper(msgsA, msgsB)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Retain(
@@ -528,8 +498,7 @@ class DatasetMergerAnalyzeSpec //
       (id => Seq(5, 6, 9, 10) contains id)
     )
     val helper   = new MergerHelper(msgsA, msgsB)
-    val combine  = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Add(
@@ -680,8 +649,7 @@ class DatasetMergerAnalyzeSpec //
       })
     }))
 
-    val combine = CMO.Combine(helper.d1cwd, helper.d2cwd, IndexedSeq.empty)
-    val analysis = helper.merger.analyzeChatHistoryMerge(combine).messageMergeOptions
+    val analysis = helper.merger.analyze(helper.d1cwd, helper.d2cwd, "")
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(

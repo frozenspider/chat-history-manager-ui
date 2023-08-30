@@ -156,20 +156,19 @@ object SelectMergeMessagesDialog {
         rd: RowData[RenderableDiff],
         selected: Boolean
     ): Option[MessagesMergeDecision] = {
-      import MessagesMergeDiff._
       val diff: MessagesMergeDiff = rd match {
         case RowData.InBoth(mmd, _, _)    => mmd.diff
         case RowData.InMasterOnly(mmd, _) => mmd.diff
         case RowData.InSlaveOnly(smd, _)  => smd.diff
       }
       diff match {
-        case diff: Retain               => Some(diff)
-        case diff: Match                => Some(diff)
+        case diff: MessagesMergeDiff.Retain               => Some(diff)
+        case diff: MessagesMergeDiff.Match                => Some(diff)
 
-        case diff: Add if selected      => Some(diff)
-        case diff: Add                  => None
-        case diff: Replace if selected  => Some(diff)
-        case diff: Replace              => Some(diff.asDontReplace)
+        case diff: MessagesMergeDiff.Add if selected      => Some(diff)
+        case diff: MessagesMergeDiff.Add                  => None
+        case diff: MessagesMergeDiff.Replace if selected  => Some(diff)
+        case diff: MessagesMergeDiff.Replace              => Some(diff.asDontReplace)
       }
     }
   }

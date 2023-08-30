@@ -30,27 +30,23 @@ class DatasetMerger(
    * Other `ChatMergeOption`s are returned unchanged.
    * Note that we can only detect conflicts if data source supports source IDs.
    */
-  def analyzeChatHistoryMerge[T <: ChatMergeOption](merge: T): T = merge match {
-    case merge @ ChatMergeOption.Combine(mCwd, sCwd, _) =>
-      val title = s"'${sCwd.chat.nameOrUnnamed}' (${sCwd.chat.msgCount} messages)"
-      log.info(s"Analyzing chat ${title}...")
-      StopWatch.measureAndCall {
-        var diffs = ArrayBuffer.empty[MessagesMergeDiff]
-        iterate(
-          MsgIterationContext(
-            mmStream = messagesStream(masterDao, mCwd.chat, None),
-            prevMm   = None,
-            mCwd     = mCwd,
-            smStream = messagesStream(slaveDao, sCwd.chat, None),
-            prevSm   = None,
-            sCwd     = sCwd,
-          ),
-          IterationState.NoState,
-          (mm => diffs += mm)
-        )
-        merge.copy(messageMergeOptions = diffs.toIndexedSeq).asInstanceOf[T]
-      }((_, t) => log.info(s"Chat $title analyzed in $t ms"))
-    case _ => merge
+  def analyze(masterCwd: ChatWithDetails, slaveCwd: ChatWithDetails, title: String): IndexedSeq[MessagesMergeDecision] ={
+    StopWatch.measureAndCall {
+      var diffs = ArrayBuffer.empty[MessagesMergeDiff]
+      iterate(
+        MsgIterationContext(
+          mmStream = messagesStream(masterDao, masterCwd.chat, None),
+          prevMm   = None,
+          mCwd     = masterCwd,
+          smStream = messagesStream(slaveDao, slaveCwd.chat, None),
+          prevSm   = None,
+          sCwd     = slaveCwd,
+        ),
+        IterationState.NoState,
+        (mm => diffs += mm)
+      )
+      diffs.toIndexedSeq
+    }((_, t) => log.info(s"Chat $title analyzed in $t ms"))
   }
 
   /** Stream messages, either from the beginning or from the given one (exclusive) */

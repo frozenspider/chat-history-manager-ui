@@ -435,8 +435,19 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
           throw new InterruptedException()
         }
         val chat = (cmo.slaveCwdOption orElse cmo.masterCwdOption).get.chat
-        setStatus(s"Analyzing '${chat.nameOrUnnamed}' (${chat.msgCount} messages)...")
-        merger.analyzeChatHistoryMerge(cmo)
+        cmo match {
+          case cmo: ChatMergeOption.Combine =>
+            val title = s"'${chat.nameOrUnnamed}' (${chat.msgCount} messages)"
+            setStatus(s"Analyzing ${title}...")
+            val diffs = merger.analyze(cmo.masterCwd, cmo.slaveCwd, title)
+            // Sanity check
+            if (diffs.size >= 10000) {
+              throw new IllegalStateException(s"Found ${diffs.size} mismatches for ${title}!")
+            }
+            cmo.copy(messageMergeOptions = diffs)
+          case cmo =>
+            cmo
+        }
       }
     }
 
@@ -459,6 +470,9 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
             // Resolve mismatches
             if (diffs.forall(d => d.isInstanceOf[MessagesMergeDiff.Match] || d.isInstanceOf[MessagesMergeDiff.Retain])) {
               // User has no choice - pass them as-is
+              (resolved :+ cmo, cmosWithLazyModels)
+            } else if (diffs.forall(d => d.isInstanceOf[MessagesMergeDiff.Add])) {
+              // We're adding a whole chat, choosing is pointless
               (resolved :+ cmo, cmosWithLazyModels)
             } else {
               val next = (cmo, () => {
