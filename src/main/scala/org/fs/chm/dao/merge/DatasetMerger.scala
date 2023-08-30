@@ -391,7 +391,10 @@ class DatasetMerger(
   // Helpers
   //
 
-  /** Treats master and slave messages as equal if either of them has content - unless they both do and it's mismatching. */
+  /**
+   * Treats master and slave messages as equal if either of them has content - unless they both do and it's mismatching.
+   * Also ignores edit timestamp if nothing else is changed.
+   */
   private def equalsWithNoMismatchingContent(mm: TaggedMessage.M,
                                              mCwd: ChatWithDetails,
                                              sm: TaggedMessage.S,
@@ -406,8 +409,8 @@ class DatasetMerger(
       case (mmRegular: Message.Typed.Regular, smRegular: Message.Typed.Regular) =>
         (mmRegular.value.contentOption, smRegular.value.contentOption) match {
           case (Some(mc), Some(sc)) if mc.getClass == sc.getClass && mc.hasPath =>
-            val mmCmp = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(contentOption = None)))
-            val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(contentOption = None)))
+            val mmCmp = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(contentOption = None, editTimestampOption = None)))
+            val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(contentOption = None, editTimestampOption = None)))
             (!hasContent(mc, masterRoot) || !hasContent(sc, slaveRoot)) && (mmCmp, masterRoot, mCwd) =~= (smCmp, slaveRoot, sCwd)
           case _ =>
             false
