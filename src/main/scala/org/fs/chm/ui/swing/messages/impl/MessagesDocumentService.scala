@@ -171,18 +171,23 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     }
   }
 
-  private def renderImage(fileOption: Option[File],
+  private def renderPossiblyMissingImage(fileOption: Option[File],
+                                         widthOption: Option[Int],
+                                         heightOption: Option[Int],
+                                         altTextOption: Option[String],
+                                         imagePrettyType: String): String = {
+    renderPossiblyMissingContent(fileOption, imagePrettyType)(renderImage(_, widthOption, heightOption, altTextOption))
+  }
+
+  private def renderImage(file: File,
                           widthOption: Option[Int],
                           heightOption: Option[Int],
-                          altTextOption: Option[String],
-                          imagePrettyType: String): String = {
-    renderPossiblyMissingContent(fileOption, imagePrettyType)(file => {
-      val srcAttr    = Some(s"""src="${fileToLocalUriString(file)}"""")
-      val widthAttr  = widthOption map (w => s"""width="${w / 2}"""")
-      val heightAttr = heightOption map (h => s"""height="${h / 2}"""")
-      val altAttr    = altTextOption map (e => s"""alt="$e"""")
-      "<img " + Seq(srcAttr, widthAttr, heightAttr, altAttr).yieldDefined.mkString(" ") + "/>"
-    })
+                          altTextOption: Option[String]): String = {
+    val srcAttr = Some(s"""src="${fileToLocalUriString(file)}"""")
+    val widthAttr = widthOption map (w => s"""width="${w / 2}"""")
+    val heightAttr = heightOption map (h => s"""height="${h / 2}"""")
+    val altAttr = altTextOption map (e => s"""alt="$e"""")
+    "<img " + Seq(srcAttr, widthAttr, heightAttr, altAttr).yieldDefined.mkString(" ") + "/>"
   }
 
   private def fileToLocalUriString(file: File): String = {
@@ -230,7 +235,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     }
 
     private def renderSuggestPhotoMessage(sm: MessageServiceSuggestProfilePhoto, dsRoot: DatasetRoot) = {
-      val image = renderImage(
+      val image = renderPossiblyMissingImage(
         sm.photo.pathFileOption(dsRoot),
         Some(sm.photo.width),
         Some(sm.photo.height),
@@ -239,7 +244,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     }
 
     private def renderEditPhotoMessage(sm: MessageServiceGroupEditPhoto, dsRoot: DatasetRoot) = {
-      val image = renderImage(
+      val image = renderPossiblyMissingImage(
         sm.photo.pathFileOption(dsRoot),
         Some(sm.photo.width),
         Some(sm.photo.height),
@@ -351,33 +356,36 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     }
 
     private def renderVideoMsg(ct: ContentVideoMsg, dsRoot: DatasetRoot): String = {
-      renderPossiblyMissingContent(ct.pathFileOption(dsRoot), "Video message")(file => {
-        // TODO
-        "[Video messages not supported yet]"
+      // TODO: Support actual video messages, but for now, thumbnail will do
+      renderPossiblyMissingContent(ct.thumbnailPathFileOption(dsRoot), "Video message (thumbnail)")(file => {
+        "[Video message]<br>" +
+          renderImage(file, Some(ct.width), Some(ct.height), Some("[Video message]"))
       })
     }
 
     private def renderAnimation(ct: ContentAnimation, dsRoot: DatasetRoot): String = {
-      renderPossiblyMissingContent(ct.pathFileOption(dsRoot), "Animation")(file => {
-        // TODO
-        "[Animations not supported yet]"
+      // TODO: Support actual animation, but for now, thumbnail will do
+      renderPossiblyMissingContent(ct.thumbnailPathFileOption(dsRoot), "Animation (thumbnail)")(file => {
+        "[Animation]<br>" +
+          renderImage(file, Some(ct.width), Some(ct.height), Some("[Animation]"))
       })
     }
 
     private def renderFile(ct: ContentFile, dsRoot: DatasetRoot): String = {
-      renderPossiblyMissingContent(ct.pathFileOption(dsRoot), "File")(file => {
-        // TODO
-        "[Files not supported yet]"
+      // TODO: Support actual files, but for now, thumbnail will do
+      renderPossiblyMissingContent(ct.thumbnailPathFileOption(dsRoot), "File (thumbnail)")(file => {
+        "[File]<br>" +
+          renderImage(file, ct.widthOption, ct.heightOption, Some("[File]"))
       })
     }
 
     def renderSticker(st: ContentSticker, dsRoot: DatasetRoot): String = {
       val pathOption = st.pathFileOption(dsRoot) orElse st.thumbnailPathFileOption(dsRoot)
-      renderImage(pathOption, Some(st.width), Some(st.height), st.emojiOption, "Sticker")
+      renderPossiblyMissingImage(pathOption, Some(st.width), Some(st.height), st.emojiOption, "Sticker")
     }
 
     def renderPhoto(ct: ContentPhoto, dsRoot: DatasetRoot): String = {
-      renderImage(ct.pathFileOption(dsRoot), Some(ct.width), Some(ct.height), None, "Photo")
+      renderPossiblyMissingImage(ct.pathFileOption(dsRoot), Some(ct.width), Some(ct.height), None, "Photo")
     }
 
     def renderLocation(ct: ContentLocation): String = {
