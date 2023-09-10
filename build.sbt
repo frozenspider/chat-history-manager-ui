@@ -9,9 +9,8 @@ Test / testOptions  += Tests.Argument("-oDF")
 // Disable concurrent test execution
 Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
 
-// sourceManaged            := baseDirectory.value / "src_managed"
 Compile / sourceManaged  := baseDirectory.value / "src_managed" / "main" / "scala"
-Test / sourceManaged     := baseDirectory.value / "src_managed" / "test" / "scala"
+Test    / sourceManaged  := baseDirectory.value / "src_managed" / "test" / "scala"
 
 // ScalaPB config
 val protobufPath = settingKey[File]("Path to the protobuf files")

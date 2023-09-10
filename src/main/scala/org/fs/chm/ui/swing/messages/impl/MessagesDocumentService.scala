@@ -387,8 +387,16 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     }
 
     def renderSticker(st: ContentSticker, dsRoot: DatasetRoot): String = {
-      val pathOption = st.pathFileOption(dsRoot) orElse st.thumbnailPathFileOption(dsRoot)
-      renderPossiblyMissingImage(pathOption, Some(st.width), Some(st.height), st.emojiOption, "Sticker")
+      // TODO: Support actual animated stickers, but for now, thumbnail will do
+      val isAnimatedSticker = st.pathFileOption(dsRoot).exists(f => {
+        val name = f.getName.toLowerCase
+        name.endsWith(".tgs") || name.endsWith(".webm")
+      })
+      val pathOption = st.pathFileOption(dsRoot).filter(_ => !isAnimatedSticker) orElse st.thumbnailPathFileOption(dsRoot)
+      renderPossiblyMissingContent(pathOption, "Sticker")(sticker => {
+        (if (isAnimatedSticker) "[Animated sticker]<br>" else "") +
+          renderImage(sticker, Some(st.width), Some(st.height), st.emojiOption)
+      })
     }
 
     def renderPhoto(ct: ContentPhoto, dsRoot: DatasetRoot): String = {
