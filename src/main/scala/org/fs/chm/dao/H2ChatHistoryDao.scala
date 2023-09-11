@@ -375,6 +375,7 @@ class H2ChatHistoryDao(
   }
 
   override def mergeUsers(baseUser: User, absorbedUser: User): Unit = {
+    ???
     backup()
     val dsUuid   = baseUser.dsUuid
     val me       = myself(baseUser.dsUuid)

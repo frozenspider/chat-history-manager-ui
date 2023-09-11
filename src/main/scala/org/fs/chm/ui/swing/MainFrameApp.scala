@@ -653,6 +653,7 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
   }
 
   override def usersMerged(baseUser: User, absorbedUser: User, dao: ChatHistoryDao): Unit = {
+    ???
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     require(baseUser.dsUuid == absorbedUser.dsUuid, "Users are from different datasets!")
