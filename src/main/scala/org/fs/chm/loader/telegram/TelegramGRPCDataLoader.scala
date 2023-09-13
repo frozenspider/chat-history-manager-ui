@@ -54,15 +54,7 @@ class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
       val root = new JFile(response.rootFile).getAbsoluteFile
       require(root.exists, s"Dataset root ${root} does not exist!")
       val chatsWithMessagesLM: ListMap[Chat, IndexedSeq[Message]] =
-        ListMap.from(response.cwm.map(cwm => cwm.chat -> cwm.messages.map { m =>
-          val textWithSs = m.text.map(rte => {
-            rte.copy(searchableString = Some(makeSearchableString(rte)))
-          })
-          m.copy(
-            searchableString = Some(makeSearchableString(textWithSs, m.typed)),
-            text             = textWithSs
-          )
-        }.toIndexedSeq))
+        ListMap.from(response.cwms.map(cwm => cwm.chat -> cwm.messages.toIndexedSeq))
       new EagerChatHistoryDao(
         name               = "Telegram (" + root.getName + ")",
         _dataRootFile      = root,

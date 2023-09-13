@@ -99,8 +99,12 @@ object Entities {
     Seq(joinedText, typedComponentText.mkString(" "), linksSeq.mkString(" ")).map(_.trim).mkString(" ").trim
   }
 
-  def normalizeSeachableString(s: String): String =
-    s.replaceAll("[\\s\\p{Cf}\n]+", " ").trim
+  def normalizeSeachableString(s: String): String = {
+    // \p is unicode category
+    // \p{Z} is any separator (including \u00A0 no-break space)
+    // \p{Cf} is any invisible formatting character (including \u200B zero-width space)
+    s.replaceAll("[\\p{Z}\\p{Cf}\n]+", " ").trim
+  }
 
   //
   // Content
