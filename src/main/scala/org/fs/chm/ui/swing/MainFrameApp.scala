@@ -47,7 +47,7 @@ import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
 
-class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
+class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
     extends SimpleSwingApplication
     with SimpleConfigAware
     with Logging
@@ -1035,29 +1035,24 @@ class MainFrameApp(grpcDataLoader: TelegramGRPCDataLoader) //
       s"Samsung GT-S5610 export vMessage files [choose any in folder] (*.${GTS5610DataLoader.DefaultExt})"
     ) { _.getName endsWith ("." + GTS5610DataLoader.DefaultExt) }
 
+    private val waTextFf = easyFileFilter(
+      s"WhatsApp text export"
+    ) { f => f.getName.startsWith("WhatsApp Chat with ") && f.getName.endsWith(".txt") }
+
     val openChooser = new FileChooser(null) {
       title = "Select a database to open"
       peer.addChoosableFileFilter(h2ff)
       peer.addChoosableFileFilter(tgFf)
       peer.addChoosableFileFilter(gts5610Ff)
+      peer.addChoosableFileFilter(waTextFf)
     }
 
     def load(file: JFile): ChatHistoryDao = {
       val f = file.getParentFile
       if (h2ff.accept(file)) {
         h2.loadData(f)
-      } else if (tgFf.accept(file)) {
-        val loadersWithErrors =
-          Seq(grpcDataLoader).map(l => (l, l.doesLookRight(f)))
-        loadersWithErrors.find(_._2.isEmpty) match {
-          case Some((loader, _)) => loader.loadData(f)
-          case None => {
-            val errors = loadersWithErrors.map(_._1).toIndexedSeq
-            throw new IllegalStateException(
-              "Not a telegram format: Errors:\n"
-                + s"(from gRPC loader) ${errors(0)}\n")
-          }
-        }
+      } else if (tgFf.accept(file) || waTextFf.accept(file)) {
+        grpcDataLoader.loadData(file)
       } else if (gts5610Ff.accept(file)) {
         gts5610.loadData(f)
       } else {

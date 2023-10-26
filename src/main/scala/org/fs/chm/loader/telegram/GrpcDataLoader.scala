@@ -12,21 +12,17 @@ import io.grpc.Server
 import io.grpc.ServerBuilder
 import io.grpc.protobuf.services.ProtoReflectionService
 import org.fs.chm.dao.EagerChatHistoryDao
-import org.fs.chm.dao.Entities._
+import org.fs.chm.loader.DataLoader
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.EntityUtils
 import org.fs.utility.StopWatch
 
-class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
+class GrpcDataLoader(rpcPort: Int) extends DataLoader[EagerChatHistoryDao] {
   private val channel: ManagedChannel = ManagedChannelBuilder
     .forAddress("127.0.0.1", rpcPort)
     .maxInboundMessageSize(Integer.MAX_VALUE)
     .usePlaintext()
     .build()
-
-  override def doesLookRight(rootFile: JFile): Option[String] = {
-    checkFormatLooksRight(rootFile, Seq()) // Any field works for us
-  }
 
   private lazy val myselfChooserServer: Server = {
     val serverPort = rpcPort + 1
@@ -56,7 +52,7 @@ class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
       val chatsWithMessagesLM: ListMap[Chat, IndexedSeq[Message]] =
         ListMap.from(response.cwms.map(cwm => cwm.chat -> cwm.messages.toIndexedSeq))
       new EagerChatHistoryDao(
-        name               = "Telegram (" + root.getName + ")",
+        name               = "Parsed (" + root.getName + ")",
         _dataRootFile      = root,
         dataset            = response.ds,
         myself1            = response.myself,
@@ -89,8 +85,8 @@ class TelegramGRPCDataLoader(rpcPort: Int) extends TelegramDataLoader {
   }
 }
 
-object TelegramGRPCDataLoader extends App {
-  val loader = new TelegramGRPCDataLoader(50051)
+object GrpcDataLoader extends App {
+  val loader = new GrpcDataLoader(50051)
   loader.myselfChooserServer
   println("Press ENTER to terminate...")
   System.in.read();
