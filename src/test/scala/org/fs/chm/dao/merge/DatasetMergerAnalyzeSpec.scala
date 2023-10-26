@@ -588,19 +588,19 @@ class DatasetMergerAnalyzeSpec //
       makeRegularMsgPhoto(3,  regular = false, notFound),
       makeRegularMsgPhoto(4,  regular = false, notDownloaded),
 
-      makeRegularMsgPhoto(4,  regular = true,  placeholder1),
       makeRegularMsgPhoto(5,  regular = true,  placeholder1),
       makeRegularMsgPhoto(6,  regular = true,  placeholder1),
       makeRegularMsgPhoto(7,  regular = true,  placeholder1),
-      makeRegularMsgPhoto(8,  regular = true,  notDownloaded),
-      makeRegularMsgPhoto(9,  regular = true,  notFound),
+      makeRegularMsgPhoto(8,  regular = true,  placeholder1),
+      makeRegularMsgPhoto(9,  regular = true,  notDownloaded),
+      makeRegularMsgPhoto(10, regular = true,  notFound),
 
-      makeRegularMsgPhoto(10, regular = false, placeholder1),
       makeRegularMsgPhoto(11, regular = false, placeholder1),
       makeRegularMsgPhoto(12, regular = false, placeholder1),
       makeRegularMsgPhoto(13, regular = false, placeholder1),
-      makeRegularMsgPhoto(14, regular = false, notDownloaded),
-      makeRegularMsgPhoto(15, regular = false, notFound),
+      makeRegularMsgPhoto(14, regular = false, placeholder1),
+      makeRegularMsgPhoto(15, regular = false, notDownloaded),
+      makeRegularMsgPhoto(16, regular = false, notFound),
     )
     val msgsB = Seq(
       makeRegularMsgPhoto(1,  regular = true,  notDownloaded),
@@ -608,19 +608,19 @@ class DatasetMergerAnalyzeSpec //
       makeRegularMsgPhoto(3,  regular = false, notDownloaded),
       makeRegularMsgPhoto(4,  regular = false, notFound),
 
-      makeRegularMsgPhoto(4,  regular = true,  placeholder1),
-      makeRegularMsgPhoto(5,  regular = true,  notDownloaded),
-      makeRegularMsgPhoto(6,  regular = true,  notFound),
-      makeRegularMsgPhoto(7,  regular = true,  placeholder2),
-      makeRegularMsgPhoto(8,  regular = true,  placeholder1),
+      makeRegularMsgPhoto(5,  regular = true,  placeholder1),
+      makeRegularMsgPhoto(6,  regular = true,  notDownloaded),
+      makeRegularMsgPhoto(7,  regular = true,  notFound),
+      makeRegularMsgPhoto(8,  regular = true,  placeholder2),
       makeRegularMsgPhoto(9,  regular = true,  placeholder1),
+      makeRegularMsgPhoto(10, regular = true,  placeholder1),
 
-      makeRegularMsgPhoto(10, regular = false, placeholder1),
-      makeRegularMsgPhoto(11, regular = false, notDownloaded),
-      makeRegularMsgPhoto(12, regular = false, notFound),
-      makeRegularMsgPhoto(13, regular = false, placeholder2),
-      makeRegularMsgPhoto(14, regular = false, placeholder1),
+      makeRegularMsgPhoto(11, regular = false, placeholder1),
+      makeRegularMsgPhoto(12, regular = false, notDownloaded),
+      makeRegularMsgPhoto(13, regular = false, notFound),
+      makeRegularMsgPhoto(14, regular = false, placeholder2),
       makeRegularMsgPhoto(15, regular = false, placeholder1),
+      makeRegularMsgPhoto(16, regular = false, placeholder1),
     )
     val helper = new MergerHelper(msgsA, msgsB, ((isMaster, path, msg) => {
       def transformContent(photo: ContentPhoto): ContentPhoto = photo match {
@@ -654,33 +654,33 @@ class DatasetMergerAnalyzeSpec //
       analysis === Seq(
         MessagesMergeDiff.Match(
           firstMasterMsg = helper.d1msgs.bySrcId(101L),
-          lastMasterMsg  = helper.d1msgs.bySrcId(106L),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(101L),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(106L)
-        ),
-        MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(107L),
           lastMasterMsg  = helper.d1msgs.bySrcId(107L),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(107L),
+          firstSlaveMsg  = helper.d2msgs.bySrcId(101L),
           lastSlaveMsg   = helper.d2msgs.bySrcId(107L)
         ),
-        MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(108L),
-          lastMasterMsg  = helper.d1msgs.bySrcId(112L),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(108L),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(112L)
-        ),
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(113L),
+          firstMasterMsg = helper.d1msgs.bySrcId(108L),
+          lastMasterMsg  = helper.d1msgs.bySrcId(108L),
+          firstSlaveMsg  = helper.d2msgs.bySrcId(108L),
+          lastSlaveMsg   = helper.d2msgs.bySrcId(108L)
+        ),
+        MessagesMergeDiff.Match(
+          firstMasterMsg = helper.d1msgs.bySrcId(109L),
           lastMasterMsg  = helper.d1msgs.bySrcId(113L),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(113L),
+          firstSlaveMsg  = helper.d2msgs.bySrcId(109L),
           lastSlaveMsg   = helper.d2msgs.bySrcId(113L)
         ),
-        MessagesMergeDiff.Match(
+        MessagesMergeDiff.Replace(
           firstMasterMsg = helper.d1msgs.bySrcId(114L),
-          lastMasterMsg  = helper.d1msgs.bySrcId(115L),
+          lastMasterMsg  = helper.d1msgs.bySrcId(114L),
           firstSlaveMsg  = helper.d2msgs.bySrcId(114L),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(115L)
+          lastSlaveMsg   = helper.d2msgs.bySrcId(114L)
+        ),
+        MessagesMergeDiff.Match(
+          firstMasterMsg = helper.d1msgs.bySrcId(115L),
+          lastMasterMsg  = helper.d1msgs.bySrcId(116L),
+          firstSlaveMsg  = helper.d2msgs.bySrcId(115L),
+          lastSlaveMsg   = helper.d2msgs.bySrcId(116L)
         ),
       )
     )
