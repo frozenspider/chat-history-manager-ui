@@ -1035,6 +1035,10 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
       s"Samsung GT-S5610 export vMessage files [choose any in folder] (*.${GTS5610DataLoader.DefaultExt})"
     ) { _.getName endsWith ("." + GTS5610DataLoader.DefaultExt) }
 
+    private val waAndroidFf = easyFileFilter(
+      s"WhatsApp Android database"
+    ) { _.getName == "msgstore.db" }
+
     private val waTextFf = easyFileFilter(
       s"WhatsApp text export"
     ) { f => f.getName.startsWith("WhatsApp Chat with ") && f.getName.endsWith(".txt") }
@@ -1043,15 +1047,16 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
       title = "Select a database to open"
       peer.addChoosableFileFilter(h2ff)
       peer.addChoosableFileFilter(tgFf)
-      peer.addChoosableFileFilter(gts5610Ff)
+      peer.addChoosableFileFilter(waAndroidFf)
       peer.addChoosableFileFilter(waTextFf)
+      peer.addChoosableFileFilter(gts5610Ff)
     }
 
     def load(file: JFile): ChatHistoryDao = {
       val f = file.getParentFile
       if (h2ff.accept(file)) {
         h2.loadData(f)
-      } else if (tgFf.accept(file) || waTextFf.accept(file)) {
+      } else if (tgFf.accept(file) || waAndroidFf.accept(file) || waTextFf.accept(file)) {
         grpcDataLoader.loadData(file)
       } else if (gts5610Ff.accept(file)) {
         gts5610.loadData(f)
