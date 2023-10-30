@@ -143,7 +143,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       idOption flatMap (id => cwd.members.find(_.id == id)) map (_.prettyName) getOrElse Unnamed
     }
 
-    s"""<span class="title-name" style="color: $color;">${resolvedName}</span>"""
+    s"""<span class="title-name" style="color: $color;">${toHtmlPlaintext(resolvedName)}</span>"""
   }
 
   private def renderFwdFrom(cwd: ChatWithDetails, fromName: String): String = {
@@ -193,6 +193,11 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
   private def fileToLocalUriString(file: File): String = {
     val path = file.getCanonicalPath.replace("\\", "/")
     "file://" + (if (path startsWith "/") "" else "/") + path
+  }
+
+  /** Replace non-HTML-renderable characters with, well, renderable */
+  private def toHtmlPlaintext(text: String): String = {
+    text replace("<", "&lt;") replace(">", "&gt;") replace("\n", "<br>")
   }
 
   object ServiceMessageHtmlRenderer {
@@ -302,11 +307,6 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       }
     }
 
-    /** Replace non-HTML-renderable characters with, well, renderable */
-    private def toHtmlPlaintext(text: String): String = {
-      text replace ("<", "&lt;") replace (">", "&gt;") replace ("\n", "<br>")
-    }
-
     private def renderComponent(rt: RichTextElement): String = {
       val text = rt.textOrEmptyString
       if (rt.`val`.isEmpty) {
@@ -357,7 +357,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         val durationOption = ct.durationSecOption map (d => s"""duration="$d"""")
         // <audio> tag is not impemented by default AWT toolkit, we're plugging custom view
         s"""<audio ${durationOption getOrElse ""} controls>
-           |  <source src=${fileToLocalUriString(file)}" ${mimeType}>
+           |  <source src="${fileToLocalUriString(file)}" ${mimeType}>
            |</audio>""".stripMargin
       })
     }
@@ -379,11 +379,15 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     }
 
     private def renderFile(ct: ContentFile, dsRoot: DatasetRoot): String = {
-      // TODO: Support actual files, but for now, thumbnail will do
-      renderPossiblyMissingContent(ct.thumbnailPathFileOption(dsRoot), "File (thumbnail)")(file => {
-        "[File]<br>" +
-          renderImage(file, ct.widthOption, ct.heightOption, Some("[File]"))
-      })
+      ct.thumbnailPathFileOption(dsRoot) match {
+        case to @ Some(_) =>
+          renderPossiblyMissingContent(to, "File (thumbnail)")(file => {
+            "[File]<br>" +
+              renderImage(file, ct.widthOption, ct.heightOption, Some("[File]"))
+          })
+        case None =>
+          s"<blockquote>File: <b>${toHtmlPlaintext(ct.title)}</b></blockquote>"
+      }
     }
 
     def renderSticker(st: ContentSticker, dsRoot: DatasetRoot): String = {
@@ -405,7 +409,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
     def renderLocation(ct: ContentLocation): String = {
       Seq(
-        Some(s"<b>${ct.titleOption}</b>"),
+        ct.titleOption.map(title => s"<b>$title</b>"),
         ct.addressOption,
         Some(s"<i>Location:</i> <b>${ct.lat}, ${ct.lon}</b>"),
         ct.durationSecOption map (s => s"(live for $s s)")
