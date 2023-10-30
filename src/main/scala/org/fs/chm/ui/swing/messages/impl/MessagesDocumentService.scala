@@ -171,18 +171,20 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     }
   }
 
-  private def renderPossiblyMissingImage(fileOption: Option[File],
+  private def renderPossiblyMissingPhoto(fileOption: Option[File],
                                          widthOption: Option[Int],
                                          heightOption: Option[Int],
                                          altTextOption: Option[String],
-                                         imagePrettyType: String): String = {
-    renderPossiblyMissingContent(fileOption, imagePrettyType)(renderImage(_, widthOption, heightOption, altTextOption))
+                                         isOneTime: Boolean): String = {
+    val name = if (isOneTime) "One-time photo" else "Photo"
+    renderPossiblyMissingContent(fileOption, name)(renderImage(_, widthOption, heightOption, altTextOption, isOneTime))
   }
 
   private def renderImage(file: File,
                           widthOption: Option[Int],
                           heightOption: Option[Int],
-                          altTextOption: Option[String]): String = {
+                          altTextOption: Option[String],
+                          isOneTime: Boolean): String = {
     val srcAttr = Some(s"""src="${fileToLocalUriString(file)}"""")
     val widthAttr = widthOption map (w => s"""width="${w / 2}"""")
     val heightAttr = heightOption map (h => s"""height="${h / 2}"""")
@@ -208,6 +210,8 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         case sm: MessageServiceSuggestProfilePhoto => renderSuggestPhotoMessage(sm, dsRoot)
         case sm: MessageServicePinMessage          => "Pinned message" + renderSourceMessage(dao, cwd, dsRoot, sm.messageIdTyped)
         case sm: MessageServiceClearHistory        => "History cleared"
+        case sm: MessageServiceMessageDeleted      => "Message deleted"
+        case sm: MessageServiceBlockUser           => s"User ${if (sm.isBlocked) "" else "un"}blocked"
         case sm: MessageServiceGroupCreate         => renderCreateGroupMessage(cwd, sm)
         case sm: MessageServiceGroupEditTitle      => renderEditTitleMessage(sm)
         case sm: MessageServiceGroupEditPhoto      => renderEditPhotoMessage(sm, dsRoot)
@@ -247,20 +251,22 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     }
 
     private def renderSuggestPhotoMessage(sm: MessageServiceSuggestProfilePhoto, dsRoot: DatasetRoot) = {
-      val image = renderPossiblyMissingImage(
+      val image = renderPossiblyMissingPhoto(
         sm.photo.pathFileOption(dsRoot),
         Some(sm.photo.width),
         Some(sm.photo.height),
-        None, "Photo")
+        None,
+        isOneTime = false)
       s"Suggested profile photo<br>$image"
     }
 
     private def renderEditPhotoMessage(sm: MessageServiceGroupEditPhoto, dsRoot: DatasetRoot) = {
-      val image = renderPossiblyMissingImage(
+      val image = renderPossiblyMissingPhoto(
         sm.photo.pathFileOption(dsRoot),
         Some(sm.photo.width),
         Some(sm.photo.height),
-        None, "Photo")
+        None,
+        isOneTime = false)
       s"Changed group photo<br>$image"
     }
 
@@ -326,7 +332,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
     private def renderLink(rt: RichTextElement, link: RteLink): String = {
       if (link.hidden) {
-        rt.searchableString.get
+        rt.searchableString
       } else {
         // Space in the end is needed if link is followed by text
         val text = link.textOption.getOrElse(link.href)
@@ -364,17 +370,19 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
     private def renderVideoMsg(ct: ContentVideoMsg, dsRoot: DatasetRoot): String = {
       // TODO: Support actual video messages, but for now, thumbnail will do
-      renderPossiblyMissingContent(ct.thumbnailPathFileOption(dsRoot), "Video message (thumbnail)")(file => {
-        "[Video message]<br>" +
-          renderImage(file, Some(ct.width), Some(ct.height), Some("[Video message]"))
+      val name = if (ct.isOneTime) "One-time video message" else "Video message";
+      renderPossiblyMissingContent(ct.thumbnailPathFileOption(dsRoot), s"$name (thumbnail)")(file => {
+        s"[$name]<br>" +
+          renderImage(file, Some(ct.width), Some(ct.height), Some(name), ct.isOneTime)
       })
     }
 
     private def renderAnimation(ct: ContentAnimation, dsRoot: DatasetRoot): String = {
       // TODO: Support actual animation, but for now, thumbnail will do
-      renderPossiblyMissingContent(ct.thumbnailPathFileOption(dsRoot), "Animation (thumbnail)")(file => {
-        "[Animation]<br>" +
-          renderImage(file, Some(ct.width), Some(ct.height), Some("[Animation]"))
+      val name = if (ct.isOneTime) "One-time animation" else "Animation";
+      renderPossiblyMissingContent(ct.thumbnailPathFileOption(dsRoot), s"$name (thumbnail)")(file => {
+        s"[$name]<br>" +
+          renderImage(file, Some(ct.width), Some(ct.height), Some(name), ct.isOneTime)
       })
     }
 
@@ -383,7 +391,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         case to @ Some(_) =>
           renderPossiblyMissingContent(to, "File (thumbnail)")(file => {
             "[File]<br>" +
-              renderImage(file, ct.widthOption, ct.heightOption, Some("[File]"))
+              renderImage(file, ct.widthOption, ct.heightOption, Some("[File]"), isOneTime = false)
           })
         case None =>
           s"<blockquote>File: <b>${toHtmlPlaintext(ct.title)}</b></blockquote>"
@@ -399,12 +407,12 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       val pathOption = st.pathFileOption(dsRoot).filter(_ => !isAnimatedSticker) orElse st.thumbnailPathFileOption(dsRoot)
       renderPossiblyMissingContent(pathOption, "Sticker")(sticker => {
         (if (isAnimatedSticker) "[Animated sticker]<br>" else "") +
-          renderImage(sticker, Some(st.width), Some(st.height), st.emojiOption)
+          renderImage(sticker, Some(st.width), Some(st.height), st.emojiOption, isOneTime = false)
       })
     }
 
     def renderPhoto(ct: ContentPhoto, dsRoot: DatasetRoot): String = {
-      renderPossiblyMissingImage(ct.pathFileOption(dsRoot), Some(ct.width), Some(ct.height), None, "Photo")
+      renderPossiblyMissingPhoto(ct.pathFileOption(dsRoot), Some(ct.width), Some(ct.height), None, ct.isOneTime)
     }
 
     def renderLocation(ct: ContentLocation): String = {

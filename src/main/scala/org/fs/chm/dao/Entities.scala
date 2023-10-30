@@ -74,7 +74,7 @@ object Entities {
   }
 
   def makeSearchableString(components: Seq[RichTextElement], typed: Message.Typed): String = {
-    val joinedText: String = (components.map(_.searchableString).yieldDefined mkString " ")
+    val joinedText: String = (components.map(_.searchableString) mkString " ")
 
     val typedComponentText: Seq[String] = typed match {
       case _: Message.Typed.Regular =>
@@ -183,8 +183,13 @@ object Entities {
 
     // Same as ExtendedUser
     lazy val prettyNameOption: Option[String] = {
-      val parts = Seq(c.firstNameOption, c.lastNameOption).yieldDefined
-      if (parts.isEmpty) None else Some(parts.mkString(" ").trim)
+      (c.firstNameOption, c.lastNameOption, c.phoneNumberOption) match {
+        case (Some(fn), Some(ln), _)   => Some(s"$fn $ln")
+        case (Some(fn), None, _)       => Some(fn)
+        case (None, Some(ln), _)       => Some(ln)
+        case (None, None, Some(phone)) => Some(phone)
+        case _                         => None
+      }
     }
 
     lazy val prettyName: String =
@@ -197,7 +202,7 @@ object Entities {
 
   def membersPracticallyEquals(members1: Seq[String], cwd1: ChatWithDetails,
                                members2: Seq[String], cwd2: ChatWithDetails) =
-      cwd1.resolveMembers(members1).map(_.map(_.id)).toSet == cwd2.resolveMembers(members2).map(_.map(_.id)).toSet
+    cwd1.resolveMembers(members1).map(_.map(_.id)).toSet == cwd2.resolveMembers(members2).map(_.map(_.id)).toSet
 
   implicit object ContentStickerPracticallyEquals extends PracticallyEquals[(ContentSticker, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentSticker, DatasetRoot), v2: (ContentSticker, DatasetRoot)): Boolean = {
@@ -322,6 +327,8 @@ object Entities {
         case (m1: MessageServiceSuggestProfilePhoto, m2: MessageServiceSuggestProfilePhoto) => (m1.photo, v1._2) =~= (m2.photo, v2._2)
         case (m1: MessageServicePinMessage,          m2: MessageServicePinMessage)          => m1 == m2
         case (m1: MessageServiceClearHistory,        m2: MessageServiceClearHistory)        => m1 == m2
+        case (m1: MessageServiceMessageDeleted,      m2: MessageServiceMessageDeleted)      => m1 == m2
+        case (m1: MessageServiceBlockUser,           m2: MessageServiceBlockUser)           => m1 == m2
         case (m1: MessageServiceGroupCreate,         m2: MessageServiceGroupCreate)         =>
           m1.copy(members = Seq.empty) == m2.copy(members = Seq.empty) &&
             membersPracticallyEquals(m1.members, v1._3, m2.members, v2._3)
@@ -362,11 +369,11 @@ object Entities {
                                    v2: (Message, DatasetRoot, ChatWithDetails)): Boolean =
       v1._1.copy(
         internalId       = NoInternalId,
-        searchableString = None,
+        searchableString = "",
         typed            = Message.Typed.Empty
       ) == v2._1.copy(
         internalId       = NoInternalId,
-        searchableString = None,
+        searchableString = "",
         typed            = Message.Typed.Empty
       ) && (v1._1.typed, v1._2, v1._3) =~= (v2._1.typed, v2._2, v2._3)
   }
@@ -384,8 +391,13 @@ object Entities {
 
     // Same as ExtendedContentSharedContact
     lazy val prettyNameOption: Option[String] = {
-      val parts = Seq(u.firstNameOption, u.lastNameOption).yieldDefined
-      if (parts.isEmpty) None else Some(parts.mkString(" ").trim)
+      (u.firstNameOption, u.lastNameOption, u.phoneNumberOption) match {
+        case (Some(fn), Some(ln), _)   => Some(s"$fn $ln")
+        case (Some(fn), None, _)       => Some(fn)
+        case (None, Some(ln), _)       => Some(ln)
+        case (None, None, Some(phone)) => Some(phone)
+        case _                         => None
+      }
     }
 
     lazy val prettyName: String =
@@ -408,7 +420,7 @@ object Entities {
 
     def files(datasetRoot: DatasetRoot): Set[JFile] = {
       val optionsSet: Set[Option[String]] = msg.typed match {
-        case Message.Typed.Regular(msgRegular)  =>
+        case Message.Typed.Regular(msgRegular) =>
           msgRegular.contentOption match {
             case None => Set.empty
             case Some(v: ContentSticker)       => Set(v.pathOption, v.thumbnailPathOption)
@@ -427,6 +439,8 @@ object Entities {
             case m: MessageServiceSuggestProfilePhoto => Set(m.photo.pathOption)
             case _: MessageServicePinMessage          => Set.empty
             case _: MessageServiceClearHistory        => Set.empty
+            case _: MessageServiceMessageDeleted      => Set.empty
+            case _: MessageServiceBlockUser           => Set.empty
             case _: MessageServiceGroupCreate         => Set.empty
             case _: MessageServiceGroupEditTitle      => Set.empty
             case m: MessageServiceGroupEditPhoto      => Set(m.photo.pathOption)
@@ -467,22 +481,22 @@ object Entities {
   /** Should be kept in sync with makeSearchableString! */
   object RichText {
     def makePlain(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Plain(RtePlain(text)), Some(normalizeSeachableString(text)))
+      RichTextElement(RichTextElement.Val.Plain(RtePlain(text)), normalizeSeachableString(text))
 
     def makeBold(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Bold(RteBold(text)), Some(normalizeSeachableString(text)))
+      RichTextElement(RichTextElement.Val.Bold(RteBold(text)), normalizeSeachableString(text))
 
     def makeItalic(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Italic(RteItalic(text)), Some(normalizeSeachableString(text)))
+      RichTextElement(RichTextElement.Val.Italic(RteItalic(text)), normalizeSeachableString(text))
 
     def makeUnderline(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Underline(RteUnderline(text)), Some(normalizeSeachableString(text)))
+      RichTextElement(RichTextElement.Val.Underline(RteUnderline(text)), normalizeSeachableString(text))
 
     def makeStrikethrough(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Strikethrough(RteStrikethrough(text)), Some(normalizeSeachableString(text)))
+      RichTextElement(RichTextElement.Val.Strikethrough(RteStrikethrough(text)), normalizeSeachableString(text))
 
     def makeSpoiler(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Spoiler(RteSpoiler(text)), Some(normalizeSeachableString(text)))
+      RichTextElement(RichTextElement.Val.Spoiler(RteSpoiler(text)), normalizeSeachableString(text))
 
     def makeLink(textOption: Option[String], href: String, hidden: Boolean): RichTextElement = {
       val searchableString = (normalizeSeachableString(textOption getOrElse "") + " " + href).trim
@@ -490,16 +504,16 @@ object Entities {
         textOption = textOption,
         href       = href,
         hidden     = hidden
-      )), Some(normalizeSeachableString(searchableString)))
+      )), normalizeSeachableString(searchableString))
     }
 
     def makePrefmtInline(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.PrefmtInline(RtePrefmtInline(text)), Some(normalizeSeachableString(text)))
+      RichTextElement(RichTextElement.Val.PrefmtInline(RtePrefmtInline(text)), normalizeSeachableString(text))
 
     def makePrefmtBlock(text: String, languageOption: Option[String]): RichTextElement =
       RichTextElement(
         RichTextElement.Val.PrefmtBlock(RtePrefmtBlock(text = text, languageOption = languageOption)),
-        Some(normalizeSeachableString(text))
+        normalizeSeachableString(text)
       )
   }
 

@@ -17,7 +17,7 @@ object DatasetMergerHelper {
         val text2 = Seq(RichText.makePlain("Different message " + m.sourceIdOption.getOrElse("<no src id>")))
         m.copy(
           text = text2,
-          searchableString = Some(makeSearchableString(text2, m.typed))
+          searchableString = makeSearchableString(text2, m.typed)
         )
       case m =>
         m

@@ -735,7 +735,8 @@ class H2ChatHistoryDao(
         "pinned_message_id",
         "path",
         "width",
-        "height"
+        "height",
+        "is_blocked"
       )
 
       private val colsPureFr  = Fragment.const(cols.mkString(", "))
@@ -802,7 +803,8 @@ class H2ChatHistoryDao(
           ++ fr"${m.time}, ${m.editTimeOption},"
           ++ fr"${m.fromId}, ${m.forwardFromNameOption}, ${m.replyToMessageIdOption},"
           ++ fr"${m.titleOption}, ${m.members}, ${m.durationSecOption}, ${m.discardReasonOption},"
-          ++ fr"${m.pinnedMessageIdOption}, ${m.pathOption}, ${m.widthOption}, ${m.heightOption}"
+          ++ fr"${m.pinnedMessageIdOption}, ${m.pathOption}, ${m.widthOption}, ${m.heightOption},"
+          ++ fr"${m.isBlockedOption}"
           ++ fr")").update.withUniqueGeneratedKeys[MessageInternalId]("internal_id")
 
       def removeSourceIds(dsUuid: PbUuid, fromChatId: Long): ConnectionIO[Int] =
@@ -864,7 +866,7 @@ class H2ChatHistoryDao(
       private val colsNoIdentityFr =
         Fragment.const(
           s"""|message_internal_id, element_type, path, thumbnail_path, emoji, width, height, mime_type, title, performer, address,
-              |lat, lon, duration_sec, poll_question, first_name, last_name, phone_number, vcard_path""".stripMargin)
+              |lat, lon, duration_sec, poll_question, first_name, last_name, phone_number, vcard_path, is_one_time""".stripMargin)
 
       def selectMultiple(dsUuid: PbUuid, msgIds: Seq[MessageInternalId]): ConnectionIO[Seq[RawContent]] =
         if (msgIds.isEmpty)
@@ -881,7 +883,7 @@ class H2ChatHistoryDao(
           ++ fr"${rc.elementType}, ${rc.pathOption}, ${rc.thumbnailPathOption}, ${rc.emojiOption}, ${rc.widthOption}, "
           ++ fr"${rc.heightOption}, ${rc.mimeTypeOption}, ${rc.titleOption}, ${rc.performerOption}, ${rc.addressOption}, "
           ++ fr"${rc.latOption}, ${rc.lonOption}, ${rc.durationSecOption}, ${rc.pollQuestionOption}, ${rc.firstNameOption}, "
-          ++ fr" ${rc.lastNameOption}, ${rc.phoneNumberOption}, ${rc.vcardPathOption}"
+          ++ fr"${rc.lastNameOption}, ${rc.phoneNumberOption}, ${rc.vcardPathOption}, ${rc.isOneTimeOption}"
           ++ fr")").update.withUniqueGeneratedKeys[Long]("id")
 
       def deleteByChat(dsUuid: PbUuid, chatId: ChatId): ConnectionIO[Int] =
@@ -985,7 +987,8 @@ class H2ChatHistoryDao(
             ContentPhoto(
               pathOption = rm.pathOption,
               width      = rm.widthOption.get,
-              height     = rm.heightOption.get
+              height     = rm.heightOption.get,
+              isOneTime  = false
             )
           )))
         case "service_pin_message" =>
@@ -994,6 +997,12 @@ class H2ChatHistoryDao(
           )))
         case "service_clear_history" =>
           Message.Typed.Service(Some(MessageServiceClearHistory()))
+        case "service_message_deleted" =>
+          Message.Typed.Service(Some(MessageServiceMessageDeleted()))
+        case "service_block_user" =>
+          Message.Typed.Service(Some(MessageServiceBlockUser(
+            isBlocked = rm.isBlockedOption.get,
+          )))
         case "service_group_create" =>
           Message.Typed.Service(Some(MessageServiceGroupCreate(
             title   = rm.titleOption.get,
@@ -1008,7 +1017,8 @@ class H2ChatHistoryDao(
             ContentPhoto(
               pathOption = rm.pathOption,
               width      = rm.widthOption.get,
-              height     = rm.heightOption.get
+              height     = rm.heightOption.get,
+              isOneTime  = false
             )
           )))
         case "service_delete_photo" =>
@@ -1034,13 +1044,13 @@ class H2ChatHistoryDao(
       }
       val text = richTexts.getOrElse(rm.internalId, Seq.empty)
       Message(
-        internalId             = rm.internalId,
-        sourceIdOption         = rm.sourceIdOption,
-        timestamp              = rm.time.unixTimestamp,
-        fromId                 = rm.fromId,
-        text                   = text,
-        searchableString       = Some(makeSearchableString(text, typed)),
-        typed                  = typed,
+        internalId       = rm.internalId,
+        sourceIdOption   = rm.sourceIdOption,
+        timestamp        = rm.time.unixTimestamp,
+        fromId           = rm.fromId,
+        text             = text,
+        searchableString = makeSearchableString(text, typed),
+        typed            = typed,
       )
     }
 
@@ -1088,6 +1098,7 @@ class H2ChatHistoryDao(
             pathOption = rc.pathOption map (_.makeRelativePath),
             width      = rc.widthOption.get,
             height     = rc.heightOption.get,
+            isOneTime  = rc.isOneTimeOption.getOrElse(false),
           )
         case "voice_message" =>
           assert(rc.mimeTypeOption.isDefined, rc)
@@ -1104,7 +1115,8 @@ class H2ChatHistoryDao(
             mimeType            = rc.mimeTypeOption.get,
             durationSecOption   = rc.durationSecOption,
             width               = rc.widthOption.get,
-            height              = rc.heightOption.get
+            height              = rc.heightOption.get,
+            isOneTime           = rc.isOneTimeOption.getOrElse(false),
           )
         case "animation" =>
           assert(rc.mimeTypeOption.isDefined && rc.widthOption.isDefined && rc.heightOption.isDefined, rc)
@@ -1114,7 +1126,8 @@ class H2ChatHistoryDao(
             mimeType            = rc.mimeTypeOption.get,
             durationSecOption   = rc.durationSecOption,
             width               = rc.widthOption.get,
-            height              = rc.heightOption.get
+            height              = rc.heightOption.get,
+            isOneTime           = rc.isOneTimeOption.getOrElse(false),
           )
         case "file" =>
           ContentFile(
@@ -1230,7 +1243,8 @@ class H2ChatHistoryDao(
         pinnedMessageIdOption  = None,
         pathOption             = None,
         widthOption            = None,
-        heightOption           = None
+        heightOption           = None,
+        isBlockedOption        = None,
       )
 
       msg.typed match {
@@ -1263,6 +1277,15 @@ class H2ChatHistoryDao(
         case Message.Typed.Service(Some(_: MessageServiceClearHistory)) =>
           template.copy(
             messageType = "service_clear_history",
+          )
+        case Message.Typed.Service(Some(_: MessageServiceMessageDeleted)) =>
+          template.copy(
+            messageType = "service_message_deleted",
+          )
+        case Message.Typed.Service(Some(m: MessageServiceBlockUser)) =>
+          template.copy(
+            messageType     = "service_block_user",
+            isBlockedOption = Some(m.isBlocked)
           )
         case Message.Typed.Service(Some(m: MessageServiceGroupCreate)) =>
           template.copy(
@@ -1396,7 +1419,8 @@ class H2ChatHistoryDao(
         firstNameOption     = None,
         lastNameOption      = None,
         phoneNumberOption   = None,
-        vcardPathOption     = None
+        vcardPathOption     = None,
+        isOneTimeOption     = None,
       )
       c match {
         case c: ContentSticker =>
@@ -1411,10 +1435,11 @@ class H2ChatHistoryDao(
           )
         case c: ContentPhoto =>
           template.copy(
-            elementType  = "photo",
-            pathOption   = c.pathOption flatMap copy(Subpath.Photos, None),
-            widthOption  = Some(c.width),
-            heightOption = Some(c.height)
+            elementType     = "photo",
+            pathOption      = c.pathOption flatMap copy(Subpath.Photos, None),
+            widthOption     = Some(c.width),
+            heightOption    = Some(c.height),
+            isOneTimeOption = Some(c.isOneTime)
           )
         case c: ContentVoiceMsg =>
           template.copy(
@@ -1432,7 +1457,8 @@ class H2ChatHistoryDao(
             mimeTypeOption      = Some(c.mimeType),
             durationSecOption   = c.durationSecOption,
             widthOption         = Some(c.width),
-            heightOption        = Some(c.height)
+            heightOption        = Some(c.height),
+            isOneTimeOption     = Some(c.isOneTime)
           )
         case c: ContentAnimation =>
           val newPathOption = c.pathOption flatMap copy(Subpath.Videos, None)
@@ -1443,7 +1469,8 @@ class H2ChatHistoryDao(
             mimeTypeOption      = Some(c.mimeType),
             durationSecOption   = c.durationSecOption,
             widthOption         = Some(c.width),
-            heightOption        = Some(c.height)
+            heightOption        = Some(c.height),
+            isOneTimeOption     = Some(c.isOneTime)
           )
         case c: ContentFile =>
           val newPathOption = c.pathOption flatMap copy(Subpath.Files, None)
@@ -1555,7 +1582,8 @@ object H2ChatHistoryDao {
       pinnedMessageIdOption: Option[MessageSourceId],
       pathOption: Option[String],
       widthOption: Option[Int],
-      heightOption: Option[Int]
+      heightOption: Option[Int],
+      isBlockedOption: Option[Boolean]
   ) {
     val canHaveContent: Boolean =
       messageType == "regular"
@@ -1593,7 +1621,8 @@ object H2ChatHistoryDao {
       firstNameOption: Option[String],
       lastNameOption: Option[String],
       phoneNumberOption: Option[String],
-      vcardPathOption: Option[String]
+      vcardPathOption: Option[String],
+      isOneTimeOption: Option[Boolean]
   )
 
   //

@@ -81,7 +81,7 @@ object TestUtils {
       sourceIdOption   = Some(idx.toLong.asInstanceOf[MessageSourceId]),
       timestamp        = baseDate.plusMinutes(idx).unixTimestamp,
       fromId           = userId,
-      searchableString = Some(makeSearchableString(text, typed)),
+      searchableString = makeSearchableString(text, typed),
       text             = text,
       typed            = typed
     )

@@ -169,7 +169,8 @@ class DatasetMergerMergeSpec //
         height              = 222,
         mimeType            = "mt",
         durationSecOption   = Some(10),
-        thumbnailPathOption = Some(file2.toRelativePath(path))
+        thumbnailPathOption = Some(file2.toRelativePath(path)),
+        isOneTime           = false
       )
     }
 
@@ -549,7 +550,7 @@ class DatasetMergerMergeSpec //
           sourceIdOption   = Some((100L + idx).asInstanceOf[MessageSourceId]),
           timestamp        = baseDate.unixTimestamp,
           fromId           = users(idx).id,
-          searchableString = Some(makeSearchableString(text, typed)),
+          searchableString = makeSearchableString(text, typed),
           text             = text,
           typed            = typed
         )

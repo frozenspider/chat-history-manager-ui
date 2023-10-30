@@ -255,7 +255,7 @@ object MessagesAreaContainer {
             timestamp        = baseDate.plusMinutes(1).unixTimestamp,
             fromId           = users.head.id,
             text             = text,
-            searchableString = Some(makeSearchableString(text, typed)),
+            searchableString = makeSearchableString(text, typed),
             typed            = typed
           )
         },
@@ -281,7 +281,7 @@ object MessagesAreaContainer {
             timestamp        = baseDate.plusMinutes(2).unixTimestamp,
             fromId           = users.last.id,
             text             = text,
-            searchableString = Some(makeSearchableString(text, typed)),
+            searchableString = makeSearchableString(text, typed),
             typed            = typed
           )
         }

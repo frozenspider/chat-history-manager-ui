@@ -73,7 +73,7 @@ class GTS5610DataLoaderSpec //
     assert(m.fromId === id)
     assert(m.time === dt(dtStr))
     assert(txt(m) === text)
-    assert(m.searchableString === Some(text.replace('\n', ' ')))
+    assert(m.searchableString === text.replace('\n', ' '))
   }
 
   private def txt(m: Message): String = {

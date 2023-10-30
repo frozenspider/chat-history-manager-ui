@@ -72,7 +72,7 @@ trait TelegramDataLoaderCommon {
         timestamp = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get.unixTimestamp,
         fromId = getUserId(jv, "from_id"),
         text = text,
-        searchableString = Some(makeSearchableString(text, typed)),
+        searchableString = makeSearchableString(text, typed),
         typed = typed
       )
     }
@@ -107,6 +107,7 @@ trait TelegramDataLoaderCommon {
               pathOption = getFileOpt(jv, "photo", true),
               width = getCheckedField[Int](jv, "width"),
               height = getCheckedField[Int](jv, "height"),
+              isOneTime  = false
             )
           ))
         case "edit_group_title" =>
@@ -151,7 +152,7 @@ trait TelegramDataLoaderCommon {
           timestamp = stringToDateTimeOpt(getCheckedField[String](jv, "date")).get.unixTimestamp,
           fromId = getUserId(jv, "actor_id"),
           text = text,
-          searchableString = Some(makeSearchableString(text, typed)),
+          searchableString = makeSearchableString(text, typed),
           typed = typed
         )
       }
@@ -309,6 +310,7 @@ trait TelegramDataLoaderCommon {
         pathOption = getRelativePathOpt(jv, "photo", true),
         width = getCheckedField[Int](jv, "width"),
         height = getCheckedField[Int](jv, "height"),
+        isOneTime  = false
       )
     }
 
@@ -320,6 +322,7 @@ trait TelegramDataLoaderCommon {
         durationSecOption = getFieldOpt[Int](jv, "duration_seconds", false),
         width = getCheckedField[Int](jv, "width"),
         height = getCheckedField[Int](jv, "height"),
+        isOneTime = false
       )
     }
 
@@ -339,6 +342,7 @@ trait TelegramDataLoaderCommon {
         durationSecOption = getFieldOpt[Int](jv, "duration_seconds", false),
         width = getCheckedField[Int](jv, "width"),
         height = getCheckedField[Int](jv, "height"),
+        isOneTime  = false
       )
     }
 

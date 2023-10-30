@@ -542,7 +542,8 @@ class DatasetMergerAnalyzeSpec //
     val notFound = ContentPhoto(
       pathOption = Some("non/existent/path.jpg"),
       width      = 100500,
-      height     = 100600
+      height     = 100600,
+      isOneTime  = false
     )
 
     val notDownloaded = notFound.copy(pathOption = None)
@@ -550,7 +551,8 @@ class DatasetMergerAnalyzeSpec //
     val placeholder1 = ContentPhoto(
       pathOption = Some("placeholder-1"),
       width      = -1,
-      height     = -1
+      height     = -1,
+      isOneTime  = false
     )
 
     val placeholder2 = placeholder1.copy(pathOption = Some("placeholder-2"))
@@ -576,7 +578,7 @@ class DatasetMergerAnalyzeSpec //
         sourceIdOption   = Some((100L + idx).asInstanceOf[MessageSourceId]),
         timestamp        = baseDate.unixTimestamp,
         fromId           = userIds.head,
-        searchableString = Some(makeSearchableString(text, typed)),
+        searchableString = makeSearchableString(text, typed),
         text             = text,
         typed            = typed
       )

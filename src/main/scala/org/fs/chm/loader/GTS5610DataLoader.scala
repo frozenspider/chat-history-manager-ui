@@ -78,7 +78,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
                 timestamp        = vmsg.dateTime.unixTimestamp,
                 fromId           = userId,
                 text             = Seq(RichText.makePlain(vmsg.text)),
-                searchableString = Some(normalizeSeachableString(vmsg.text)),
+                searchableString = normalizeSeachableString(vmsg.text),
                 typed            = Message.Typed.Regular(MessageRegular(
                   editTimestampOption    = None,
                   forwardFromNameOption  = None,
