@@ -283,7 +283,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     }
 
     private def renderMigratedFrom(sm: MessageServiceGroupMigrateFrom) = {
-      s"Migrated from ${sm.title}}".trim
+      s"Migrated from ${sm.title}".trim
     }
 
     private def renderGroupCallMessage(cwd: ChatWithDetails, sm: MessageServiceGroupCall) = {
@@ -293,7 +293,8 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     }
 
     private def renderMembers(cwd: ChatWithDetails, members: Seq[String]) = {
-      members
+      if (members.isEmpty) ""
+      else members
         .map(name => renderTitleName(cwd, None, Some(name)))
         .mkString("<ul><li>", "</li><li>", "</li></ul>")
     }
@@ -370,8 +371,12 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
     private def renderVideoMsg(ct: ContentVideoMsg, dsRoot: DatasetRoot): String = {
       // TODO: Support actual video messages, but for now, thumbnail will do
-      val name = if (ct.isOneTime) "One-time video message" else "Video message";
-      renderPossiblyMissingContent(ct.thumbnailPathFileOption(dsRoot), s"$name (thumbnail)")(file => {
+      val name = if (ct.isOneTime) "One-time video" else "Video"
+      val fileOption = ct.pathFileOption(dsRoot);
+      val thumbOption = ct.thumbnailPathFileOption(dsRoot)
+      if (thumbOption.isEmpty && fileOption.isDefined && fileOption.get.exists) {
+        s"[$name has no thumbnail]"
+      } else renderPossiblyMissingContent(thumbOption, s"$name (thumbnail)")(file => {
         s"[$name]<br>" +
           renderImage(file, Some(ct.width), Some(ct.height), Some(name), ct.isOneTime)
       })
@@ -379,8 +384,12 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
     private def renderAnimation(ct: ContentAnimation, dsRoot: DatasetRoot): String = {
       // TODO: Support actual animation, but for now, thumbnail will do
-      val name = if (ct.isOneTime) "One-time animation" else "Animation";
-      renderPossiblyMissingContent(ct.thumbnailPathFileOption(dsRoot), s"$name (thumbnail)")(file => {
+      val name = if (ct.isOneTime) "One-time animation" else "Animation"
+      val fileOption = ct.pathFileOption(dsRoot);
+      val thumbOption = ct.thumbnailPathFileOption(dsRoot)
+      if (thumbOption.isEmpty && fileOption.isDefined && fileOption.get.exists) {
+        s"[$name has no thumbnail]"
+      } else renderPossiblyMissingContent(thumbOption, s"$name (thumbnail)")(file => {
         s"[$name]<br>" +
           renderImage(file, Some(ct.width), Some(ct.height), Some(name), ct.isOneTime)
       })
