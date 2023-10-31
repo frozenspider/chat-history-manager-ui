@@ -742,8 +742,8 @@ class H2ChatHistoryDao(
       private val colsPureFr  = Fragment.const(cols.mkString(", "))
       private val colsFr      = Fragment.const(cols.map(c => "m." + c).mkString(", "))
       private val selectAllFr = fr"SELECT" ++ colsFr ++ fr"FROM messages m"
-      private val orderAsc    = fr"ORDER BY m.time, m.source_id, m.internal_id"
-      private val orderDesc   = fr"ORDER BY m.time DESC, m.source_id DESC, m.internal_id DESC"
+      private val orderAsc    = fr"ORDER BY m.time, m.internal_id"
+      private val orderDesc   = fr"ORDER BY m.time DESC, m.internal_id DESC"
 
       private def whereDsAndChatFr(dsUuid: PbUuid, chatId: Long): Fragment =
         fr"WHERE m.ds_uuid = $dsUuid AND m.chat_id = $chatId"
