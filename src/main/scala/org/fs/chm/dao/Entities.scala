@@ -77,9 +77,22 @@ object Entities {
     val joinedText: String = (components.map(_.searchableString) mkString " ")
 
     val typedComponentText: Seq[String] = typed match {
-      case _: Message.Typed.Regular =>
-        // Text is enough.
-        Seq.empty
+      case Message.Typed.Regular(m) =>
+        m.contentOption match {
+          case Some(c: ContentSticker) =>
+            Seq(c.emojiOption).yieldDefined
+          case Some(c: ContentFile) =>
+            Seq(c.performerOption).yieldDefined
+          case Some(c: ContentLocation) =>
+            Seq(c.addressOption, c.titleOption, Some(c.latStr), Some(c.lonStr)).yieldDefined
+          case Some(c: ContentPoll) =>
+            Seq(c.question)
+          case Some(c: ContentSharedContact) =>
+            Seq(c.firstNameOption, c.lastNameOption, c.phoneNumberOption).yieldDefined
+          case _ =>
+            // Text is enough.
+            Seq.empty
+        }
       case Message.Typed.Service(Some(m)) =>
         m match {
           case m: MessageServiceGroupCreate        => m.title +: m.members
@@ -346,6 +359,7 @@ object Entities {
         case (m1: MessageServiceGroupCall,           m2: MessageServiceGroupCall)           =>
           m1.copy(members = Seq.empty) == m2.copy(members = Seq.empty) &&
             membersPracticallyEquals(m1.members, v1._3, m2.members, v2._3)
+        case _ => unexpectedCase((v1._1, v2._1))
       }
     }
   }

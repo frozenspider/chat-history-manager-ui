@@ -41,7 +41,7 @@ class EagerChatHistoryDao(
   }
 
   // Sanity check: all chat members should have users.
-  _chatsWithMessages.keys.foreach(c => chatMembers(c))
+  chatsWithMessages.keys.foreach(c => chatMembers(c))
 
   override def storagePath: File = _dataRootFile
 
@@ -164,7 +164,7 @@ class EagerChatHistoryDao(
       dataset            = dataset,
       myself1            = myself1,
       users1             = users1,
-      _chatsWithMessages = _chatsWithMessages.map { case (c, msgs) =>
+      _chatsWithMessages = chatsWithMessages.map { case (c, msgs) =>
         (c, msgs.map(m => {
           val typed: Message.Typed = m.typed match {
             case Message.Typed.Regular(regular) if regular.editTimestampOption.isDefined =>
