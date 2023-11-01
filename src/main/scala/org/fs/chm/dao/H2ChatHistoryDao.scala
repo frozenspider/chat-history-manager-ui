@@ -367,9 +367,14 @@ class H2ChatHistoryDao(
   override def updateUser(user: User): Unit = {
     backup()
     val isMyself = myself(user.dsUuid).id == user.id
-    val rowsNum  = queries.users.update(user, isMyself).transact(txctr).unsafeRunSync()
-    require(rowsNum == 1, s"Updating user affected ${rowsNum} rows!")
-    queries.chats.updateRenameUser(user).transact(txctr).unsafeRunSync()
+    val oldUser = users(user.dsUuid).find(_.id == user.id).get
+    val query = for {
+      v1 <- queries.users.update(user, isMyself)
+      v2 <- queries.chats.updateRenameUser(user)
+      v3 <- queries.rawMessages.updateMemberInStrings(user.dsUuid, user.id, oldUser.prettyNameOption, user.prettyName)
+    } yield v1 + v2 + v3
+    val rowsNum = query.transact(txctr).unsafeRunSync()
+    assert(rowsNum > 0, "Nothing was updated!")
     Lock.synchronized {
       _usersCacheOption = None
     }
@@ -393,10 +398,12 @@ class H2ChatHistoryDao(
       v1 <- queries.users.update(newUser, isMyself)
       // Change ownership of old user's stuff
       v2 <- queries.mergePersonalChats(dsUuid, absorbedUser.id, newUser.id)
-      v3 <- queries.chatMembers.updateUser(dsUuid, absorbedUser.id, newUser.id)
-      v4 <- queries.rawMessages.updateUser(dsUuid, absorbedUser.id, newUser.id)
-      v5 <- queries.users.delete(dsUuid, absorbedUser.id)
-    } yield v1 + v2 + v3 + v4 + v5
+      v3 <- queries.rawMessages.updateMemberInStrings(dsUuid, absorbedUser.id, absorbedUser.prettyNameOption, newUser.prettyName)
+      v4 <- queries.rawMessages.updateMemberInStrings(dsUuid, baseUser.id, baseUser.prettyNameOption, newUser.prettyName)
+      v5 <- queries.chatMembers.updateUser(dsUuid, absorbedUser.id, newUser.id)
+      v6 <- queries.rawMessages.updateUser(dsUuid, absorbedUser.id, newUser.id)
+      v7 <- queries.users.delete(dsUuid, absorbedUser.id)
+    } yield v1 + v2 + v3 + v4 + v5 + v6 + v7
     val rowsNum = query.transact(txctr).unsafeRunSync()
     assert(rowsNum > 0, "Nothing was updated!")
     Lock.synchronized {
@@ -825,6 +832,19 @@ class H2ChatHistoryDao(
             UPDATE messages m SET m.chat_id = ${toChatId}
             WHERE m.chat_id = ${fromChatId} AND m.ds_uuid = ${dsUuid}
            """.update.run
+
+      def updateMemberInStrings(dsUuid: PbUuid, userId: Long, fromNameOption: Option[String], toName: String): ConnectionIO[Int] =
+        fromNameOption match {
+          case None       => pure0
+          case Some(from) => sql"""
+            UPDATE messages m
+            SET m.members = REPLACE(m.members, ${from}, ${toName})
+            WHERE m.chat_id IN (
+              SELECT cm.chat_id FROM chat_members cm WHERE cm.ds_uuid = ${dsUuid} AND cm.user_id = ${userId}
+            )
+            AND m.members IS NOT NULL AND m.members <> ''
+          """.update.run
+        }
 
       def deleteByChat(dsUuid: PbUuid, chatId: ChatId): ConnectionIO[Int] =
         (fr"DELETE FROM messages m WHERE m.ds_uuid = ${dsUuid} AND m.chat_id = ${chatId}").update.run
@@ -1314,7 +1334,7 @@ class H2ChatHistoryDao(
             messageType  = "service_delete_photo",
           )
         case Message.Typed.Service(Some(m: MessageServiceGroupInviteMembers)) =>
-          template.copy(
+          template.copy( // TODO: Rename to service_group_invite_members
             messageType = "service_invite_group_members",
             members     = m.members
           )
