@@ -343,10 +343,7 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
           dao.users(ds.uuid).sortBy(_.id).zipWithIndex map {
             case (u, i) =>
               val pane = new UserDetailsPane(dao, u, false, Some(this))
-              for (el <- Seq(pane.firstNameC, pane.lastNameC)) {
-                el.innerComponent.foreground = Colors.forIdx(i)
-                el.innerComponent.fontStyle  = Font.Style.Bold
-              }
+              pane.stylizeFirstLastName(Colors.forIdx(i))
               pane
           }
         },
@@ -653,7 +650,6 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
   }
 
   override def usersMerged(baseUser: User, absorbedUser: User, dao: ChatHistoryDao): Unit = {
-    ???
     checkEdt()
     require(dao.isMutable, "DAO is immutable!")
     require(baseUser.dsUuid == absorbedUser.dsUuid, "Users are from different datasets!")

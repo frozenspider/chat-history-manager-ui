@@ -25,6 +25,7 @@ import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.Logging
 import org.fs.chm.utility.PerfUtils._
+import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
 
 class H2ChatHistoryDao(
@@ -375,27 +376,27 @@ class H2ChatHistoryDao(
   }
 
   override def mergeUsers(baseUser: User, absorbedUser: User): Unit = {
-    ???
     backup()
     val dsUuid   = baseUser.dsUuid
     val me       = myself(baseUser.dsUuid)
     val isMyself = me.id == baseUser.id || me.id == absorbedUser.id
-    val newUser = baseUser.copy(
-      firstNameOption    = absorbedUser.firstNameOption,
-      lastNameOption     = absorbedUser.lastNameOption,
-      usernameOption     = absorbedUser.usernameOption,
-      phoneNumberOption  = absorbedUser.phoneNumberOption,
-    )
+    require(!isMyself, "Can't merge myself! (not well tested)")
 
+    val phoneNumberOption = Seq(baseUser.phoneNumberOption, absorbedUser.phoneNumberOption).yieldDefined.mkString(",") match {
+      case "" => None
+      case x  => Some(x)
+    }
+    val newUser  = baseUser.copy(
+      phoneNumberOption = phoneNumberOption
+    )
     val query = for {
       v1 <- queries.users.update(newUser, isMyself)
       // Change ownership of old user's stuff
-      v2 <- queries.chatMembers.updateUser(dsUuid, absorbedUser.id, newUser.id)
-      v3 <- queries.rawMessages.updateUser(dsUuid, absorbedUser.id, newUser.id)
-      v4 <- queries.users.delete(dsUuid, absorbedUser.id)
-      v5 <- queries.mergePersonalChats(dsUuid, newUser.id)
-      v6 <- queries.chats.updateRenameUser(newUser)
-    } yield v1 + v2 + v3 + v4 + v5 + v6
+      v2 <- queries.mergePersonalChats(dsUuid, absorbedUser.id, newUser.id)
+      v3 <- queries.chatMembers.updateUser(dsUuid, absorbedUser.id, newUser.id)
+      v4 <- queries.rawMessages.updateUser(dsUuid, absorbedUser.id, newUser.id)
+      v5 <- queries.users.delete(dsUuid, absorbedUser.id)
+    } yield v1 + v2 + v3 + v4 + v5
     val rowsNum = query.transact(txctr).unsafeRunSync()
     assert(rowsNum > 0, "Nothing was updated!")
     Lock.synchronized {
@@ -899,30 +900,32 @@ class H2ChatHistoryDao(
         sql"DELETE FROM messages_content WHERE ds_uuid = ${dsUuid}".update.run
     }
 
-    /** Merge all messages from all personal chats with this user into the first one and delete the rest */
-    def mergePersonalChats(dsUuid: PbUuid, userId: Long): ConnectionIO[Int] = {
-      // TODO: This looks really inefficient
+    /**
+     * Move all messages from a personal chats with one user to another and delete the leftover chat.
+     * <p>
+     * Effectively, this leaves a personal chat with three members participating, but this will not be recorded
+     * as it's intended to be an intermediate step for user merge.
+     * <p>
+     * Absorbed chat will have its messages stripped from source IDs.
+     */
+    def mergePersonalChats(dsUuid: PbUuid, fromUserId: Long, toUserId: Long): ConnectionIO[Int] = {
       for {
-        pcs <- queries.chats.selectAllPersonalChats(dsUuid, userId)
-
-        v0 <- if (pcs.isEmpty || pcs.tail.isEmpty) {
-          pure0
-        } else {
-          val mainChat = pcs.head
-          var query: ConnectionIO[Int] = pure0
-          for (otherChat <- pcs.tail) {
-            val query2 = for {
-              i1 <- rawMessages.removeSourceIds(dsUuid, otherChat.id)
-              i2 <- rawMessages.updateChat(dsUuid, otherChat.id, mainChat.id)
-              i3 <- chatMembers.deleteByChat(dsUuid, otherChat.id)
-              i4 <- chats.delete(dsUuid, otherChat.id)
-            } yield i1 + i2 + i3 + i4
-            query = query flatMap (_ => query2)
-          }
-          query
+        absorbedChats <- queries.chats.selectAllPersonalChats(dsUuid, fromUserId)
+        absorbedChat = {
+          require(absorbedChats.length == 1, s"Found ${absorbedChats.length} chats for absorbed user!")
+          absorbedChats.head
+        }
+        mainChats <- queries.chats.selectAllPersonalChats(dsUuid, toUserId)
+        mainChat = {
+          require(mainChats.length == 1, s"Found ${mainChats.length} chats for main user!")
+          mainChats.head
         }
 
-      } yield v0
+        i1 <- rawMessages.removeSourceIds(dsUuid, absorbedChat.id)
+        i2 <- rawMessages.updateChat(dsUuid, absorbedChat.id, mainChat.id)
+        i3 <- chatMembers.deleteByChat(dsUuid, absorbedChat.id)
+        i4 <- chats.delete(dsUuid, absorbedChat.id)
+      } yield i1 + i2 + i3 + i4
     }
 
     /** Select all non-null JFilesystem paths from all tables for the specific dataset */

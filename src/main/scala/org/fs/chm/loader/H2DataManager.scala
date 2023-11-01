@@ -61,7 +61,7 @@ class H2DataManager extends DataLoader[H2ChatHistoryDao] {
     if (!createNew && !dataDbFile.exists())
       throw new FileNotFoundException(s"$dataFileName not found in " + path.getAbsolutePath)
     // This will create a new DB if data.mv.db does not exist
-    val flyway = Flyway.configure.dataSource(dbUrl(dataDbFile), "sa", "").load
+    val flyway = Flyway.configure.dataSource(dbUrl(dataDbFile), "sa", "")/*.validateOnMigrate(false)*/.load
     flyway.migrate()
     daoFromFile(dataDbFile)
   }

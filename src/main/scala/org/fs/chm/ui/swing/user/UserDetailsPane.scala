@@ -25,10 +25,10 @@ class UserDetailsPane(
     menuCallbacksOption: Option[Callbacks.UserDetailsMenuCb]
 ) extends GridBagPanel {
 
-  val firstNameC   = new TextOptionComponent(user.firstNameOption, editable)
-  val lastNameC    = new TextOptionComponent(user.lastNameOption, editable)
-  val usernameC    = new TextOptionComponent(user.usernameOption, false)
-  val phoneNumberC = new TextOptionComponent(user.phoneNumberOption, editable)
+  private val firstNameC   = new TextOptionComponent(user.firstNameOption, false, editable)
+  private val lastNameC    = new TextOptionComponent(user.lastNameOption, false, editable)
+  private val usernameC    = new TextOptionComponent(user.usernameOption, false, false)
+  private val phoneNumberC = new TextOptionComponent(user.phoneNumberOption, true, editable)
 
   {
     val data: Seq[(String, Component)] = Seq(
@@ -67,7 +67,7 @@ class UserDetailsPane(
     menuCallbacksOption foreach { _ => // Adding right-click menu
       val popupMenu = new PopupMenu {
         contents += menuItem("Edit", enabled = dao.isMutable)(edit())
-        contents += menuItem("Merge With...", enabled = dao.isMutable)(merge())
+        contents += menuItem("Merge Into This...", enabled = dao.isMutable)(merge())
       }
 
       // Reactions
@@ -79,6 +79,13 @@ class UserDetailsPane(
         case e @ MouseReleased(src, pt, _, _, _) if SwingUtilities.isRightMouseButton(e.peer) && enabled =>
           popupMenu.show(src, pt.x, pt.y)
       }
+    }
+  }
+
+  def stylizeFirstLastName(color: Color): Unit = {
+    for (el <- Seq(firstNameC, lastNameC)) {
+      el.innerComponent.foreground = color
+      el.innerComponent.fontStyle = Font.Style.Bold
     }
   }
 

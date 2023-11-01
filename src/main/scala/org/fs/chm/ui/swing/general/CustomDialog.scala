@@ -24,14 +24,24 @@ abstract class CustomDialog[A](takeFullHeight: Boolean) extends Dialog {
 
   private var _selected: Option[A] = None
 
+  protected def headerText: String = ""
+
   protected def okButtonText = "OK"
 
   {
+    val header = new TextArea(headerText) {
+      editable = false
+      font = {
+        val oldFont = font
+        new Font(oldFont.getName, Font.Bold.id, oldFont.getSize + 2)
+      }
+    }
     val okBtn = new Button(okButtonText)
     val component = dialogComponent()
 
     contents = new BorderPanel {
       import scala.swing.BorderPanel.Position._
+      layout(header)                = North
       layout(component)            = Center
       layout(new FlowPanel(okBtn)) = South
     }

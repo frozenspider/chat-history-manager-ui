@@ -15,8 +15,12 @@ class SelectUserToMergeDialog(
     baseUser: User
 ) extends CustomDialog[User](takeFullHeight = true) {
   {
-    title = s"Select user to merge with ${baseUser.prettyName}"
+    title = s"Select user to be absorbed into ${baseUser.prettyName}"
   }
+
+  override protected def headerText: String = "WARNING: Absorbed user will be removed, and its messages merge info will be lost.\n" +
+    "Only do this for users that will have no more history to be merged.\n" +
+    "Base user messages will keep their source IDs intact and this will be mergeable as before."
 
   private lazy val elementsSeq: Seq[(RadioButton, UserDetailsPane)] = {
     val group = new ButtonGroup()
@@ -25,11 +29,8 @@ class SelectUserToMergeDialog(
         val radio = new RadioButton()
         group.buttons += radio
 
-        val pane = new UserDetailsPane(dao, u, true, None)
-        for (el <- Seq(pane.firstNameC, pane.lastNameC)) {
-          el.innerComponent.foreground = Colors.forIdx(idx)
-          el.innerComponent.fontStyle  = Font.Style.Bold
-        }
+        val pane = new UserDetailsPane(dao, u, editable = false, menuCallbacksOption = None)
+        pane.stylizeFirstLastName(Colors.forIdx(idx))
         (radio, pane)
     }
   }
