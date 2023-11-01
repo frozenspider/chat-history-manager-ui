@@ -1708,6 +1708,6 @@ object H2ChatHistoryDao {
   }
 
   private val ArraySeparator = ";;;"
-  implicit val stringSeqFromString: Get[Seq[String]] = Get[String].tmap(s => s.split(ArraySeparator))
+  implicit val stringSeqFromString: Get[Seq[String]] = Get[String].tmap(s => if (s.isEmpty) Seq.empty else s.split(ArraySeparator))
   implicit val stringSeqToString:   Put[Seq[String]] = Put[String].tcontramap(ss => ss.mkString(ArraySeparator))
 }
