@@ -1130,6 +1130,16 @@ class H2ChatHistoryDao(
             mimeType          = rc.mimeTypeOption.get,
             durationSecOption = rc.durationSecOption
           )
+        case "audio" =>
+          assert(rc.mimeTypeOption.isDefined, rc)
+          ContentAudio(
+            pathOption          = rc.pathOption map (_.makeRelativePath),
+            thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
+            titleOption         = rc.titleOption,
+            performerOption     = rc.performerOption,
+            mimeType            = rc.mimeTypeOption.get,
+            durationSecOption   = rc.durationSecOption,
+          )
         case "video_message" =>
           assert(rc.mimeTypeOption.isDefined && rc.widthOption.isDefined && rc.heightOption.isDefined, rc)
           ContentVideoMsg(
@@ -1141,11 +1151,13 @@ class H2ChatHistoryDao(
             height              = rc.heightOption.get,
             isOneTime           = rc.isOneTimeOption.getOrElse(false),
           )
-        case "animation" =>
+        case "video" =>
           assert(rc.mimeTypeOption.isDefined && rc.widthOption.isDefined && rc.heightOption.isDefined, rc)
-          ContentAnimation(
+          ContentVideo(
             pathOption          = rc.pathOption map (_.makeRelativePath),
             thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
+            titleOption         = rc.titleOption,
+            performerOption     = rc.performerOption,
             mimeType            = rc.mimeTypeOption.get,
             durationSecOption   = rc.durationSecOption,
             width               = rc.widthOption.get,
@@ -1156,12 +1168,8 @@ class H2ChatHistoryDao(
           ContentFile(
             pathOption          = rc.pathOption map (_.makeRelativePath),
             thumbnailPathOption = rc.thumbnailPathOption map (_.makeRelativePath),
+            fileNameOption      = rc.titleOption,
             mimeTypeOption      = rc.mimeTypeOption,
-            title               = rc.titleOption.getOrElse("<File>"),
-            performerOption     = rc.performerOption,
-            durationSecOption   = rc.durationSecOption,
-            widthOption         = rc.widthOption,
-            heightOption        = rc.heightOption
           )
         case "location" =>
           assert(rc.latOption.isDefined && rc.lonOption.isDefined, rc)
@@ -1471,24 +1479,37 @@ class H2ChatHistoryDao(
             mimeTypeOption    = Some(c.mimeType),
             durationSecOption = c.durationSecOption
           )
+        case c: ContentAudio =>
+          val newPathOption = c.pathOption flatMap copy(Subpath.Audios, None)
+          template.copy(
+            elementType         = "audio",
+            pathOption          = newPathOption,
+            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Audios, newPathOption),
+            titleOption         = c.titleOption,
+            performerOption     = c.performerOption,
+            mimeTypeOption      = Some(c.mimeType),
+            durationSecOption   = c.durationSecOption,
+          )
         case c: ContentVideoMsg =>
-          val newPathOption = c.pathOption flatMap copy(Subpath.VideosMessages, None)
+          val newPathOption = c.pathOption flatMap copy(Subpath.VideoMessages, None)
           template.copy(
             elementType         = "video_message",
             pathOption          = newPathOption,
-            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.VideosMessages, newPathOption),
+            thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.VideoMessages, newPathOption),
             mimeTypeOption      = Some(c.mimeType),
             durationSecOption   = c.durationSecOption,
             widthOption         = Some(c.width),
             heightOption        = Some(c.height),
             isOneTimeOption     = Some(c.isOneTime)
           )
-        case c: ContentAnimation =>
+        case c: ContentVideo =>
           val newPathOption = c.pathOption flatMap copy(Subpath.Videos, None)
           template.copy(
-            elementType         = "animation",
+            elementType         = "video",
             pathOption          = newPathOption,
             thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Videos, newPathOption),
+            titleOption         = c.titleOption,
+            performerOption     = c.performerOption,
             mimeTypeOption      = Some(c.mimeType),
             durationSecOption   = c.durationSecOption,
             widthOption         = Some(c.width),
@@ -1502,11 +1523,7 @@ class H2ChatHistoryDao(
             pathOption          = newPathOption,
             thumbnailPathOption = c.thumbnailPathOption flatMap copy(Subpath.Files, newPathOption),
             mimeTypeOption      = c.mimeTypeOption,
-            titleOption         = Some(c.title),
-            performerOption     = c.performerOption,
-            durationSecOption   = c.durationSecOption,
-            widthOption         = c.widthOption,
-            heightOption        = c.heightOption
+            titleOption         = c.fileNameOption,
           )
         case c: ContentLocation =>
           template.copy(
@@ -1560,7 +1577,8 @@ object H2ChatHistoryDao {
     case object Photos extends Subpath("photos/", useHashing = true)
     case object Stickers extends Subpath("stickers/", useHashing = true)
     case object VoiceMessages extends Subpath("voice_messages/")
-    case object VideosMessages extends Subpath("video_messages/")
+    case object Audios extends Subpath("audios/", useHashing = true)
+    case object VideoMessages extends Subpath("video_messages/")
     case object Videos extends Subpath("videos/", useHashing = true)
     case object Files extends Subpath("files/")
   }

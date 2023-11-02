@@ -349,8 +349,9 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         case ct: ContentSticker       => renderSticker(ct, dsRoot)
         case ct: ContentPhoto         => renderPhoto(ct, dsRoot)
         case ct: ContentVoiceMsg      => renderVoiceMsg(ct, dsRoot)
+        case ct: ContentAudio         => renderAudio(ct, dsRoot)
         case ct: ContentVideoMsg      => renderVideoMsg(ct, dsRoot)
-        case ct: ContentAnimation     => renderAnimation(ct, dsRoot)
+        case ct: ContentVideo         => renderVideo(ct, dsRoot)
         case ct: ContentFile          => renderFile(ct, dsRoot)
         case ct: ContentLocation      => renderLocation(ct)
         case ct: ContentPoll          => renderPoll(ct)
@@ -369,6 +370,22 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       })
     }
 
+    private def renderAudio(ct: ContentAudio, dsRoot: DatasetRoot) = {
+      val titleOption = Seq(ct.performerOption, ct.titleOption).yieldDefined match {
+        case seq if seq.nonEmpty => Some(s"<b>${seq.mkString(" - ").trim}</b>")
+        case _                   => None
+      }
+      val content = renderPossiblyMissingContent(ct.pathFileOption(dsRoot), "Audio")(file => {
+        val mimeType = s"""type="${ct.mimeType}""""
+        val durationOption = ct.durationSecOption map (d => s"""duration="$d"""")
+        // <audio> tag is not impemented by default AWT toolkit, we're plugging custom view
+        s"""<audio ${durationOption getOrElse ""} controls>
+           |  <source src="${fileToLocalUriString(file)}" ${mimeType}>
+           |</audio>""".stripMargin
+      })
+      Seq(titleOption, Some(content)).yieldDefined.mkString("<blockquote>", "<br>", "</blockquote>")
+    }
+
     private def renderVideoMsg(ct: ContentVideoMsg, dsRoot: DatasetRoot): String = {
       // TODO: Support actual video messages, but for now, thumbnail will do
       val name = if (ct.isOneTime) "One-time video" else "Video"
@@ -382,17 +399,22 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       })
     }
 
-    private def renderAnimation(ct: ContentAnimation, dsRoot: DatasetRoot): String = {
-      // TODO: Support actual animation, but for now, thumbnail will do
-      val name = if (ct.isOneTime) "One-time animation" else "Animation"
+    private def renderVideo(ct: ContentVideo, dsRoot: DatasetRoot): String = {
+      val titleOption = Seq(ct.performerOption, ct.titleOption).yieldDefined match {
+        case seq if seq.nonEmpty => Some(s"<b>${seq.mkString(" - ").trim}</b>")
+        case _                   => None
+      }
+      // TODO: Support actual video, but for now, thumbnail will do
+      val name = if (ct.isOneTime) "One-time video" else "Video"
       val fileOption = ct.pathFileOption(dsRoot);
       val thumbOption = ct.thumbnailPathFileOption(dsRoot)
-      if (thumbOption.isEmpty && fileOption.isDefined && fileOption.get.exists) {
+      val content = if (thumbOption.isEmpty && fileOption.isDefined && fileOption.get.exists) {
         s"[$name has no thumbnail]"
       } else renderPossiblyMissingContent(thumbOption, s"$name (thumbnail)")(file => {
         s"[$name]<br>" +
           renderImage(file, Some(ct.width), Some(ct.height), Some(name), ct.isOneTime)
       })
+      Seq(titleOption, Some(content)).yieldDefined.mkString("<blockquote>", "<br>", "</blockquote>")
     }
 
     private def renderFile(ct: ContentFile, dsRoot: DatasetRoot): String = {
@@ -400,10 +422,10 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         case to @ Some(_) =>
           renderPossiblyMissingContent(to, "File (thumbnail)")(file => {
             "[File]<br>" +
-              renderImage(file, ct.widthOption, ct.heightOption, Some("[File]"), isOneTime = false)
+              renderImage(file, None, None, Some("[File]"), isOneTime = false)
           })
         case None =>
-          s"<blockquote>File: <b>${toHtmlPlaintext(ct.title)}</b></blockquote>"
+          s"<blockquote>File: <b>${ct.fileNameOption.map(toHtmlPlaintext).getOrElse(Unnamed)}</b></blockquote>"
       }
     }
 

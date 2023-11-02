@@ -80,8 +80,12 @@ object Entities {
         m.contentOption match {
           case Some(c: ContentSticker) =>
             Seq(c.emojiOption).yieldDefined
+          case Some(c: ContentAudio) =>
+            Seq(c.titleOption, c.performerOption).yieldDefined
+          case Some(c: ContentVideo) =>
+            Seq(c.titleOption, c.performerOption).yieldDefined
           case Some(c: ContentFile) =>
-            Seq(c.performerOption).yieldDefined
+            Seq(c.fileNameOption).yieldDefined
           case Some(c: ContentLocation) =>
             Seq(c.addressOption, c.titleOption, Some(c.latStr), Some(c.lonStr)).yieldDefined
           case Some(c: ContentPoll) =>
@@ -133,8 +137,9 @@ object Entities {
         case c: ContentSticker    => c.pathFileOption(datasetRoot)
         case c: ContentPhoto      => c.pathFileOption(datasetRoot)
         case c: ContentVoiceMsg   => c.pathFileOption(datasetRoot)
+        case c: ContentAudio      => c.pathFileOption(datasetRoot)
         case c: ContentVideoMsg   => c.pathFileOption(datasetRoot)
-        case c: ContentAnimation  => c.pathFileOption(datasetRoot)
+        case c: ContentVideo      => c.pathFileOption(datasetRoot)
         case c: ContentFile       => c.pathFileOption(datasetRoot)
         case c                    => None
       }
@@ -145,8 +150,9 @@ object Entities {
         case _: ContentSticker   => true
         case _: ContentPhoto     => true
         case _: ContentVoiceMsg  => true
+        case _: ContentAudio     => true
         case _: ContentVideoMsg  => true
-        case _: ContentAnimation => true
+        case _: ContentVideo     => true
         case _: ContentFile      => true
         case _                   => false
       }
@@ -166,13 +172,17 @@ object Entities {
     def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
   }
 
+  implicit class ExtendedContentAudio(c: ContentAudio) extends WithPathFileOption {
+    def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
+  }
+
   implicit class ExtendedContentVideoMsg(c: ContentVideoMsg) extends WithPathFileOption {
     def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
 
     def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
   }
 
-  implicit class ExtendedContentAnimation(c: ContentAnimation) extends WithPathFileOption {
+  implicit class ExtendedContentVideo(c: ContentVideo) extends WithPathFileOption {
     def pathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.pathOption.map(_.toFile(datasetRoot))
 
     def thumbnailPathFileOption(datasetRoot: DatasetRoot): Option[JFile] = c.thumbnailPathOption.map(_.toFile(datasetRoot))
@@ -238,6 +248,13 @@ object Entities {
     }
   }
 
+  implicit object ContentAudioPracticallyEquals extends PracticallyEquals[(ContentAudio, DatasetRoot)] {
+    override def practicallyEquals(v1: (ContentAudio, DatasetRoot), v2: (ContentAudio, DatasetRoot)): Boolean = {
+      v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v2._2) &&
+        v1._1.copy(pathOption = None) == v2._1.copy(pathOption = None)
+    }
+  }
+
   implicit object ContentVideoMsgPracticallyEquals extends PracticallyEquals[(ContentVideoMsg, DatasetRoot)] {
     override def practicallyEquals(v1: (ContentVideoMsg, DatasetRoot), v2: (ContentVideoMsg, DatasetRoot)): Boolean = {
       v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v2._2) &&
@@ -246,8 +263,8 @@ object Entities {
     }
   }
 
-  implicit object ContentAnimationPracticallyEquals extends PracticallyEquals[(ContentAnimation, DatasetRoot)] {
-    override def practicallyEquals(v1: (ContentAnimation, DatasetRoot), v2: (ContentAnimation, DatasetRoot)): Boolean = {
+  implicit object ContentVideoPracticallyEquals extends PracticallyEquals[(ContentVideo, DatasetRoot)] {
+    override def practicallyEquals(v1: (ContentVideo, DatasetRoot), v2: (ContentVideo, DatasetRoot)): Boolean = {
       v1._1.pathFileOption(v1._2) =~= v2._1.pathFileOption(v2._2) &&
         v1._1.thumbnailPathFileOption(v1._2) =~= v2._1.thumbnailPathFileOption(v2._2) &&
         v1._1.copy(pathOption = None, thumbnailPathOption = None) == v2._1.copy(pathOption = None, thumbnailPathOption = None)
@@ -290,8 +307,9 @@ object Entities {
         case (c1: ContentSticker,       c2: ContentSticker)       => (c1, v1._2) =~= (c2, v2._2)
         case (c1: ContentPhoto,         c2: ContentPhoto)         => (c1, v1._2) =~= (c2, v2._2)
         case (c1: ContentVoiceMsg,      c2: ContentVoiceMsg)      => (c1, v1._2) =~= (c2, v2._2)
+        case (c1: ContentAudio,         c2: ContentAudio)         => (c1, v1._2) =~= (c2, v2._2)
         case (c1: ContentVideoMsg,      c2: ContentVideoMsg)      => (c1, v1._2) =~= (c2, v2._2)
-        case (c1: ContentAnimation,     c2: ContentAnimation)     => (c1, v1._2) =~= (c2, v2._2)
+        case (c1: ContentVideo,         c2: ContentVideo)         => (c1, v1._2) =~= (c2, v2._2)
         case (c1: ContentFile,          c2: ContentFile)          => (c1, v1._2) =~= (c2, v2._2)
         case (c1: ContentLocation,      c2: ContentLocation)      => (c1, v1._2) =~= (c2, v2._2)
         case (c1: ContentPoll,          c2: ContentPoll)          => (c1, v1._2) =~= (c2, v2._2)
@@ -439,8 +457,9 @@ object Entities {
             case Some(v: ContentSticker)       => Set(v.pathOption, v.thumbnailPathOption)
             case Some(v: ContentPhoto)         => Set(v.pathOption)
             case Some(v: ContentVoiceMsg)      => Set(v.pathOption)
+            case Some(v: ContentAudio)         => Set(v.pathOption)
             case Some(v: ContentVideoMsg)      => Set(v.pathOption, v.thumbnailPathOption)
-            case Some(v: ContentAnimation)     => Set(v.pathOption, v.thumbnailPathOption)
+            case Some(v: ContentVideo)         => Set(v.pathOption, v.thumbnailPathOption)
             case Some(v: ContentFile)          => Set(v.pathOption, v.thumbnailPathOption)
             case Some(v: ContentLocation)      => Set.empty
             case Some(v: ContentPoll)          => Set.empty

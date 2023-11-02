@@ -161,9 +161,10 @@ class ChatListItem(
           case None                          => msg.searchableString
           case Some(s: ContentSticker)       => s.emojiOption.map(_ + " ").getOrElse("") + "(sticker)"
           case Some(_: ContentPhoto)         => "(photo)"
-          case Some(_: ContentVoiceMsg)      => "(voice)"
-          case Some(_: ContentVideoMsg)      => "(video)"
-          case Some(_: ContentAnimation)     => "(animation)"
+          case Some(_: ContentVoiceMsg)      => "(voice message)"
+          case Some(_: ContentAudio)         => "(audio)"
+          case Some(_: ContentVideoMsg)      => "(video message)"
+          case Some(_: ContentVideo)         => "(video)"
           case Some(_: ContentFile)          => "(file)"
           case Some(_: ContentLocation)      => "(location)"
           case Some(_: ContentPoll)          => "(poll)"

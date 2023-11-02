@@ -85,7 +85,7 @@ class DatasetMergerMergeSpec //
     assertFiles(helper.dao3, newDs, msgsPaths(helper.dao1, helper.d1ds, helper.d1msgs))
   }
 
-  test("merge chats - keep single animation, content preserved") {
+  test("merge chats - keep single video, content preserved") {
     mergeFilesHelper(amendMasterMessagesOnly = false, helper => Seq(
       ChatMergeOption.Keep(helper.d1cwd)
     ))
@@ -160,11 +160,13 @@ class DatasetMergerMergeSpec //
 
   def mergeFilesHelper(amendMasterMessagesOnly: Boolean,
                        makeChatMerges: H2MergerHelper => Seq[ResolvedChatMergeOption]): Unit = {
-    def makeAnimationContent(path: File): Content = {
+    def makeVideoContent(path: File): Content = {
       val file1 = createRandomTempFile(path)
       val file2 = createRandomTempFile(path)
-      ContentAnimation(
+      ContentVideo(
         pathOption          = Some(file1.toRelativePath(path)),
+        titleOption         = Some("My Title"),
+        performerOption     = Some("My Performer"),
         width               = 111,
         height              = 222,
         mimeType            = "mt",
@@ -174,20 +176,20 @@ class DatasetMergerMergeSpec //
       )
     }
 
-    def addAnimationToMasterMessage(isMaster: Boolean, path: File, msg: Message): Message = {
+    def addVideoToMasterMessage(isMaster: Boolean, path: File, msg: Message): Message = {
       val regular = msg.typed.regular.get
       msg.copy(typed = Message.Typed.Regular(regular.copy(
-        contentOption = if (isMaster) Some(makeAnimationContent(path)) else None
+        contentOption = if (isMaster) Some(makeVideoContent(path)) else None
       )))
     }
 
-    def addAnimationToAnyMessage(unused: Boolean, path: File, msg: Message): Message =
-      addAnimationToMasterMessage(isMaster = true, path, msg)
+    def addVideoToAnyMessage(unused: Boolean, path: File, msg: Message): Message =
+      addVideoToMasterMessage(isMaster = true, path, msg)
 
     val msg = createRegularMessage(1, 1)
     val helper = H2MergerHelper.fromMessages(
       Seq(msg), Seq(msg),
-      if (amendMasterMessagesOnly) addAnimationToMasterMessage else addAnimationToAnyMessage
+      if (amendMasterMessagesOnly) addVideoToMasterMessage else addVideoToAnyMessage
     )
     assert(helper.dao1.datasets.size === 1)
     assert(helper.dao2.datasets.size === 1)
@@ -744,12 +746,8 @@ class DatasetMergerMergeSpec //
           val content = ContentFile(
             pathOption          = Some(file1.toRelativePath(path)),
             thumbnailPathOption = Some(file2.toRelativePath(path)),
+            fileNameOption      = Some("t"),
             mimeTypeOption      = Some("mt"),
-            title               = "t",
-            performerOption     = Some("p"),
-            durationSecOption   = Some(1),
-            widthOption         = Some(2),
-            heightOption        = Some(3),
           )
           Message.Typed.Regular(msg.copy(contentOption = Some(content)))
         case _ =>

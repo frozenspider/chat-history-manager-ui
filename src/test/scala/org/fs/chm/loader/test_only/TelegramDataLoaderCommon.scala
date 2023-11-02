@@ -280,7 +280,7 @@ trait TelegramDataLoaderCommon {
       (mediaTypeOption, photoOption, fileOption, locPresent, pollQuestionPresent, contactInfoPresent) match {
         case (None, None, None, false, false, false) => None
         case (Some("sticker"), None, Some(_), false, false, false) => Some(parseSticker(jv))
-        case (Some("animation"), None, Some(_), false, false, false) => Some(parseAnimation(jv))
+        case (Some("animation"), None, Some(_), false, false, false) => Some(parseVideo(jv))
         case (Some("video_message"), None, Some(_), false, false, false) => Some(parseVideoMsg(jv))
         case (Some("voice_message"), None, Some(_), false, false, false) => Some(parseVoiceMsg(jv))
         case (Some("video_file"), None, Some(_), false, false, false) => Some(parseFile(jv, "<Video>"))
@@ -314,10 +314,12 @@ trait TelegramDataLoaderCommon {
       )
     }
 
-    private def parseAnimation(jv: JValue): ContentAnimation = {
-      ContentAnimation(
+    private def parseVideo(jv: JValue): ContentVideo = {
+      ContentVideo(
         pathOption = getRelativePathOpt(jv, "file", true),
         thumbnailPathOption = getRelativePathOpt(jv, "thumbnail", false),
+        titleOption = None,
+        performerOption = None,
         mimeType = getCheckedField[String](jv, "mime_type"),
         durationSecOption = getFieldOpt[Int](jv, "duration_seconds", false),
         width = getCheckedField[Int](jv, "width"),
@@ -350,12 +352,8 @@ trait TelegramDataLoaderCommon {
       ContentFile(
         pathOption = getRelativePathOpt(jv, "file", true),
         thumbnailPathOption = getRelativePathOpt(jv, "thumbnail", false),
+        fileNameOption = None,
         mimeTypeOption = getStringOpt(jv, "mime_type", true),
-        title = getStringOpt(jv, "title", false) getOrElse titleIfEmpty,
-        performerOption = getStringOpt(jv, "performer", false),
-        durationSecOption = getFieldOpt[Int](jv, "duration_seconds", false),
-        widthOption = getFieldOpt[Int](jv, "width", false),
-        heightOption = getFieldOpt[Int](jv, "height", false)
       )
     }
 
