@@ -290,17 +290,15 @@ class H2ChatHistoryDaoSpec //
     val baseUserPcMsgs     = h2dao.firstMessages(baseUserPc, 99999)
     val absorbedUserPcMsgs = h2dao.firstMessages(absorbedUserPc, 99999)
 
-    h2dao.mergeUsers(baseUser, absorbedUser.copy(firstNameOption = Some("new-name")))
+    val newPhoneNumber = "+123 456 789"
+    h2dao.mergeUsers(baseUser, absorbedUser.copy(phoneNumberOption = Some(newPhoneNumber)))
 
     val chatsAfter = h2dao.chats(dsUuid)
     val usersAfter = h2dao.users(dsUuid)
 
     // Verify users
     assert(usersAfter.size === usersBefore.size - 1)
-    val expectedUser = absorbedUser.copy(
-      id              = baseUser.id,
-      firstNameOption = Some("new-name")
-    )
+    val expectedUser = baseUser.copy(phoneNumberOption = Some(baseUser.phoneNumberOption.get + "," + newPhoneNumber))
     assert(usersAfter.find(_.id == baseUser.id) === Some(expectedUser))
     assert(!usersAfter.exists(_.id == absorbedUser.id))
 

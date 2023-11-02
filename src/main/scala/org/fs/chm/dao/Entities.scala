@@ -58,16 +58,15 @@ object Entities {
       sourceType = srcType
     )
 
-  /** Should be kept in sync with RichText.make*! */
-  def makeSearchableString(rte: RichTextElement): String = {
-    normalizeSeachableString(rte.`val`.value match {
+  private def makeSearchableString(rteVal: RichTextElement.Val): String = {
+    normalizeSeachableString(rteVal.value match {
       case RtePlain(text, _)                 => text
       case RteBold(text, _)                  => text
       case RteItalic(text, _)                => text
       case RteUnderline(text, _)             => text
       case RteStrikethrough(text, _)         => text
       case RteSpoiler(text, _)               => text
-      case RteLink(textOpt, href, hiddem, _) => (textOpt getOrElse "") + " " + href
+      case RteLink(textOpt, href, hidden, _) => textOpt.filter(_ != href).getOrElse(" ") + " " + href
       case RtePrefmtInline(text, _)          => text
       case RtePrefmtBlock(text, langOpt, _)  => text
     })
@@ -492,43 +491,37 @@ object Entities {
   // Rich Text
   //
 
-  /** Should be kept in sync with makeSearchableString! */
   object RichText {
     def makePlain(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Plain(RtePlain(text)), normalizeSeachableString(text))
+      make(RichTextElement.Val.Plain(RtePlain(text)))
 
     def makeBold(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Bold(RteBold(text)), normalizeSeachableString(text))
+      make(RichTextElement.Val.Bold(RteBold(text)))
 
     def makeItalic(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Italic(RteItalic(text)), normalizeSeachableString(text))
+      make(RichTextElement.Val.Italic(RteItalic(text)))
 
     def makeUnderline(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Underline(RteUnderline(text)), normalizeSeachableString(text))
+      make(RichTextElement.Val.Underline(RteUnderline(text)))
 
     def makeStrikethrough(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Strikethrough(RteStrikethrough(text)), normalizeSeachableString(text))
+      make(RichTextElement.Val.Strikethrough(RteStrikethrough(text)))
 
     def makeSpoiler(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.Spoiler(RteSpoiler(text)), normalizeSeachableString(text))
+      make(RichTextElement.Val.Spoiler(RteSpoiler(text)))
 
-    def makeLink(textOption: Option[String], href: String, hidden: Boolean): RichTextElement = {
-      val searchableString = (normalizeSeachableString(textOption getOrElse "") + " " + href).trim
-      RichTextElement(RichTextElement.Val.Link(RteLink(
-        textOption = textOption,
-        href       = href,
-        hidden     = hidden
-      )), normalizeSeachableString(searchableString))
-    }
+    def makeLink(textOption: Option[String], href: String, hidden: Boolean): RichTextElement =
+      make(RichTextElement.Val.Link(RteLink(textOption, href, hidden)))
 
     def makePrefmtInline(text: String): RichTextElement =
-      RichTextElement(RichTextElement.Val.PrefmtInline(RtePrefmtInline(text)), normalizeSeachableString(text))
+      make(RichTextElement.Val.PrefmtInline(RtePrefmtInline(text)))
 
     def makePrefmtBlock(text: String, languageOption: Option[String]): RichTextElement =
-      RichTextElement(
-        RichTextElement.Val.PrefmtBlock(RtePrefmtBlock(text = text, languageOption = languageOption)),
-        normalizeSeachableString(text)
-      )
+      make(RichTextElement.Val.PrefmtBlock(RtePrefmtBlock(text = text, languageOption = languageOption)))
+
+    private def make(rteVal: RichTextElement.Val): RichTextElement = {
+      RichTextElement(rteVal, makeSearchableString(rteVal))
+    }
   }
 
   implicit class ExtendedRichTextElement(rte: RichTextElement) {
