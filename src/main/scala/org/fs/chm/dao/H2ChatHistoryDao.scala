@@ -1570,17 +1570,17 @@ object H2ChatHistoryDao {
     s"chats/chat_${chatId}"
 
   /** Subpath inside a directory, suffixed by "/" to be concatenated. */
-  sealed abstract class Subpath(val fragment: String, val useHashing: Boolean = false)
+  sealed abstract class Subpath(val fragment: String, val useHashing: Boolean)
 
   object Subpath {
-    case object Root extends Subpath("")
+    case object Root extends Subpath("", useHashing = false)
     case object Photos extends Subpath("photos/", useHashing = true)
     case object Stickers extends Subpath("stickers/", useHashing = true)
-    case object VoiceMessages extends Subpath("voice_messages/")
+    case object VoiceMessages extends Subpath("voice_messages/", useHashing = false)
     case object Audios extends Subpath("audios/", useHashing = true)
-    case object VideoMessages extends Subpath("video_messages/")
+    case object VideoMessages extends Subpath("video_messages/", useHashing = true)
     case object Videos extends Subpath("videos/", useHashing = true)
-    case object Files extends Subpath("files/")
+    case object Files extends Subpath("files/", useHashing = false)
   }
 
   lazy val Hash: DigestUtils =
