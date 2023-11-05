@@ -111,7 +111,7 @@ class UserDetailsPane(
   }
 
   private def merge(): Unit = {
-    val dialog = new SelectUserToMergeDialog(dao, user)
+    val dialog = new SelectAbsorbedUserDialog(dao, user)
     dialog.visible = true
     dialog.selection foreach { user2 =>
       menuCallbacksOption foreach (_.usersMerged(user, user2, dao))

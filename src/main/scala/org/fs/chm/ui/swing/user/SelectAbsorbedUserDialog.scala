@@ -10,7 +10,7 @@ import org.fs.chm.protobuf.User
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 
-class SelectUserToMergeDialog(
+class SelectAbsorbedUserDialog(
     dao: ChatHistoryDao,
     baseUser: User
 ) extends CustomDialog[User](takeFullHeight = true) {

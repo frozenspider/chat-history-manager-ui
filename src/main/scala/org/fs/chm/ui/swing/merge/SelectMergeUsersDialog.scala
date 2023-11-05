@@ -71,8 +71,15 @@ class SelectMergeUsersDialog(
             case None =>
               RowData.InSlaveOnly(UserWithDao(su, slaveDao), selectable = false)
             case Some(mu) =>
-              // Only selectable if user content differs
-              val selectable = mu != su.copy(dsUuid = mu.dsUuid)
+              // Only selectable if user content conflicting/additional content
+              def hasDifferentValue[T](lens: User => Option[T]): Boolean =
+                lens(su).isDefined && lens(su) != lens(mu)
+
+              val selectable = hasDifferentValue(u => u.firstNameOption) ||
+                hasDifferentValue(u => u.lastNameOption) ||
+                hasDifferentValue(u => u.usernameOption) ||
+                hasDifferentValue(u => u.phoneNumberOption)
+
               RowData.InBoth(UserWithDao(mu, masterDao), UserWithDao(su, slaveDao), selectable)
           }
         }
