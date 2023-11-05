@@ -399,30 +399,52 @@ class DatasetMerger(
                                              mCwd: ChatWithDetails,
                                              sm: TaggedMessage.S,
                                              sCwd: ChatWithDetails): Boolean = {
+    /**
+     * Special case: Telegram 2023-11 started exporting double styles (bold+X)
+     * as bold instead of an X. We want to ignore this change.
+     */
+    def textToComparable(text: Seq[RichTextElement]): Seq[RichTextElement] = {
+      text map (t => t.`val` match {
+        case rte: RichTextElement.Val.Italic        => RichText.makeBold(rte.value.text)
+        case rte: RichTextElement.Val.Underline     => RichText.makeBold(rte.value.text)
+        case rte: RichTextElement.Val.Strikethrough => RichText.makeBold(rte.value.text)
+        case _                                      => t
+      })
+    }
+
+    def toComparable(m: Message, mr: Message.Typed.Regular): Message = {
+      m.copy(
+        typed = Message.Typed.Regular(mr.value.copy(contentOption = None, editTimestampOption = None)),
+        text  = textToComparable(m.text)
+      )
+    }
+
     def hasContent(c: WithPathFileOption, root: DatasetRoot): Boolean = {
       c.pathFileOption(root).exists(_.exists)
     }
 
-    if ((mm.asInstanceOf[Message], masterRoot, mCwd) =~= (sm, slaveRoot, sCwd)) {
-      true
-    } else (mm.typed, sm.typed) match {
-      case (mmRegular: Message.Typed.Regular, smRegular: Message.Typed.Regular) =>
-        (mmRegular.value.contentOption, smRegular.value.contentOption) match {
-          case (Some(mc), Some(sc)) if mc.getClass == sc.getClass && mc.hasPath =>
-            val mmCmp = mm.copy(typed = Message.Typed.Regular(mmRegular.value.copy(contentOption = None, editTimestampOption = None)))
-            val smCmp = sm.copy(typed = Message.Typed.Regular(smRegular.value.copy(contentOption = None, editTimestampOption = None)))
-            (!hasContent(mc, masterRoot) || !hasContent(sc, slaveRoot)) && (mmCmp, masterRoot, mCwd) =~= (smCmp, slaveRoot, sCwd)
-          case _ =>
-            false
-        }
-      case (Message.Typed.Service(Some(MessageServiceGroupEditPhoto(mmPhoto, _))),
-            Message.Typed.Service(Some(MessageServiceGroupEditPhoto(smPhoto, _)))) =>
-        !hasContent(mmPhoto, masterRoot) || !hasContent(smPhoto, slaveRoot)
-      case (Message.Typed.Service(Some(MessageServiceSuggestProfilePhoto(mmPhoto, _))),
-            Message.Typed.Service(Some(MessageServiceSuggestProfilePhoto(smPhoto, _)))) =>
-        !hasContent(mmPhoto, masterRoot) || !hasContent(smPhoto, slaveRoot)
-      case _ => false
-    }
+    (mm.asInstanceOf[Message], masterRoot, mCwd) =~= (sm, slaveRoot, sCwd) ||
+      ((mm.typed, sm.typed) match {
+        case (mmRegular: Message.Typed.Regular, smRegular: Message.Typed.Regular) =>
+          val contentEquals = (mmRegular.value.contentOption, smRegular.value.contentOption) match {
+            case (Some(mc), Some(sc)) if mc.getClass == sc.getClass && mc.hasPath =>
+              (!hasContent(mc, masterRoot) || !hasContent(sc, slaveRoot))
+            case (None, None) => true
+            case _            => false
+          }
+          contentEquals && {
+            val mmCmp = toComparable(mm, mmRegular)
+            val smCmp = toComparable(sm, smRegular)
+            (mmCmp, masterRoot, mCwd) =~= (smCmp, slaveRoot, sCwd)
+          }
+        case (Message.Typed.Service(Some(MessageServiceGroupEditPhoto(mmPhoto, _))),
+              Message.Typed.Service(Some(MessageServiceGroupEditPhoto(smPhoto, _)))) =>
+          !hasContent(mmPhoto, masterRoot) || !hasContent(smPhoto, slaveRoot)
+        case (Message.Typed.Service(Some(MessageServiceSuggestProfilePhoto(mmPhoto, _))),
+              Message.Typed.Service(Some(MessageServiceSuggestProfilePhoto(smPhoto, _)))) =>
+          !hasContent(mmPhoto, masterRoot) || !hasContent(smPhoto, slaveRoot)
+        case _ => false
+      })
   }
 
   /** If message dates and plain strings are equal, we consider this enough */
