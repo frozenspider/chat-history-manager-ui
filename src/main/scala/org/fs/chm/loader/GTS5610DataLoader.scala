@@ -81,6 +81,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
                 searchableString = normalizeSeachableString(vmsg.text),
                 typed            = Message.Typed.Regular(MessageRegular(
                   editTimestampOption    = None,
+                  isDeleted              = false,
                   forwardFromNameOption  = None,
                   replyToMessageIdOption = None,
                   contentOption          = None

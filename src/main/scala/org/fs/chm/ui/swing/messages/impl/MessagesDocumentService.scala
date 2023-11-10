@@ -100,7 +100,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
   //
 
   def renderMessageHtml(dao: ChatHistoryDao, cwd: ChatWithDetails, dsRoot: DatasetRoot, m: Message, isQuote: Boolean = false): String = {
-    val (msgHtml: String, editDtOption: Option[DateTime]) = m.typed match {
+    val (msgHtml: String, editDtOption: Option[DateTime], isDeleted: Boolean) = m.typed match {
       case Message.Typed.Regular(rm) =>
         val textHtmlOption = RichTextHtmlRenderer.render(m.text)
         val contentHtmlOption = rm.contentOption map { ct =>
@@ -112,12 +112,19 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         } else {
           rm.replyToMessageIdTypedOption map (id => renderSourceMessage(dao, cwd, dsRoot, id))
         }
-        (Seq(fwdFromHtmlOption, replySrcHtmlOption, textHtmlOption, contentHtmlOption).yieldDefined.mkString, rm.editTimeOption)
+        val msgDeletedOption = if (rm.isDeleted) {
+          Some(s"""<div class="system-message">Message deleted</div>""")
+        } else None
+        (Seq(msgDeletedOption, fwdFromHtmlOption, replySrcHtmlOption, textHtmlOption, contentHtmlOption).yieldDefined.mkString,
+         rm.editTimeOption,
+         rm.isDeleted)
       case Message.Typed.Service(Some(sm)) =>
-        (ServiceMessageHtmlRenderer.render(dao, cwd, dsRoot, m, sm), None)
+        (ServiceMessageHtmlRenderer.render(dao, cwd, dsRoot, m, sm),
+         None,
+         false)
     }
     val editTimeHtml = editDtOption match {
-      case Some(dt) => s""" <span style="color: gray;">(edited ${dt.toString("yyyy-MM-dd HH:mm")})</span>"""
+      case Some(dt) => s""" <span style="color: gray;">(${if (isDeleted) "deleted" else "edited"} ${dt.toString("yyyy-MM-dd HH:mm")})</span>"""
       case None     => ""
     }
     val titleNameHtml = renderTitleName(cwd, Some(m.fromId), None)
@@ -125,12 +132,11 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})$editTimeHtml"""
     val sourceIdAttr = m.sourceIdOption map (id => s"""message_source_id="$id"""") getOrElse ""
     // "date" attribute is used by overlay to show topmost message date
-    s"""
-       |<div class="message" ${sourceIdAttr} date="${m.time.toString("yyyy-MM-dd")}">
-       |   <div class="title">${titleHtml}</div>
-       |   <div class="body">${msgHtml}</div>
-       |</div>
-       |${if (!isQuote) "<p>" else ""}
+    s"""|<div class="message" ${sourceIdAttr} date="${m.time.toString("yyyy-MM-dd")}">
+        |   <div class="title">${titleHtml}</div>
+        |   <div class="body">${msgHtml}</div>
+        |</div>
+        |${if (!isQuote) "<p>" else ""}
     """.stripMargin // TODO: Remove <p>
   }
 
@@ -210,7 +216,6 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         case sm: MessageServiceSuggestProfilePhoto => renderSuggestPhotoMessage(sm, dsRoot)
         case sm: MessageServicePinMessage          => "Pinned message" + renderSourceMessage(dao, cwd, dsRoot, sm.messageIdTyped)
         case sm: MessageServiceClearHistory        => "History cleared"
-        case sm: MessageServiceMessageDeleted      => "Message deleted"
         case sm: MessageServiceBlockUser           => s"User ${if (sm.isBlocked) "" else "un"}blocked"
         case sm: MessageServiceGroupCreate         => renderCreateGroupMessage(cwd, sm)
         case sm: MessageServiceGroupEditTitle      => renderEditTitleMessage(sm)

@@ -744,7 +744,8 @@ class H2ChatHistoryDao(
         "path",
         "width",
         "height",
-        "is_blocked"
+        "is_blocked",
+        "is_deleted"
       )
 
       private val colsPureFr  = Fragment.const(cols.mkString(", "))
@@ -812,7 +813,7 @@ class H2ChatHistoryDao(
           ++ fr"${m.fromId}, ${m.forwardFromNameOption}, ${m.replyToMessageIdOption},"
           ++ fr"${m.titleOption}, ${m.members}, ${m.durationSecOption}, ${m.discardReasonOption},"
           ++ fr"${m.pinnedMessageIdOption}, ${m.pathOption}, ${m.widthOption}, ${m.heightOption},"
-          ++ fr"${m.isBlockedOption}"
+          ++ fr"${m.isBlockedOption}, ${m.isDeleted}"
           ++ fr")").update.withUniqueGeneratedKeys[MessageInternalId]("internal_id")
 
       def removeSourceIds(dsUuid: PbUuid, fromChatId: Long): ConnectionIO[Int] =
@@ -996,6 +997,7 @@ class H2ChatHistoryDao(
         case "regular" =>
           Message.Typed.Regular(MessageRegular(
             editTimestampOption    = rm.editTimeOption map (_.unixTimestamp),
+            isDeleted              = rm.isDeleted,
             forwardFromNameOption  = rm.forwardFromNameOption,
             replyToMessageIdOption = rm.replyToMessageIdOption,
             contentOption          = contents.get(rm.internalId)
@@ -1020,8 +1022,6 @@ class H2ChatHistoryDao(
           )))
         case "service_clear_history" =>
           Message.Typed.Service(Some(MessageServiceClearHistory()))
-        case "service_message_deleted" =>
-          Message.Typed.Service(Some(MessageServiceMessageDeleted()))
         case "service_block_user" =>
           Message.Typed.Service(Some(MessageServiceBlockUser(
             isBlocked = rm.isBlockedOption.get,
@@ -1276,6 +1276,7 @@ class H2ChatHistoryDao(
         widthOption            = None,
         heightOption           = None,
         isBlockedOption        = None,
+        isDeleted              = false,
       )
 
       msg.typed match {
@@ -1283,6 +1284,7 @@ class H2ChatHistoryDao(
           template.copy(
             messageType            = "regular",
             editTimeOption         = m.editTimeOption,
+            isDeleted              = m.isDeleted,
             forwardFromNameOption  = m.forwardFromNameOption,
             replyToMessageIdOption = m.replyToMessageIdTypedOption
           )
@@ -1308,10 +1310,6 @@ class H2ChatHistoryDao(
         case Message.Typed.Service(Some(_: MessageServiceClearHistory)) =>
           template.copy(
             messageType = "service_clear_history",
-          )
-        case Message.Typed.Service(Some(_: MessageServiceMessageDeleted)) =>
-          template.copy(
-            messageType = "service_message_deleted",
           )
         case Message.Typed.Service(Some(m: MessageServiceBlockUser)) =>
           template.copy(
@@ -1624,7 +1622,8 @@ object H2ChatHistoryDao {
       pathOption: Option[String],
       widthOption: Option[Int],
       heightOption: Option[Int],
-      isBlockedOption: Option[Boolean]
+      isBlockedOption: Option[Boolean],
+      isDeleted: Boolean
   ) {
     val canHaveContent: Boolean =
       messageType == "regular"

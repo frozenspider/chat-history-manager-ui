@@ -262,6 +262,7 @@ object MessagesAreaContainer {
         {
           val typed = Message.Typed.Regular(MessageRegular(
             editTimestampOption    = Some(baseDate.plusMinutes(2).plusSeconds(5).unixTimestamp),
+            isDeleted              = false,
             forwardFromNameOption  = Some("u" + users.head.id),
             replyToMessageIdOption = Some(1L.asInstanceOf[MessageSourceId]),
             contentOption          = Some(

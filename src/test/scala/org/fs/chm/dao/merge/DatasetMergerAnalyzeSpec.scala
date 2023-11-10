@@ -565,6 +565,7 @@ class DatasetMergerAnalyzeSpec //
       val typed: Message.Typed = if (regular) {
         Message.Typed.Regular(MessageRegular(
           editTimestampOption    = Some(baseDate.plusMinutes(10 + idx).unixTimestamp),
+          isDeleted              = false,
           replyToMessageIdOption = None,
           forwardFromNameOption  = Some("some user"),
           contentOption          = Some(photo)

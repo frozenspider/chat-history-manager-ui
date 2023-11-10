@@ -357,7 +357,6 @@ object Entities {
         case (m1: MessageServiceSuggestProfilePhoto, m2: MessageServiceSuggestProfilePhoto) => (m1.photo, v1._2) =~= (m2.photo, v2._2)
         case (m1: MessageServicePinMessage,          m2: MessageServicePinMessage)          => m1 == m2
         case (m1: MessageServiceClearHistory,        m2: MessageServiceClearHistory)        => m1 == m2
-        case (m1: MessageServiceMessageDeleted,      m2: MessageServiceMessageDeleted)      => m1 == m2
         case (m1: MessageServiceBlockUser,           m2: MessageServiceBlockUser)           => m1 == m2
         case (m1: MessageServiceGroupCreate,         m2: MessageServiceGroupCreate)         =>
           m1.copy(members = Seq.empty) == m2.copy(members = Seq.empty) &&
@@ -471,7 +470,6 @@ object Entities {
             case m: MessageServiceSuggestProfilePhoto => Set(m.photo.pathOption)
             case _: MessageServicePinMessage          => Set.empty
             case _: MessageServiceClearHistory        => Set.empty
-            case _: MessageServiceMessageDeleted      => Set.empty
             case _: MessageServiceBlockUser           => Set.empty
             case _: MessageServiceGroupCreate         => Set.empty
             case _: MessageServiceGroupEditTitle      => Set.empty

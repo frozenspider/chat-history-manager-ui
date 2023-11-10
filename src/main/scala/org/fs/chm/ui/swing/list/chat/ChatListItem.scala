@@ -158,6 +158,7 @@ class ChatListItem(
     val text: String = msg.typed match {
       case Message.Typed.Regular(msgRegular) =>
         msgRegular.contentOption match {
+          case _ if msgRegular.isDeleted     => "(message deleted)"
           case None                          => msg.searchableString
           case Some(s: ContentSticker)       => s.emojiOption.map(_ + " ").getOrElse("") + "(sticker)"
           case Some(_: ContentPhoto)         => "(photo)"
@@ -176,7 +177,6 @@ class ChatListItem(
           case _: MessageServiceSuggestProfilePhoto => "(suggested photo)"
           case _: MessageServicePinMessage          => "(message pinned)"
           case _: MessageServiceClearHistory        => "(history cleared)"
-          case _: MessageServiceMessageDeleted      => "(message deleted)"
           case s: MessageServiceBlockUser           => s"(user ${if (s.isBlocked) "" else "un"}blocked)"
           case _: MessageServiceGroupCreate         => "(group created)"
           case _: MessageServiceGroupEditTitle      => "(title changed)"

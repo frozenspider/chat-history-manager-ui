@@ -62,6 +62,7 @@ trait TelegramDataLoaderCommon {
       val text = RichTextParser.parseRichText(jv)
       val typed = Message.Typed.Regular(MessageRegular(
         editTimestampOption = stringOptToDateTimeOpt(getStringOpt(jv, "edited", false)).map(_.unixTimestamp),
+        isDeleted = false,
         forwardFromNameOption = getForwardedFromOpt(jv, "forwarded_from"),
         replyToMessageIdOption = getFieldOpt[MessageSourceId](jv, "reply_to_message_id", false),
         contentOption = ContentParser.parseContentOption(jv),

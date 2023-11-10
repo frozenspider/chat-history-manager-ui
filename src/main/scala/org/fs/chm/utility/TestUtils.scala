@@ -71,6 +71,7 @@ object TestUtils {
 
     val typed = Message.Typed.Regular(MessageRegular(
       editTimestampOption    = Some(baseDate.plusMinutes(idx).plusSeconds(5).unixTimestamp),
+      isDeleted              = false,
       replyToMessageIdOption = replyToMessageIdOption,
       forwardFromNameOption  = Some("u" + userId),
       contentOption          = Some(ContentPoll(question = s"Hey, ${idx}!"))
