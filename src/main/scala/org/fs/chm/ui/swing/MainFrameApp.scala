@@ -47,7 +47,7 @@ import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
 
-class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
+class MainFrameApp(grpcEagerDataLoader: GrpcEagerDataLoader, grpcRemoteDataLoader: GrpcRemoteDataLoader) //
     extends SimpleSwingApplication
     with SimpleConfigAware
     with Logging
@@ -67,7 +67,7 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
   private var loadedDaos: ListMap[ChatHistoryDao, Map[Chat, ChatCache]] = ListMap.empty
 
   private var currentChatOption:      Option[(ChatHistoryDao, ChatWithDetails)] = None
-  private var loadMessagesInProgress: AtomicBoolean                             = new AtomicBoolean(false)
+  private var loadMessagesInProgress: Boolean                                   = false
 
   private val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
   private val htmlKit       = new ExtendedHtmlEditorKit(desktopOption)
@@ -111,7 +111,7 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
       }
     }
 
-    initialFileOption map (f => Future { Swing.onEDT { openDb(f) } })
+    initialFileOption map (f => Future { Swing.onEDT { openDb(f, remote = false) } })
   }
 
   lazy val ui = new BorderPanel {
@@ -131,7 +131,8 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
     val separatorBeforeDb = new Separator()
     val separatorAfterDb  = new Separator()
     val dbMenu = new Menu("Database") {
-      contents += menuItem("Open")(showOpenDbDialog())
+      contents += menuItem("Open")(showOpenDbDialog(remote = false))
+      contents += menuItem("Open (Remote)")(showOpenDbDialog(remote = true))
       contents += separatorBeforeDb
       contents += separatorAfterDb
     }
@@ -259,8 +260,8 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
   // Events
   //
 
-  def showOpenDbDialog(): Unit = {
-    val chooser = DataLoaders.openChooser
+  def showOpenDbDialog(remote: Boolean): Unit = {
+    val chooser = DataLoaders.openChooser(remote)
     for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
       val lastFile = new JFile(lastFileString)
       chooser.peer.setCurrentDirectory(lastFile.nearestExistingDir)
@@ -272,17 +273,17 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
       case FileChooser.Result.Approve if loadedDaos.keys.exists(_ isLoaded chooser.selectedFile.getParentFile) =>
         showWarning(s"File '${chooser.selectedFile}' is already loaded")
       case FileChooser.Result.Approve =>
-        openDb(chooser.selectedFile)
+        openDb(chooser.selectedFile, remote)
     }
   }
 
-  def openDb(file: JFile): Unit = {
+  def openDb(file: JFile, remote: Boolean): Unit = {
     checkEdt()
     freezeTheWorld("Loading data...")
     config.update(DataLoaders.LastFileKey, file.getAbsolutePath)
     Future { // To release UI lock
       try {
-        val dao = DataLoaders.load(file)
+        val dao = DataLoaders.load(file, remote)
         Swing.onEDT {
           try {
             loadDaoInEDT(dao)
@@ -549,8 +550,8 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
           chatList.replaceWith(loadedDaos.keys.toSeq)
           srcDao.close()
         case None =>
-          loadedDaos = loadedDaos + (dao -> Map.empty) // TODO: Reverse?
           chatList.append(dao)
+          loadedDaos = loadedDaos + (dao -> Map.empty) // TODO: Reverse?
       }
     }
     daoListChanged()
@@ -690,7 +691,7 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
     Future {
       MutationLock.synchronized {
         currentChatOption = Some(dao -> cwd)
-        loadMessagesInProgress set true
+        loadMessagesInProgress = true
       }
       // If the chat has been already rendered, restore previous document as-is
       if (loadedDaos(dao)(cwd.chat).msgDocOption.isEmpty) {
@@ -699,7 +700,7 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
       Swing.onEDTWait(MutationLock.synchronized {
         val doc = loadedDaos(dao)(cwd.chat).msgDocOption.get
         msgRenderer.render(doc, false)
-        loadMessagesInProgress set false
+        loadMessagesInProgress = false
         unfreezeTheWorld()
       })
     }
@@ -717,14 +718,18 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
               // Just scroll
               Swing.onEDTWait(msgRenderer.render(cache.msgDocOption.get, true))
             case _ =>
-              loadMessagesInProgress set true
+              MutationLock.synchronized {
+                loadMessagesInProgress = true
+              }
               loadFirstMessagesAndUpdateCache(dao, cwd)
           }
         case None =>
           () // NOOP
       }
       Swing.onEDT {
-        loadMessagesInProgress set false
+        MutationLock.synchronized {
+          loadMessagesInProgress = false
+        }
         unfreezeTheWorld()
       }
     }
@@ -742,14 +747,18 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
               // Just scroll
               Swing.onEDTWait(msgRenderer.render(cache.msgDocOption.get, false))
             case _ =>
-              loadMessagesInProgress set true
+              MutationLock.synchronized {
+                loadMessagesInProgress = true
+              }
               loadLastMessagesAndUpdateCache(dao, cwd)
           }
         case None =>
           () // NOOP
       }
       Swing.onEDT {
-        loadMessagesInProgress set false
+        MutationLock.synchronized {
+          loadMessagesInProgress = false
+        }
         unfreezeTheWorld()
       }
     }
@@ -763,13 +772,17 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
       currentChatOption match {
         case Some((dao, cwd)) =>
           // TODO: Don't replace a document if currently cached document already contains message?
-          loadMessagesInProgress set true
+          MutationLock.synchronized {
+            loadMessagesInProgress = true
+          }
           loadDateMessagesAndUpdateCache(dao, cwd, date)
         case None =>
           () // NOOP
       }
       Swing.onEDT {
-        loadMessagesInProgress set false
+        MutationLock.synchronized {
+          loadMessagesInProgress = false
+        }
         unfreezeTheWorld()
       }
     }
@@ -810,36 +823,54 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
       load: (ChatHistoryDao, ChatWithDetails, LoadStatus) => (IndexedSeq[Message], LoadStatus),
       addToRender: (ChatHistoryDao, ChatWithDetails, IndexedSeq[Message], LoadStatus) => MD
   ): Unit = {
-    currentChatOption match {
-      case _ if loadMessagesInProgress.get => log.debug("Loading messages: Already in progress")
-      case None                            => log.debug("Loading messages: No chat selected")
-      case Some((dao, cwd)) =>
-        val cache      = loadedDaos(dao)(cwd.chat)
-        val loadStatus = cache.loadStatusOption.get
-        log.debug(s"Loading messages: loadStatus = ${loadStatus}")
-        if (shouldLoad(loadStatus)) {
-          freezeTheWorld("Loading messages...")
-          msgRenderer.updateStarted()
-          loadMessagesInProgress set true
-          val f = Future {
-            Swing.onEDTWait(msgRenderer.prependLoading())
+    val chatInfoOption = MutationLock.synchronized {
+      currentChatOption match {
+        case _ if loadMessagesInProgress =>
+          log.debug("Loading messages: Already in progress")
+          None
+        case None =>
+          log.debug("Loading messages: No chat selected")
+          None
+        case Some((dao, cwd)) =>
+          val cache      = loadedDaos(dao)(cwd.chat)
+          val loadStatus = cache.loadStatusOption.get
+          log.debug(s"Loading messages: loadStatus = ${loadStatus}")
+          if (!shouldLoad(loadStatus)) {
+            None
+          } else {
             assert(loadStatus.firstOption.isDefined)
             assert(loadStatus.lastOption.isDefined)
-            val (addedMessages, loadStatus2) = load(dao, cwd, loadStatus)
-            log.debug(s"Loading messages: Loaded ${addedMessages.size} messages")
-            Swing.onEDTWait(MutationLock.synchronized {
-              val md =  addToRender(dao, cwd, addedMessages, loadStatus2)
-              log.debug("Loading messages: Reloaded message container")
-              updateCache(dao, cwd.chat, ChatCache(Some(md), Some(loadStatus2)))
-            })
+            loadMessagesInProgress = true
+            freezeTheWorld("Loading messages...")
+            Some((loadStatus, dao, cwd))
           }
-          f.onComplete(_ =>
-            Swing.onEDTWait(MutationLock.synchronized {
-              msgRenderer.updateFinished()
-              loadMessagesInProgress set false
-              unfreezeTheWorld()
-            }))
+      }
+    }
+    chatInfoOption match {
+      case Some((loadStatus, dao, cwd)) =>
+        msgRenderer.updateStarted()
+        val f = Future {
+          Swing.onEDTWait(msgRenderer.prependLoading())
+          val (addedMessages, loadStatus2) = load(dao, cwd, loadStatus)
+          log.debug(s"Loading messages: Loaded ${addedMessages.size} messages")
+          Swing.onEDTWait(MutationLock.synchronized {
+            val md = addToRender(dao, cwd, addedMessages, loadStatus2)
+            log.debug("Loading messages: Reloaded message container")
+            updateCache(dao, cwd.chat, ChatCache(Some(md), Some(loadStatus2)))
+          })
         }
+        f.onComplete(res => {
+          res.failed.toOption match {
+            case Some(th) => handleException(th)
+            case None =>
+              Swing.onEDTWait(MutationLock.synchronized {
+                msgRenderer.updateFinished()
+                loadMessagesInProgress = false
+                unfreezeTheWorld()
+              })
+          }
+        })
+      case None => /* NOOP */
     }
   }
 
@@ -872,25 +903,26 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
   }
 
   def loadDateMessagesAndUpdateCache(dao: ChatHistoryDao, cwd: ChatWithDetails, date: DateTime): Unit = {
-    val (msgsB, msgsA) = dao.messagesAroundDate(cwd.chat, date, MsgBatchLoadSize)
-    val msgs = msgsB ++ msgsA
-    Swing.onEDTWait {
-      val md = {
-        msgRenderer.render(dao, cwd, msgsA, false, true)
-        // FIXME: Viewport is not updated!
-        msgRenderer.updateStarted()
-        val md = msgRenderer.prepend(dao, cwd, msgsB, msgsB.size < MsgBatchLoadSize)
-        msgRenderer.updateFinished()
-        md
-      }
-      val loadStatus = LoadStatus(
-        firstOption  = msgs.headOption,
-        lastOption   = msgs.lastOption,
-        beginReached = msgsB.size < MsgBatchLoadSize,
-        endReached   = msgsA.size < MsgBatchLoadSize
-      )
-      updateCache(dao, cwd.chat, ChatCache(Some(md), Some(loadStatus)))
-    }
+    ??? // Dead code as of now
+    // val (msgsB, msgsA) = dao.messagesAroundDate(cwd.chat, date, MsgBatchLoadSize)
+    // val msgs = msgsB ++ msgsA
+    // Swing.onEDTWait {
+    //   val md = {
+    //     msgRenderer.render(dao, cwd, msgsA, false, true)
+    //     // FIXME: Viewport is not updated!
+    //     msgRenderer.updateStarted()
+    //     val md = msgRenderer.prepend(dao, cwd, msgsB, msgsB.size < MsgBatchLoadSize)
+    //     msgRenderer.updateFinished()
+    //     md
+    //   }
+    //   val loadStatus = LoadStatus(
+    //     firstOption  = msgs.headOption,
+    //     lastOption   = msgs.lastOption,
+    //     beginReached = msgsB.size < MsgBatchLoadSize,
+    //     endReached   = msgsA.size < MsgBatchLoadSize
+    //   )
+    //   updateCache(dao, cwd.chat, ChatCache(Some(md), Some(loadStatus)))
+    // }
   }
 
   /** Asynchronously apply the given change (under mutation lock) and refresh UI to reflect it */
@@ -1039,22 +1071,27 @@ class MainFrameApp(grpcDataLoader: GrpcDataLoader) //
       s"WhatsApp text export"
     ) { f => f.getName.startsWith("WhatsApp Chat with ") && f.getName.endsWith(".txt") }
 
-    val openChooser = new FileChooser(null) {
+    def openChooser(remote: Boolean): FileChooser = new FileChooser(null) {
       title = "Select a database to open"
-      peer.addChoosableFileFilter(h2ff)
+      if (!remote) {
+        peer.addChoosableFileFilter(h2ff)
+      }
       peer.addChoosableFileFilter(tgFf)
       peer.addChoosableFileFilter(androidFf)
       peer.addChoosableFileFilter(waTextFf)
-      peer.addChoosableFileFilter(gts5610Ff)
+      if (!remote) {
+        peer.addChoosableFileFilter(gts5610Ff)
+      }
     }
 
-    def load(file: JFile): ChatHistoryDao = {
+    def load(file: JFile, remote: Boolean): ChatHistoryDao = {
       val f = file.getParentFile
-      if (h2ff.accept(file)) {
+      if (!remote && h2ff.accept(file)) {
         h2.loadData(f)
       } else if (tgFf.accept(file) || androidFf.accept(file) || waTextFf.accept(file)) {
-        grpcDataLoader.loadData(file)
-      } else if (gts5610Ff.accept(file)) {
+        val loader = if (remote) grpcRemoteDataLoader else grpcEagerDataLoader
+        loader.loadData(file)
+      } else if (!remote && gts5610Ff.accept(file)) {
         gts5610.loadData(f)
       } else {
         throw new IllegalStateException("Unknown file type!")

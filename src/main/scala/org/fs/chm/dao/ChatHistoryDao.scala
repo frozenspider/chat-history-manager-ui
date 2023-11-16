@@ -37,11 +37,15 @@ trait ChatHistoryDao extends AutoCloseable {
   /** Contains myself as the first element. Order must be stable. Method is expected to be fast. */
   def users(dsUuid: PbUuid): Seq[User]
 
-  def userOption(dsUuid: PbUuid, id: Long): Option[User]
+  def userOption(dsUuid: PbUuid, id: Long): Option[User] = {
+    users(dsUuid).find(_.id == id)
+  }
 
   def chats(dsUuid: PbUuid): Seq[ChatWithDetails]
 
-  def chatOption(dsUuid: PbUuid, id: Long): Option[ChatWithDetails]
+  def chatOption(dsUuid: PbUuid, id: Long): Option[ChatWithDetails] = {
+    chats(dsUuid).find(_.chat.id == id)
+  }
 
   /** Return N messages after skipping first M of them. Trivial pagination in a nutshell. */
   def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message]
@@ -87,12 +91,10 @@ trait ChatHistoryDao extends AutoCloseable {
    */
   def messagesSliceLength(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): Int
 
-  /** Returns N messages before and N at-or-after the given date */
-  def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message])
+  // /** Returns N messages before and N at-or-after the given date */
+  // def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message])
 
   def messageOption(chat: Chat, source_id: MessageSourceId): Option[Message]
-
-  def messageOptionByInternalId(chat: Chat, internal_id: MessageInternalId): Option[Message]
 
   def isMutable: Boolean = this.isInstanceOf[MutableChatHistoryDao]
 

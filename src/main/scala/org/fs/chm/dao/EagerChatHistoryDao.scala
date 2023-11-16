@@ -64,8 +64,6 @@ class EagerChatHistoryDao(
 
   override def users(dsUuid: PbUuid): Seq[User] = myself1 +: users1.filter(_ != myself1)
 
-  override def userOption(dsUuid: PbUuid, id: Long): Option[User] = users1.find(_.id == id)
-
   private val chats1: Seq[Chat] = chatsWithMessages.keys.toSeq
 
   override def chats(dsUuid: PbUuid): Seq[ChatWithDetails] = {
@@ -74,17 +72,12 @@ class EagerChatHistoryDao(
     }.sortBy(_.lastMsgOption.map(- _.timestamp).getOrElse(Long.MaxValue)) // Minus used to reverse order
   }
 
-  override def chatOption(dsUuid: PbUuid, id: Long): Option[ChatWithDetails] = chatsWithMessages find (_._1.id == id) map {
-    case (c, msgs) => ChatWithDetails(c, msgs.lastOption, chatMembers(c))
-  }
-
   private def chatMembers(chat: Chat): Seq[User] = {
     val me = myself(chat.dsUuid)
-    me +: (chat.memberIds
+    me +: chat.memberIds
       .filter(_ != me.id)
       .map(mId => users1.find(_.id == mId).getOrElse(throw new IllegalStateException(s"No member with id ${mId} found for chat ${chat.qualifiedName}")))
-      .toSeq
-      .sortBy(_.id))
+      .sortBy(_.id)
   }
 
   override def messagesBeforeImpl(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message] = {
@@ -118,19 +111,19 @@ class EagerChatHistoryDao(
     messagesSliceImpl(chat, msgId1, msgId2).length
   }
 
-  def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
-    val dateTs    = date.unixTimestamp
-    val messages  = chatsWithMessages(chat)
-    val idx       = messages.indexWhere(m => m.timestamp >= dateTs)
-    if (idx == -1) {
-      // Not found
-      (lastMessages(chat, limit), IndexedSeq.empty)
-    } else {
-      val msgsBefore = messages.slice(idx - limit, idx)
-      val msgsAfter  = messages.slice(idx, idx + limit)
-      (msgsBefore, msgsAfter)
-    }
-  }
+//  def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
+//    val dateTs    = date.unixTimestamp
+//    val messages  = chatsWithMessages(chat)
+//    val idx       = messages.indexWhere(m => m.timestamp >= dateTs)
+//    if (idx == -1) {
+//      // Not found
+//      (lastMessages(chat, limit), IndexedSeq.empty)
+//    } else {
+//      val msgsBefore = messages.slice(idx - limit, idx)
+//      val msgsAfter  = messages.slice(idx, idx + limit)
+//      (msgsBefore, msgsAfter)
+//    }
+//  }
 
   override def scrollMessages(chat: Chat, offset: Int, limit: Int): IndexedSeq[Message] = {
     chatsWithMessages.get(chat) map (_.slice(offset, offset + limit)) getOrElse IndexedSeq.empty
@@ -142,9 +135,6 @@ class EagerChatHistoryDao(
 
   override def messageOption(chat: Chat, id: MessageSourceId): Option[Message] =
     chatsWithMessages.get(chat) flatMap (_ find (_.sourceIdOption contains id))
-
-  override def messageOptionByInternalId(chat: Chat, id: MessageInternalId): Option[Message] =
-    chatsWithMessages.get(chat) flatMap (_ find (_.internalId == id))
 
   /** Get a copy of this DAO with shifted time of all timestamps in the dataset to accommodate timezone differences */
   def copyWithShiftedDatasetTime(dsUuid: PbUuid, hrs: Int): EagerChatHistoryDao = {

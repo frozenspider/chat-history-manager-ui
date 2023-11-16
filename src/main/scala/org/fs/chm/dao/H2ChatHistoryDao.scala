@@ -92,10 +92,6 @@ class H2ChatHistoryDao(
     usersCache(dsUuid)._2
   } ensuring (us => us.head == myself(dsUuid))
 
-  def userOption(dsUuid: PbUuid, id: Long): Option[User] = {
-    usersCache(dsUuid)._2.find(_.id == id)
-  }
-
   private def chatMembers(chat: Chat): Seq[User] = {
     val allUsers = users(chat.dsUuid)
     val me = myself(chat.dsUuid)
@@ -203,10 +199,6 @@ class H2ChatHistoryDao(
     }((res, ms) => s"${res} messages counted in ${ms} ms [messagesSliceLength]")
   }
 
-  def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
-    ???
-  }
-
   override def messageOption(chat: Chat, id: MessageSourceId): Option[Message] = {
     logPerformance {
       materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectOptionBySourceId(chat, id).map(_.toIndexedSeq))
@@ -216,15 +208,6 @@ class H2ChatHistoryDao(
         .map(_._2)
     }((res, ms) => s"Message fetched in ${ms} ms [messageOption]")
   }
-
-  override def messageOptionByInternalId(chat: Chat, id: MessageInternalId): Option[Message] =
-    logPerformance {
-      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectOption(chat, id).map(_.toIndexedSeq))
-        .transact(txctr)
-        .unsafeRunSync()
-        .headOption
-        .map(_._2)
-    }((res, ms) => s"Message fetched in ${ms} ms [messageOptionByInternalId]")
 
   def copyAllFrom(dao: ChatHistoryDao): Unit = {
     StopWatch.measureAndCall {
