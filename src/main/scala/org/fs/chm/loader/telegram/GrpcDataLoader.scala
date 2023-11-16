@@ -28,7 +28,7 @@ class GrpcDataLoader(rpcPort: Int) extends DataLoader[EagerChatHistoryDao] {
     val serverPort = rpcPort + 1
     log.info(s"Starting callback server at ${serverPort}")
     val server: Server = ServerBuilder.forPort(serverPort)
-      .addService(MyselfChooserGrpc.bindService(new MyselfChooserImpl, ExecutionContext.global))
+      .addService(ChooseMyselfServiceGrpc.bindService(new ChooseMyselfImpl, ExecutionContext.global))
       .addService(ProtoReflectionService.newInstance())
       .build.start
     sys.addShutdownHook {
@@ -44,7 +44,7 @@ class GrpcDataLoader(rpcPort: Int) extends DataLoader[EagerChatHistoryDao] {
     myselfChooserServer
     StopWatch.measureAndCall {
       val response: ParseHistoryFileResponse = tryWrappingExceptions {
-        val blockingStub = HistoryLoaderGrpc.blockingStub(channel)
+        val blockingStub = HistoryLoaderServiceGrpc.blockingStub(channel)
         blockingStub.parseHistoryFile(request)
       }
       val root = new JFile(response.rootFile).getAbsoluteFile
@@ -62,7 +62,7 @@ class GrpcDataLoader(rpcPort: Int) extends DataLoader[EagerChatHistoryDao] {
     }((_, ms) => log.info(s"Telegram history loaded in ${ms} ms (via gRPC)"))
   }
 
-  private class MyselfChooserImpl extends MyselfChooserGrpc.MyselfChooser {
+  private class ChooseMyselfImpl extends ChooseMyselfServiceGrpc.ChooseMyselfService {
     override def chooseMyself(request: ChooseMyselfRequest): Future[ChooseMyselfResponse] = {
       try {
         val myselfIdx = EntityUtils.chooseMyself(request.users)

@@ -13,9 +13,8 @@ Compile / sourceManaged  := baseDirectory.value / "src_managed" / "main" / "scal
 Test    / sourceManaged  := baseDirectory.value / "src_managed" / "test" / "scala"
 
 // ScalaPB config
-val protobufPath = settingKey[File]("Path to the protobuf files")
-
-Compile / PB.protoSources := {
+val protobufDir = settingKey[File]("Path to the protobuf files")
+protobufDir := {
   def fail(msg: String) = throw new sbt.MessageOnlyException(s"Can't compile protobufs: $msg")
   val pbFileName = "protobuf-path.txt"
   val pbConfigFile = baseDirectory.value / pbFileName
@@ -30,8 +29,10 @@ Compile / PB.protoSources := {
   if (pbPathFile.list((_, n) => n.toLowerCase.endsWith(".proto")).isEmpty) {
     fail(s"${pbPath} aka ${pbPathFile.getAbsolutePath} (specified in /${pbFileName}) has no *.proto files!")
   }
-  Seq(pbPathFile)
+  pbPathFile
 }
+
+Compile / PB.protoSources := Seq(protobufDir.value)
 
 Compile / PB.targets := Seq(
   scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
