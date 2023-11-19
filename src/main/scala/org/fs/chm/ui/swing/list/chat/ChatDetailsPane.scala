@@ -7,6 +7,7 @@ import scala.swing._
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.ChatType
+import org.fs.chm.protobuf.SourceType
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.general.field.TextComponent
 
@@ -32,6 +33,12 @@ class ChatDetailsPane(
       }),
       ("Image:", Some(if (cwd.chat.imgPathOption.isDefined) "(Yes)" else "(None)")),
       ("Messages:", Some(cwd.chat.msgCount.toString)),
+      ("Source Type:", Some(cwd.chat.sourceType match {
+        case SourceType.TextImport => "Text import"
+        case SourceType.Telegram   => "Telegram"
+        case SourceType.WhatsappDb => "WhatsApp"
+        case SourceType.TinderDb   => "Tinder"
+      })),
       ("", Some("")),
       ("ID:", Some(cwd.chat.id.toReadableId)),
       ("Dataset ID:", Some(cwd.chat.dsUuid.value)),
