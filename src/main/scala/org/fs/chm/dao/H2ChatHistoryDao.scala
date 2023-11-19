@@ -544,13 +544,13 @@ class H2ChatHistoryDao(
       sql"BACKUP TO $path".update.run
 
     object datasets {
-      private val colsFr = fr"uuid, alias, source_type"
+      private val colsFr = fr"uuid, alias"
 
       lazy val selectAll: ConnectionIO[Seq[Dataset]] =
         (fr"SELECT" ++ colsFr ++ fr"FROM datasets").query[Dataset].to[Seq]
 
       def insert(ds: Dataset): ConnectionIO[Int] =
-        (fr"INSERT INTO datasets (" ++ colsFr ++ fr") VALUES (${ds.uuid}, ${ds.alias}, ${ds.sourceType})").update.run
+        (fr"INSERT INTO datasets (" ++ colsFr ++ fr") VALUES (${ds.uuid}, ${ds.alias})").update.run
 
       def rename(dsUuid: PbUuid, newName: String): ConnectionIO[Int] =
         sql"UPDATE datasets SET alias = ${newName} WHERE uuid = ${dsUuid}".update.run
@@ -617,7 +617,7 @@ class H2ChatHistoryDao(
     }
 
     object chats {
-      private val colsFr     = fr"ds_uuid, id, name, type, img_path"
+      private val colsFr     = fr"ds_uuid, id, name, source_type, type, img_path"
 
       private def selectFr(dsUuid: PbUuid) =
         (fr"SELECT" ++ colsFr ++ fr","
@@ -649,10 +649,10 @@ class H2ChatHistoryDao(
       def select(dsUuid: PbUuid, id: ChatId): ConnectionIO[Option[Chat]] =
         (selectFr(dsUuid) ++ fr"AND c.id = ${id}").query[RawChat].option.map(_ map Raws.toChat)
 
-      def insert(srcDsRoot: DatasetRoot, dstDsRoot: DatasetRoot, c: Chat) = {
+      def insert(srcDsRoot: DatasetRoot, dstDsRoot: DatasetRoot, c: Chat): ConnectionIO[Int] = {
         val rc = Raws.fromChat(srcDsRoot, dstDsRoot, c)
         (fr"INSERT INTO chats (" ++ colsFr ++ fr") VALUES ("
-          ++ fr"${rc.dsUuid}, ${rc.id}, ${rc.nameOption}, ${rc.tpe}, ${rc.imgPathOption}"
+          ++ fr"${rc.dsUuid}, ${rc.id}, ${rc.nameOption}, ${rc.sourceType}, ${rc.tpe}, ${rc.imgPathOption}"
           ++ fr")").update.run
       }
 
@@ -982,7 +982,8 @@ class H2ChatHistoryDao(
       Chat(
         dsUuid        = rc.dsUuid,
         id            = rc.id,
-        nameOption     = rc.nameOption,
+        nameOption    = rc.nameOption,
+        sourceType    = rc.sourceType,
         tpe           = rc.tpe,
         imgPathOption = rc.imgPathOption map (_.makeRelativePath),
         memberIds     = rc.memberIdsOption map (_.toSeq) getOrElse Seq.empty,
@@ -1242,6 +1243,7 @@ class H2ChatHistoryDao(
         dsUuid          = c.dsUuid,
         id              = c.id,
         nameOption      = c.nameOption,
+        sourceType      = c.sourceType,
         tpe             = c.tpe,
         imgPathOption   = c.imgPathOption flatMap copyFileFrom(srcDsRoot, dstDsRoot, c.id)(Subpath.Root, None),
         memberIdsOption = Some(c.memberIds.toList),
@@ -1592,6 +1594,7 @@ object H2ChatHistoryDao {
       dsUuid: PbUuid,
       id: Long,
       nameOption: Option[String],
+      sourceType: SourceType,
       tpe: ChatType,
       imgPathOption: Option[String],
       memberIdsOption: Option[List[Long]],
@@ -1679,6 +1682,21 @@ object H2ChatHistoryDao {
   implicit protected val msgSourceIdMeta: Meta[MessageSourceId] =
     implicitly[Meta[Long]].asInstanceOf[Meta[MessageSourceId]]
 
+  implicit val sourceTypeFromString: Get[SourceType] = Get[String].tmap {
+    case "text_import" => SourceType.TextImport
+    case "telegram"    => SourceType.Telegram
+    case "whatsapp"    => SourceType.WhatsappDb
+    case "tinder"      => SourceType.TinderDb
+  }
+
+  implicit val sourceTypeToString: Put[SourceType] = Put[String].tcontramap {
+    case SourceType.TextImport => "text_import"
+    case SourceType.Telegram   => "telegram"
+    case SourceType.WhatsappDb => "whatsapp"
+    case SourceType.TinderDb   => "tinder"
+    case x => unexpectedCase(x)
+  }
+
   implicit val chatTypeFromString: Get[ChatType] = Get[String].tmap {
     case "personal"      => ChatType.Personal
     case "private_group" => ChatType.PrivateGroup
@@ -1728,22 +1746,19 @@ object H2ChatHistoryDao {
   private case class DatasetMapping(
     uuid      : PbUuid,
     alias     : String,
-    sourceType: String
   )
 
   implicit val datasetRead: Read[Dataset] = Read[DatasetMapping].map { dm =>
     Dataset(
       uuid       = dm.uuid,
       alias      = dm.alias,
-      sourceType = dm.sourceType,
     )
   }
 
   implicit val datasetWrite: Write[Dataset] = Write[DatasetMapping].contramap { d =>
     DatasetMapping(
       uuid       = d.uuid,
-      alias      = d.alias,
-      sourceType = d.sourceType,
+      alias      = d.alias
     )
   }
 

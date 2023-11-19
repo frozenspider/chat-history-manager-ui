@@ -44,6 +44,7 @@ object TestUtils {
       dsUuid        = dsUuid,
       id            = id,
       nameOption    = Some("Chat " + nameSuffix),
+      sourceType    = SourceType.Telegram,
       tpe           = ChatType.PrivateGroup,
       imgPathOption = None,
       memberIds     = memberIds.toSeq,
@@ -57,6 +58,7 @@ object TestUtils {
       dsUuid        = dsUuid,
       id            = idx,
       nameOption    = user.prettyNameOption,
+      sourceType    = SourceType.Telegram,
       tpe           = ChatType.Personal,
       imgPathOption = None,
       memberIds     = memberIds.toSeq,
@@ -114,7 +116,6 @@ object TestUtils {
     val ds = Dataset(
       uuid       = randomUuid,
       alias      = "Dataset " + nameSuffix,
-      sourceType = "test source"
     )
     val users1       = users map (_ copy (dsUuid = ds.uuid))
     val dataPathRoot = makeTempDir("eager").asInstanceOf[DatasetRoot]

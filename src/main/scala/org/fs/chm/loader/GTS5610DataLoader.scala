@@ -14,6 +14,7 @@ import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.ChatType
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
+import org.fs.chm.protobuf.SourceType
 import org.fs.chm.protobuf.User
 import org.fs.chm.utility.LangUtils._
 
@@ -92,6 +93,7 @@ class GTS5610DataLoader extends DataLoader[EagerChatHistoryDao] {
               dsUuid        = dataset.uuid,
               id            = userId,
               nameOption    = user.firstNameOption,
+              sourceType    = SourceType.TextImport,
               tpe           = ChatType.Personal,
               imgPathOption = None,
               memberIds     = Seq(myself, user).map(_.id),

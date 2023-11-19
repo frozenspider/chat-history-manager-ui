@@ -404,6 +404,7 @@ trait TelegramDataLoaderCommon {
       dsUuid = dsUuid,
       id = id,
       nameOption = getStringOpt(jv, "name", true),
+      sourceType = SourceType.Telegram,
       tpe = tpe,
       imgPathOption = None,
       memberIds = memberIds.toSeq,

@@ -239,7 +239,6 @@ object MessagesAreaContainer {
       val ds = Dataset(
         uuid       = randomUuid,
         alias      = "Dataset",
-        sourceType = "test source"
       )
       val users = (1 to 2) map (createUser(ds.uuid, _))
       val msgs = IndexedSeq(

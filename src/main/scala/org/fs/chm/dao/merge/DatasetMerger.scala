@@ -255,7 +255,6 @@ class DatasetMerger(
         val newDs = Dataset(
           uuid       = randomUuid,
           alias      = masterDs.alias + " (merged)",
-          sourceType = masterDs.sourceType
         )
         newDao.insertDataset(newDs)
 

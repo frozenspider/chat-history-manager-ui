@@ -153,7 +153,6 @@ object SelectMergeUsersDialog {
       val ds = Dataset(
         uuid       = randomUuid,
         alias      = "Dataset",
-        sourceType = "test source"
       )
       val users        = usersProducer(ds)
       val chat         = createGroupChat(ds.uuid, 1, "One", users.map(_.id), 0)

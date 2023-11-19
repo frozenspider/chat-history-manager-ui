@@ -70,7 +70,7 @@ class DatasetItem[I <: Panel](
   private def delete(): Unit = {
     Dialog.showConfirmation(
       title   = "Delete dataset",
-      message = s"Are you sure you want to delete a dataset '${ds.alias}', sourced from ${ds.sourceType}?"
+      message = s"Are you sure you want to delete a dataset '${ds.alias}'?"
     ) match {
       case Dialog.Result.Yes => deleteDatasetCallbackOption.get.deleteDataset(dao, ds.uuid)
       case _                 => // NOOP

@@ -55,7 +55,6 @@ object Entities {
     Dataset(
       uuid = randomUuid,
       alias = s"${srcAlias} data loaded @ " + DateTime.now().toString("yyyy-MM-dd"),
-      sourceType = srcType
     )
 
   private def makeSearchableString(rteVal: RichTextElement.Val): String = {
