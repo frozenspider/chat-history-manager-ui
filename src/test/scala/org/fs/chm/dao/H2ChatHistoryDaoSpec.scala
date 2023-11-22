@@ -120,30 +120,30 @@ class H2ChatHistoryDaoSpec //
       assert(after2 === allH2.tail.take(numMsgsToTake))
       assert((after2, h2Root, h2Cwd) =~= (tgDao.messagesAfter(tgChat, allTg(1), numMsgsToTake), tgRoot, tgCwd))
 
-      val between1 = h2dao.messagesBetween(h2Chat, allH2.head, allH2.last)
+      val between1 = h2dao.messagesSlice(h2Chat, allH2.head.internalIdTyped, allH2.last.internalIdTyped)
       assert(between1 === allH2)
-      assert((between1, h2Root, h2Cwd) =~= (tgDao.messagesBetween(tgChat, allTg.head, allTg.last), tgRoot, tgCwd))
+      assert((between1, h2Root, h2Cwd) =~= (tgDao.messagesSlice(tgChat, allTg.head.internalIdTyped, allTg.last.internalIdTyped), tgRoot, tgCwd))
 
-      val between2 = h2dao.messagesBetween(h2Chat, allH2(1), allH2.last)
+      val between2 = h2dao.messagesSlice(h2Chat, allH2(1).internalIdTyped, allH2.last.internalIdTyped)
       assert(between2 === allH2.tail)
-      assert((between2, h2Root, h2Cwd) =~= (tgDao.messagesBetween(tgChat, allTg(1), allTg.last), tgRoot, tgCwd))
+      assert((between2, h2Root, h2Cwd) =~= (tgDao.messagesSlice(tgChat, allTg(1).internalIdTyped, allTg.last.internalIdTyped), tgRoot, tgCwd))
 
-      val between3 = h2dao.messagesBetween(h2Chat, allH2.head, allH2.dropRight(1).last)
+      val between3 = h2dao.messagesSlice(h2Chat, allH2.head.internalIdTyped, allH2.dropRight(1).last.internalIdTyped)
       assert(between3 === allH2.dropRight(1))
-      assert((between3, h2Root, h2Cwd) =~= (tgDao.messagesBetween(tgChat, allTg.head, allTg.dropRight(1).last), tgRoot, tgCwd))
+      assert((between3, h2Root, h2Cwd) =~= (tgDao.messagesSlice(tgChat, allTg.head.internalIdTyped, allTg.dropRight(1).last.internalIdTyped), tgRoot, tgCwd))
 
-      val countBetween1 = h2dao.countMessagesBetween(h2Chat, allH2.head, allH2.last)
-      assert(countBetween1 === allH2.size - 2)
-      assert(countBetween1 === tgDao.countMessagesBetween(tgChat, allTg.head, allTg.last))
+      val countBetween1 = h2dao.messagesSliceLength(h2Chat, allH2.head.internalIdTyped, allH2.last.internalIdTyped)
+      assert(countBetween1 === allH2.size)
+      assert(countBetween1 === tgDao.messagesSliceLength(tgChat, allTg.head.internalIdTyped, allTg.last.internalIdTyped))
 
       if (countBetween1 > 0) {
-        val countBetween2 = h2dao.countMessagesBetween(h2Chat, allH2(1), allH2.last)
-        assert(countBetween2 === allH2.size - 3)
-        assert(countBetween2 === tgDao.countMessagesBetween(tgChat, allTg(1), allTg.last))
+        val countBetween2 = h2dao.messagesSliceLength(h2Chat, allH2(1).internalIdTyped, allH2.last.internalIdTyped)
+        assert(countBetween2 === allH2.size - 1)
+        assert(countBetween2 === tgDao.messagesSliceLength(tgChat, allTg(1).internalIdTyped, allTg.last.internalIdTyped))
 
-        val countBetween3 = h2dao.countMessagesBetween(h2Chat, allH2.head, allH2.dropRight(1).last)
-        assert(countBetween3 === allH2.size - 3)
-        assert(countBetween3 === tgDao.countMessagesBetween(tgChat, allTg.head, allTg.dropRight(1).last))
+        val countBetween3 = h2dao.messagesSliceLength(h2Chat, allH2.head.internalIdTyped, allH2.dropRight(1).last.internalIdTyped)
+        assert(countBetween3 === allH2.size - 1)
+        assert(countBetween3 === tgDao.messagesSliceLength(tgChat, allTg.head.internalIdTyped, allTg.dropRight(1).last.internalIdTyped))
       }
 
       val last = h2dao.lastMessages(h2Chat, numMsgsToTake)
@@ -230,21 +230,22 @@ class H2ChatHistoryDaoSpec //
     } {
       val clue                        = s"Dao is ${dao.getClass.getSimpleName}"
       implicit def toMessage(i: Long) = msgs.find(_.sourceIdOption contains i).get
+      implicit def toMessageInternalid(i: Long) = msgs.find(_.sourceIdOption contains i).get.internalIdTyped
 
       assert(dao.messagesBefore(chat, 3L, 10) === Seq(msgs.head), clue)
 
       assert(dao.messagesAfter(chat, 7L, 10) === Seq(msgs.last), clue)
 
-      assert(dao.messagesBetween(chat, 3L, 3L) === Seq(msgs.head), clue)
-      assert(dao.messagesBetween(chat, 7L, 7L) === Seq(msgs.last), clue)
+      assert(dao.messagesSlice(chat, 3L, 3L) === Seq(msgs.head), clue)
+      assert(dao.messagesSlice(chat, 7L, 7L) === Seq(msgs.last), clue)
 
-      assert(dao.countMessagesBetween(chat, 3L, 3L) === 0, clue)
-      assert(dao.countMessagesBetween(chat, 3L, 4L) === 0, clue)
-      assert(dao.countMessagesBetween(chat, 3L, 5L) === 1, clue)
+      assert(dao.messagesSliceLength(chat, 3L, 3L) === 1, clue)
+      assert(dao.messagesSliceLength(chat, 3L, 4L) === 2, clue)
+      assert(dao.messagesSliceLength(chat, 3L, 5L) === 3, clue)
 
-      assert(dao.countMessagesBetween(chat, 7L, 7L) === 0, clue)
-      assert(dao.countMessagesBetween(chat, 6L, 7L) === 0, clue)
-      assert(dao.countMessagesBetween(chat, 5L, 7L) === 1, clue)
+      assert(dao.messagesSliceLength(chat, 7L, 7L) === 1, clue)
+      assert(dao.messagesSliceLength(chat, 6L, 7L) === 2, clue)
+      assert(dao.messagesSliceLength(chat, 5L, 7L) === 3, clue)
     }
   }
 

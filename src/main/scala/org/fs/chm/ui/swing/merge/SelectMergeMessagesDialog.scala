@@ -221,7 +221,7 @@ object SelectMergeMessagesDialog {
             assert(lastOption.isEmpty)
             CxtFetchResult.Continuous(fetch1)
           } else {
-            val nBetween = dao.countMessagesBetween(chat, subfetch1.last, fetch2.head)
+            val nBetween = dao.messagesSliceLength(chat, subfetch1.last.internalIdTyped, fetch2.head.internalIdTyped) - 2
             CxtFetchResult.Discrete(subfetch1, nBetween, fetch2)
           }
         }

@@ -187,20 +187,20 @@ class H2ChatHistoryDao(
     }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesAfterImpl]")
   }
 
-  override def messagesBetweenImpl(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] = {
+  override def messagesSliceImpl(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): IndexedSeq[Message] = {
     logPerformance {
-      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectBetweenInc(chat, msg1, msg2))
+      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectBetweenInc(chat, msgId1, msgId2))
         .transact(txctr)
         .unsafeRunSync()
         .map(_._2)
-    }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesBetweenImpl]")
+    }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesSliceImpl]")
   }
 
-  override def countMessagesBetween(chat: Chat, msg1: Message, msg2: Message): Int = {
+  override def messagesSliceLength(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): Int = {
     logPerformance {
-      require(msg1.timestamp <= msg2.timestamp)
-      queries.rawMessages.countBetweenExc(chat, msg1, msg2).transact(txctr).unsafeRunSync()
-    }((res, ms) => s"${res} messages counted in ${ms} ms [countMessagesBetween]")
+      require(msgId1 <= msgId2)
+      queries.rawMessages.countBetweenInc(chat, msgId1, msgId2).transact(txctr).unsafeRunSync()
+    }((res, ms) => s"${res} messages counted in ${ms} ms [messagesSliceLength]")
   }
 
   def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
@@ -792,19 +792,18 @@ class H2ChatHistoryDao(
           ++ fr"AND (m.time > ${msg.time} OR (m.time = ${msg.time} AND m.internal_id >= ${msg.internalId}))"
           ++ orderAsc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
 
-      def selectBetweenInc(chat: Chat, msg1: Message, msg2: Message): ConnectionIO[IndexedSeq[RawMessage]] =
+      def selectBetweenInc(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): ConnectionIO[IndexedSeq[RawMessage]] =
         (selectAllByChatFr(chat.dsUuid, chat.id)
-          ++ fr"AND (m.time > ${msg1.time} OR (m.time = ${msg1.time} AND m.internal_id >= ${msg1.internalId}))"
-          ++ fr"AND (m.time < ${msg2.time} OR (m.time = ${msg2.time} AND m.internal_id <= ${msg2.internalId}))"
+          ++ fr"AND m.internal_id >= ${msgId1}"
+          ++ fr"AND m.internal_id <= ${msgId2}"
           ++ orderAsc).query[RawMessage].to[IndexedSeq]
 
-      def countBetweenExc(chat: Chat, msg1: Message, msg2: Message): ConnectionIO[Int] =
+      def countBetweenInc(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): ConnectionIO[Int] =
         (fr"""
           SELECT COUNT(*) FROM messages m
-          """ ++ whereDsAndChatFr(chat.dsUuid, chat.id) ++ fr"""
-          AND (m.time > ${msg1.time} OR (m.time = ${msg1.time} AND m.internal_id > ${msg1.internalId}))
-          AND (m.time < ${msg2.time} OR (m.time = ${msg2.time} AND m.internal_id < ${msg2.internalId}))
-        """).query[Int].unique
+          """ ++ whereDsAndChatFr(chat.dsUuid, chat.id)
+          ++ fr"AND m.internal_id >= ${msgId1}"
+          ++ fr"AND m.internal_id <= ${msgId2}").query[Int].unique
 
       def insert(m: RawMessage): ConnectionIO[MessageInternalId] =
         (fr"INSERT INTO messages (" ++ colsPureFr ++ fr") VALUES ("

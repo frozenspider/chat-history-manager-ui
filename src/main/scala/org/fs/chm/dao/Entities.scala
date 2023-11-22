@@ -444,6 +444,9 @@ object Entities {
   //
 
   implicit class ExtendedMessage(msg: Message) {
+    def internalIdTyped: MessageInternalId =
+      msg.internalId.asInstanceOf[MessageInternalId]
+
     def sourceIdTypedOption: Option[MessageSourceId] =
       msg.sourceIdOption.map(_.asInstanceOf[MessageSourceId])
 

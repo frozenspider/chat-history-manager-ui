@@ -103,28 +103,19 @@ class EagerChatHistoryDao(
     messages.slice(idx, upperLimit)
   }
 
-  override def messagesBetweenImpl(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] = {
-    require(msg1.internalId <= msg2.internalId)
+  override def messagesSliceImpl(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): IndexedSeq[Message] = {
+    require(msgId1 <= msgId2)
     val messages = chatsWithMessages(chat)
-    val idx1     = messages.indexWhere(_.internalId >= msg1.internalId)
-    val idx2     = messages.lastIndexWhere(_.internalId <= msg2.internalId)
+    val idx1     = messages.indexWhere(_.internalId >= msgId1)
+    val idx2     = messages.lastIndexWhere(_.internalId <= msgId2)
     require(idx1 > -1, "Message 1 not found!")
     require(idx2 > -1, "Message 2 not found!")
     assert(idx2 >= idx1)
     messages.slice(idx1, idx2 + 1)
   }
 
-  override def countMessagesBetween(chat: Chat, msg1: Message, msg2: Message): Int = {
-    require(msg1.internalId <= msg2.internalId)
-    val between = messagesBetween(chat, msg1, msg2)
-    var size    = between.size
-    if (size == 0) {
-      0
-    } else {
-      if (between.head.internalId == msg1.internalId) size -= 1
-      if (between.last.internalId == msg2.internalId) size -= 1
-      math.max(size, 0)
-    }
+  override def messagesSliceLength(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): Int = {
+    messagesSliceImpl(chat, msgId1, msgId2).length
   }
 
   def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {

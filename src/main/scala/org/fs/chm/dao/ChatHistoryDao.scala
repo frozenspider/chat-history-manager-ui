@@ -75,18 +75,17 @@ trait ChatHistoryDao extends AutoCloseable {
    * Return N messages between the given ones (inclusive).
    * Messages must be present, so the result would contain at least one element (if both are the same message).
    */
-  final def messagesBetween(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message] =
-    messagesBetweenImpl(chat, msg1, msg2) ensuring (seq => seq.nonEmpty &&
-      seq.head.sourceIdOption == msg1.sourceIdOption && seq.head.internalId == msg1.internalId &&
-      seq.last.sourceIdOption == msg2.sourceIdOption && seq.last.internalId == msg2.internalId)
+  final def messagesSlice(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): IndexedSeq[Message] =
+    messagesSliceImpl(chat, msgId1, msgId2) ensuring (seq => seq.nonEmpty &&
+      seq.head.internalId == msgId1 && seq.last.internalId == msgId2)
 
-  protected def messagesBetweenImpl(chat: Chat, msg1: Message, msg2: Message): IndexedSeq[Message]
+  protected def messagesSliceImpl(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): IndexedSeq[Message]
 
   /**
-   * Count messages between the given ones (exclusive, unlike messagesBetween).
+   * Count messages between the given ones (inclusive).
    * Messages must be present.
    */
-  def countMessagesBetween(chat: Chat, msg1: Message, msg2: Message): Int
+  def messagesSliceLength(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): Int
 
   /** Returns N messages before and N at-or-after the given date */
   def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message])
