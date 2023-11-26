@@ -230,7 +230,7 @@ object SelectMergeMessagesDialog {
 
     private def fetchMsgsAfterInc(firstOption: Option[FirstMsg], howMany: Int): Seq[Message] = {
       firstOption map { first =>
-        dao.messagesAfter(chat, first, howMany)
+        dao.messagesAfter(chat, first.internalIdTyped, howMany)
       } getOrElse {
         dao.firstMessages(chat, howMany)
       }
@@ -238,7 +238,7 @@ object SelectMergeMessagesDialog {
 
     private def fetchMsgsBeforeInc(lastOption: Option[LastMsg], howMany: Int): Seq[Message] = {
       lastOption map { last =>
-        dao.messagesBefore(chat, last, howMany)
+        dao.messagesBefore(chat, last.internalIdTyped, howMany)
       } getOrElse {
         dao.lastMessages(chat, howMany)
       }

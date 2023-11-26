@@ -65,7 +65,7 @@ class DatasetMerger(
       fromMessageOption: Option[TM]
   ): Stream[IndexedSeq[TM]] = {
     val batch = fromMessageOption
-      .map(from => dao.messagesAfter(chat, from, BatchSize + 1).drop(1))
+      .map(from => dao.messagesAfter(chat, from.internalIdTyped, BatchSize + 1).drop(1))
       .getOrElse(dao.firstMessages(chat, BatchSize))
       .asInstanceOf[IndexedSeq[TM]]
     if (batch.isEmpty) {

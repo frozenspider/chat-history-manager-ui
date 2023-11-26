@@ -100,25 +100,25 @@ class H2ChatHistoryDaoSpec //
       assert(scroll2 === allH2.tail.take(numMsgsToTake))
       assert((scroll2, h2Root, h2Cwd) =~= (tgDao.scrollMessages(tgChat, 1, numMsgsToTake), tgRoot, tgCwd))
 
-      val before1 = h2dao.messagesBefore(h2Chat, allH2.last, numMsgsToTake)
+      val before1 = h2dao.messagesBefore(h2Chat, allH2.last.internalIdTyped, numMsgsToTake)
       assert(before1.last === allH2.last)
       assert(before1 === allH2.takeRight(numMsgsToTake))
-      assert((before1, h2Root, h2Cwd) =~= (tgDao.messagesBefore(tgChat, allTg.last, numMsgsToTake), tgRoot, tgCwd))
+      assert((before1, h2Root, h2Cwd) =~= (tgDao.messagesBefore(tgChat, allTg.last.internalIdTyped, numMsgsToTake), tgRoot, tgCwd))
 
-      val before2 = h2dao.messagesBefore(h2Chat, allH2.dropRight(1).last, numMsgsToTake)
+      val before2 = h2dao.messagesBefore(h2Chat, allH2.dropRight(1).last.internalIdTyped, numMsgsToTake)
       assert(before2.last === allH2.dropRight(1).last)
       assert(before2 === allH2.dropRight(1).takeRight(numMsgsToTake))
-      assert((before2, h2Root, h2Cwd) =~= (tgDao.messagesBefore(tgChat, allTg.dropRight(1).last, numMsgsToTake), tgRoot, tgCwd))
+      assert((before2, h2Root, h2Cwd) =~= (tgDao.messagesBefore(tgChat, allTg.dropRight(1).last.internalIdTyped, numMsgsToTake), tgRoot, tgCwd))
 
-      val after1 = h2dao.messagesAfter(h2Chat, allH2.head, numMsgsToTake)
+      val after1 = h2dao.messagesAfter(h2Chat, allH2.head.internalIdTyped, numMsgsToTake)
       assert(after1.head === allH2.head)
       assert(after1 === allH2.take(numMsgsToTake))
-      assert((after1, h2Root, h2Cwd) =~= (tgDao.messagesAfter(tgChat, allTg.head, numMsgsToTake), tgRoot, tgCwd))
+      assert((after1, h2Root, h2Cwd) =~= (tgDao.messagesAfter(tgChat, allTg.head.internalIdTyped, numMsgsToTake), tgRoot, tgCwd))
 
-      val after2 = h2dao.messagesAfter(h2Chat, allH2(1), numMsgsToTake)
+      val after2 = h2dao.messagesAfter(h2Chat, allH2(1).internalIdTyped, numMsgsToTake)
       assert(after2.head === allH2(1))
       assert(after2 === allH2.tail.take(numMsgsToTake))
-      assert((after2, h2Root, h2Cwd) =~= (tgDao.messagesAfter(tgChat, allTg(1), numMsgsToTake), tgRoot, tgCwd))
+      assert((after2, h2Root, h2Cwd) =~= (tgDao.messagesAfter(tgChat, allTg(1).internalIdTyped, numMsgsToTake), tgRoot, tgCwd))
 
       val between1 = h2dao.messagesSlice(h2Chat, allH2.head.internalIdTyped, allH2.last.internalIdTyped)
       assert(between1 === allH2)

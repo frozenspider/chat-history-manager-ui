@@ -87,17 +87,17 @@ class EagerChatHistoryDao(
       .sortBy(_.id))
   }
 
-  override def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
+  override def messagesBeforeImpl(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message] = {
     val messages = chatsWithMessages(chat)
-    val idx      = messages.lastIndexWhere(_.internalId <= msg.internalId)
+    val idx      = messages.lastIndexWhere(_.internalId <= msgId)
     require(idx > -1, "Message not found!")
     val lowerLimit = (idx - limit + 1) max 0
     messages.slice(lowerLimit, idx + 1)
   }
 
-  override def messagesAfterImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
+  override def messagesAfterImpl(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message] = {
     val messages = chatsWithMessages(chat)
-    val idx      = messages.indexWhere(_.internalId >= msg.internalId)
+    val idx      = messages.indexWhere(_.internalId >= msgId)
     require(idx > -1, "Message not found!")
     val upperLimit = (idx + limit) min messages.size
     messages.slice(idx, upperLimit)

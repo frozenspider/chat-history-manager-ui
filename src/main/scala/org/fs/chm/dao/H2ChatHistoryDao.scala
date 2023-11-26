@@ -168,19 +168,19 @@ class H2ChatHistoryDao(
     }((res, ms) => s"${res.size} messages fetched in ${ms} ms [lastMessages]")
   }
 
-  override def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
+  override def messagesBeforeImpl(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message] = {
     logPerformance {
-      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectBeforeInversedInc(chat, msg, limit))
+      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectBeforeInversedInc(chat, msgId, limit))
         .transact(txctr)
         .unsafeRunSync()
         .reverse
         .map(_._2)
     }((res, ms) => s"${res.size} messages fetched in ${ms} ms [messagesBeforeImpl]")
-  } ensuring (seq => seq.nonEmpty && seq.last.internalId == msg.internalId)
+  }
 
-  override def messagesAfterImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] = {
+  override def messagesAfterImpl(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message] = {
     logPerformance {
-      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectAfterInc(chat, msg, limit))
+      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectAfterInc(chat, msgId, limit))
         .transact(txctr)
         .unsafeRunSync()
         .map(_._2)
@@ -782,14 +782,14 @@ class H2ChatHistoryDao(
       def selectLastInversed(chat: Chat, limit: Int): ConnectionIO[IndexedSeq[RawMessage]] =
         (selectAllByChatFr(chat.dsUuid, chat.id) ++ orderDesc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
 
-      def selectBeforeInversedInc(chat: Chat, msg: Message, limit: Int): ConnectionIO[IndexedSeq[RawMessage]] =
+      def selectBeforeInversedInc(chat: Chat, msgId: MessageInternalId, limit: Int): ConnectionIO[IndexedSeq[RawMessage]] =
         (selectAllByChatFr(chat.dsUuid, chat.id)
-          ++ fr"AND (m.time < ${msg.time} OR (m.time = ${msg.time} AND m.internal_id <= ${msg.internalId}))"
+          ++ fr"AND m.internal_id <= ${msgId}"
           ++ orderDesc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
 
-      def selectAfterInc(chat: Chat, msg: Message, limit: Int): ConnectionIO[IndexedSeq[RawMessage]] =
+      def selectAfterInc(chat: Chat, msgId: MessageInternalId, limit: Int): ConnectionIO[IndexedSeq[RawMessage]] =
         (selectAllByChatFr(chat.dsUuid, chat.id)
-          ++ fr"AND (m.time > ${msg.time} OR (m.time = ${msg.time} AND m.internal_id >= ${msg.internalId}))"
+          ++ fr"AND m.internal_id >= ${msgId}"
           ++ orderAsc ++ withLimit(limit)).query[RawMessage].to[IndexedSeq]
 
       def selectBetweenInc(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): ConnectionIO[IndexedSeq[RawMessage]] =

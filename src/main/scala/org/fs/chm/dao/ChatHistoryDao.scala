@@ -55,29 +55,29 @@ trait ChatHistoryDao extends AutoCloseable {
    * Return N messages before the given one (inclusive).
    * Message must be present, so the result would contain at least one element.
    */
-  final def messagesBefore(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] =
-    messagesBeforeImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit &&
-      seq.last.sourceIdOption == msg.sourceIdOption && seq.last.internalId == msg.internalId)
+  final def messagesBefore(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message] =
+    messagesBeforeImpl(chat, msgId, limit).ensuring(seq =>
+      seq.nonEmpty && seq.size <= limit && seq.last.internalId == msgId)
 
-  protected def messagesBeforeImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message]
+  protected def messagesBeforeImpl(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message]
 
   /**
    * Return N messages after the given one (inclusive).
    * Message must be present, so the result would contain at least one element.
    */
-  final def messagesAfter(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message] =
-    messagesAfterImpl(chat, msg, limit) ensuring (seq => seq.nonEmpty && seq.size <= limit &&
-      seq.head.sourceIdOption == msg.sourceIdOption && seq.head.internalId == msg.internalId)
+  final def messagesAfter(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message] =
+    messagesAfterImpl(chat, msgId, limit).ensuring(seq =>
+      seq.nonEmpty && seq.size <= limit && seq.head.internalId == msgId)
 
-  protected def messagesAfterImpl(chat: Chat, msg: Message, limit: Int): IndexedSeq[Message]
+  protected def messagesAfterImpl(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message]
 
   /**
    * Return N messages between the given ones (inclusive).
    * Messages must be present, so the result would contain at least one element (if both are the same message).
    */
   final def messagesSlice(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): IndexedSeq[Message] =
-    messagesSliceImpl(chat, msgId1, msgId2) ensuring (seq => seq.nonEmpty &&
-      seq.head.internalId == msgId1 && seq.last.internalId == msgId2)
+    messagesSliceImpl(chat, msgId1, msgId2).ensuring(seq =>
+      seq.nonEmpty && seq.head.internalId == msgId1 && seq.last.internalId == msgId2)
 
   protected def messagesSliceImpl(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): IndexedSeq[Message]
 
