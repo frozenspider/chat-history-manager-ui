@@ -9,15 +9,15 @@ import org.fs.utility.StopWatch
 
 class GrpcRemoteDataLoader(channel: ManagedChannel) extends DataLoader[GrpcChatHistoryDao] {
   override protected def loadDataInner(path: JFile, createNew: Boolean): GrpcChatHistoryDao = {
-    val request = ParseRequest(path = path.getAbsolutePath)
+    val request = ParseLoadRequest(path = path.getAbsolutePath)
     log.info(s"Sending gRPC parse request (remote): ${request}")
     StopWatch.measureAndCall {
-      val response: ParseReturnHandleResponse = GrpcDataLoaderHolder.wrapRequestNoParams {
+      val response: LoadResponse = GrpcDataLoaderHolder.wrapRequestNoParams {
         val blockingStub = HistoryLoaderServiceGrpc.blockingStub(channel)
-        blockingStub.parseReturnHandle(request)
+        blockingStub.load(request)
       }
       val loaded = response.file.get
-      val rpcStub = ChatHistoryDaoServiceGrpc.blockingStub(channel)
+      val rpcStub = HistoryLoaderServiceGrpc.blockingStub(channel)
       new GrpcChatHistoryDao(loaded.key, loaded.name + " (remote)", rpcStub)
     }((_, ms) => log.info(s"Telegram history loaded in ${ms} ms (via gRPC, remote)"))
   }

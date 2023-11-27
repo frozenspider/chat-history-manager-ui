@@ -11,12 +11,12 @@ import org.fs.utility.StopWatch
 
 class GrpcEagerDataLoader(channel: ManagedChannel) extends DataLoader[EagerChatHistoryDao] {
   override protected def loadDataInner(path: JFile, createNew: Boolean): EagerChatHistoryDao = {
-    val request = ParseRequest(path = path.getAbsolutePath)
+    val request = ParseLoadRequest(path = path.getAbsolutePath)
     log.info(s"Sending gRPC parse request (eager): ${request}")
     StopWatch.measureAndCall {
-      val response: ParseReturnFullResponse = GrpcDataLoaderHolder.wrapRequestNoParams {
-        val blockingStub = HistoryLoaderServiceGrpc.blockingStub(channel)
-        blockingStub.parseReturnFull(request)
+      val response: ParseResponse = GrpcDataLoaderHolder.wrapRequestNoParams {
+        val blockingStub = HistoryParserServiceGrpc.blockingStub(channel)
+        blockingStub.parse(request)
       }
       val root = new JFile(response.rootFile).getAbsoluteFile
       require(root.exists, s"Dataset root ${root} does not exist!")

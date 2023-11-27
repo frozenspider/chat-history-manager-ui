@@ -3,12 +3,12 @@ package org.fs.chm.dao
 import java.io.File
 
 import org.fs.chm.dao.Entities._
-import org.fs.chm.protobuf.ChatHistoryDaoServiceGrpc._
+import org.fs.chm.protobuf.HistoryLoaderServiceGrpc._
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.Logging
 import org.fs.chm.loader.GrpcDataLoaderHolder.wrapRequest
 
-class GrpcChatHistoryDao(key: String, override val name: String, rpcStub: ChatHistoryDaoServiceBlockingStub)
+class GrpcChatHistoryDao(key: String, override val name: String, rpcStub: HistoryLoaderServiceBlockingStub)
   extends ChatHistoryDao with Logging {
 
   override lazy val storagePath: File = {

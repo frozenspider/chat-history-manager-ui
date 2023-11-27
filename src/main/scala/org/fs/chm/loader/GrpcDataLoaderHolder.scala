@@ -29,7 +29,6 @@ class GrpcDataLoaderHolder(rpcPort: Int) extends Logging {
     sys.addShutdownHook {
       server.shutdown()
     }
-    Thread.sleep(1000)
     server
   }
 
