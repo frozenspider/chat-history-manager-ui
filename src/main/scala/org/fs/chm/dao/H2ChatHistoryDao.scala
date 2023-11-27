@@ -265,35 +265,8 @@ class H2ChatHistoryDao(
         }((_, t) => log.info(s"Dataset inserted in $t ms"))
 
         // Sanity checks
-        StopWatch.measureAndCall {
-          log.info(s"Running sanity checks on dataset ${ds.uuid.value}")
-          val ds2Option = datasets.find(_.uuid == ds.uuid)
-          assert(
-            ds2Option.isDefined && ds == ds2Option.get,
-            s"dataset differs:\nWas    $ds\nBecame ${ds2Option getOrElse "<none>"}")
-          assert(myself1 == myself(ds.uuid), s"'myself' differs:\nWas    $myself1\nBecame ${myself(ds.uuid)}")
-          assert(
-            dao.users(ds.uuid) == users(ds.uuid),
-            s"Users differ:\nWas    ${dao.users(ds.uuid)}\nBecame ${users(ds.uuid)}")
-          val chats1 = dao.chats(ds.uuid)
-          val chats2 = chats(ds.uuid)
-          assert(chats1.size == chats2.size, s"Chat size differs:\nWas    ${chats1.size}\nBecame ${chats2.size}")
-          for (((cwd1, cwd2), i) <- chats1.zip(chats2).zipWithIndex) {
-            StopWatch.measureAndCall {
-              log.info(s"Checking chat '${cwd1.chat.nameOption.getOrElse("")}' with ${cwd1.chat.msgCount} messages")
-              assert(cwd1.chat == cwd2.chat, s"Chat #$i differs:\nWas    ${cwd1.chat}\nBecame ${cwd2.chat}")
-              val messages1 = dao.lastMessages(cwd1.chat, cwd1.chat.msgCount + 1)
-              val messages2 = lastMessages(cwd2.chat, cwd2.chat.msgCount + 1)
-              assert(
-                messages1.size == messages1.size,
-                s"Messages size for chat ${cwd1.chat.qualifiedName} (#$i) differs:\nWas    ${messages1.size}\nBecame ${messages2.size}")
-              for (((m1, m2), j) <- messages1.zip(messages2).zipWithIndex) {
-                assert((m1, srcDsRoot, cwd1) =~= (m2, dstDsRoot, cwd2),
-                       s"Message #$j for chat ${cwd1.chat.qualifiedName} (#$i) differs:\nWas    $m1\nBecame $m2")
-              }
-            }((_, t) => log.info(s"Chat checked in $t ms"))
-          }
-        }((_, t) => log.info(s"Dataset checked in $t ms"))
+        log.info(s"Running sanity checks on dataset ${ds.uuid.value}")
+        ChatHistoryDao.ensureDataSourcesAreEqual(dao, this, ds.uuid);
       }
     }((_, t) => log.info(s"All done in $t ms"))
   }

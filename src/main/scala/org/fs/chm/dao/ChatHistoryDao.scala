@@ -10,6 +10,8 @@ import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.PbUuid
 import org.fs.chm.protobuf.User
 import org.fs.chm.utility.LangUtils._
+import org.fs.chm.utility.Logging
+import org.fs.utility.StopWatch
 
 /**
  * Everything except for messages should be pre-cached and readily available.
@@ -104,6 +106,56 @@ trait ChatHistoryDao extends AutoCloseable {
 
   /** Whether given data path is the one loaded in this DAO */
   def isLoaded(storagePath: JFile): Boolean
+}
+
+object ChatHistoryDao extends Logging {
+  private val BATCH_SIZE = 5_000
+
+  def ensureDataSourcesAreEqual(srcDao: ChatHistoryDao, dstDao: ChatHistoryDao, dsUuid: PbUuid): Unit = {
+    StopWatch.measureAndCall {
+      // Dataset
+      val srcDsOption = srcDao.datasets.find(_.uuid == dsUuid)
+      require(srcDsOption.isDefined, "Source dataset not found")
+      val srcDs = srcDsOption.get;
+      val dstDaoOption = dstDao.datasets.find(_.uuid == dsUuid)
+      require(
+        dstDaoOption.isDefined && srcDs == dstDaoOption.get,
+        s"dataset differs:\nWas    $srcDs\nBecame ${dstDaoOption getOrElse "<none>"}")
+      val srcDsRoot = srcDao.datasetRoot(dsUuid)
+      val dstDsRoot = dstDao.datasetRoot(dsUuid)
+
+      // Users
+      require(srcDao.myself(dsUuid) == dstDao.myself(dsUuid), s"'myself' differs:\nWas    ${srcDao.myself(dsUuid)}\nBecame ${dstDao.myself(dsUuid)}")
+      require(
+        srcDao.users(dsUuid) == dstDao.users(dsUuid),
+        s"Users differ:\nWas    ${srcDao.users(dsUuid)}\nBecame ${dstDao.users(dsUuid)}")
+      val srcChats = srcDao.chats(dsUuid)
+      val dstChats = dstDao.chats(dsUuid)
+      require(srcChats.size == dstChats.size, s"Chat size differs:\nWas    ${srcChats.size}\nBecame ${dstChats.size}")
+      for (((srcCwd, dstCwd), i) <- srcChats.zip(dstChats).zipWithIndex) {
+        StopWatch.measureAndCall {
+          log.info(s"Checking chat '${srcCwd.chat.nameOption.getOrElse("")}' with ${srcCwd.chat.msgCount} messages")
+          require(srcCwd.chat == dstCwd.chat, s"Chat #$i differs:\nWas    ${srcCwd.chat}\nBecame ${dstCwd.chat}")
+
+          var offset = 0
+          while (offset < srcCwd.chat.msgCount) {
+            val srcMsgs = srcDao.scrollMessages(srcCwd.chat, offset, BATCH_SIZE)
+            val dstMsgs = dstDao.scrollMessages(dstCwd.chat, offset, BATCH_SIZE)
+            require(srcMsgs.nonEmpty && dstMsgs.nonEmpty,
+              "Empty messages batch returned, either flawed batching logic or incorrect srcChat.msgCount")
+            require(
+              srcMsgs.size == dstMsgs.size,
+              s"Messages size for chat ${srcCwd.chat.qualifiedName} (#$i) differs:\nWas    ${srcMsgs.size}\nBecame ${dstMsgs.size}")
+            for (((m1, m2), j) <- srcMsgs.zip(dstMsgs).zipWithIndex) {
+              require((m1, srcDsRoot, srcCwd) =~= (m2, dstDsRoot, dstCwd),
+                s"Message #$j for chat ${srcCwd.chat.qualifiedName} (#$i) differs:\nWas    $m1\nBecame $m2")
+            }
+            offset += srcMsgs.length
+          }
+        }((_, t) => log.info(s"Chat checked in $t ms"))
+      }
+    }((_, t) => log.info(s"Dataset checked in $t ms"))
+  }
 }
 
 trait MutableChatHistoryDao extends ChatHistoryDao {

@@ -20,6 +20,7 @@ import org.fs.chm.BuildInfo
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
+import org.fs.chm.dao.GrpcChatHistoryDao
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
@@ -323,6 +324,30 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
+  def verifyRemoteDao(rpcDao: GrpcChatHistoryDao): Unit = {
+    checkEdt()
+    freezeTheWorld("Verifying...")
+    Future {
+      val path = rpcDao.storagePath
+      try {
+        grpcHolder.grpcDaoService.getDao(path) match {
+          case Some(localDao) =>
+            for (ds <- localDao.datasets) {
+              // This throws and exception if something is wrong
+              ChatHistoryDao.ensureDataSourcesAreEqual(localDao, rpcDao, ds.uuid)
+            }
+            showWarning("DAOs match!")
+          case None => showError(s"DAO with path ${path} wasn't found!")
+        }
+      } catch {
+        case th: Throwable =>
+          showError(s"Found a problem: ${th}")
+      } finally {
+        Swing.onEDT { unfreezeTheWorld() }
+      }
+    }
+  }
+
   def showPickH2Dialog(callback: JFile => Unit): Unit = {
     val chooser = DataLoaders.saveAsChooser
     for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
@@ -577,6 +602,11 @@ class MainFrameApp(grpcPort: Int) //
     for (dao <- loadedDaos.keys) {
       val daoMenu = new Menu(dao.name) {
         contents += menuItem("Save As...")(saveAs(dao))
+        dao match {
+          case dao: GrpcChatHistoryDao => contents += menuItem("Verify")(verifyRemoteDao(dao))
+          case _ => // NOOP
+        }
+        contents += new Separator()
         contents += menuItem("Close")(closeDb(dao))
       }
       dbEmbeddedMenu.append(daoMenu)

@@ -13,35 +13,47 @@ import org.fs.chm.dao.Entities.MessageSourceId
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.Logging
 
+/** Acts as server API for a local history DAO */
 class GrpcDaoService(doLoad: File => ChatHistoryDao)
   extends HistoryLoaderServiceGrpc.HistoryLoaderService
     with Logging {
   implicit private val ec: ExecutionContextExecutor = ExecutionContext.global
 
-  private val lock = new Object
+  // Only hash map access is syncronized, DAO themselves should be thread-safe already
+  private val Lock = new Object
 
-  private var daoMap: Map[String, ChatHistoryDao] = Map.empty
+  private var DaoMap: Map[String, ChatHistoryDao] = Map.empty
+
+  def getDao[T](path: File): Option[ChatHistoryDao] = {
+    Lock.synchronized {
+      DaoMap.values.find(_.storagePath == path)
+    }
+  }
 
   /** Parse/open a history file and return its DAO handle */
   override def load(request: ParseLoadRequest): Future[LoadResponse] = {
     val file = new File(request.path)
     Future {
-      val key = request.path
-      val dao = doLoad(file)
-      lock.synchronized {
-        daoMap = daoMap + (key -> dao)
+      loggingRequest(request) {
+        val key = request.path
+        val dao = doLoad(file)
+        Lock.synchronized {
+          DaoMap = DaoMap + (key -> dao)
+        }
+        LoadResponse(Some(LoadedFile(key = request.path, name = dao.name)))
       }
-      LoadResponse(Some(LoadedFile(key = request.path, name = dao.name)))
     }
   }
 
   override def getLoadedFiles(request: GetLoadedFilesRequest): Future[GetLoadedFilesResponse] = {
-    val loaded = lock.synchronized {
-      for {
-        (key, dao) <- daoMap
-      } yield LoadedFile(key, dao.name)
-    }
-    Future.successful(GetLoadedFilesResponse(loaded.toSeq))
+    Future.successful(loggingRequest(request) {
+      val loaded = Lock.synchronized {
+        for {
+          (key, dao) <- DaoMap
+        } yield LoadedFile(key, dao.name)
+      }
+      GetLoadedFilesResponse(loaded.toSeq)
+    })
   }
 
   override def name(request: NameRequest): Future[NameResponse] =
@@ -111,11 +123,12 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
   override def close(request: CloseRequest): Future[CloseResponse] = {
     Future {
       val key = request.key
-      lock.synchronized {
-        val dao = daoMap(key)
-        daoMap = daoMap - key
-        dao.close();
+      val dao = Lock.synchronized {
+        val dao = DaoMap(key)
+        DaoMap = DaoMap - key
+        dao
       }
+      dao.close();
       CloseResponse(success = true)
     }
   }
@@ -126,20 +139,28 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
 
   private def withDao[T](req: Object, key: String)(f: ChatHistoryDao => T): Future[T] = {
     Future {
-      try {
-        log.debug(s"<<< Request:  ${req.toString.take(150)}")
-        val res = lock.synchronized {
-          f(daoMap(key))
+      loggingRequest(req) {
+        val dao = Lock.synchronized {
+          DaoMap(key)
         }
-        log.debug(s">>> Response: ${res.toString.linesIterator.next().take(150)}")
-        res
-      } catch {
-        case th: Throwable =>
-          log.debug(s">>> Failure:  ${th.toString.take(150)}")
-          throw th
+        f(dao)
       }
     }
   }
+
+  private def loggingRequest[T](req: Object)(logic: => T): T = {
+    log.debug(s">>> Request:  ${req.toString.take(150)}")
+    try {
+      val res = logic
+      log.debug(s"<<< Response: ${res.toString.linesIterator.next().take(150)}")
+      res
+    } catch {
+      case th: Throwable =>
+        log.debug(s"<<< Failure:  ${th.toString.take(150)}")
+        throw th
+    }
+  }
+
 
   private implicit def toInternal(l: Long): MessageInternalId = l.asInstanceOf[MessageInternalId]
 }

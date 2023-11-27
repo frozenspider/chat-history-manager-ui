@@ -8,6 +8,7 @@ import org.fs.chm.protobuf._
 import org.fs.chm.utility.Logging
 import org.fs.chm.loader.GrpcDataLoaderHolder.wrapRequest
 
+/** Acts as a remote history DAO */
 class GrpcChatHistoryDao(key: String, override val name: String, rpcStub: HistoryLoaderServiceBlockingStub)
   extends ChatHistoryDao with Logging {
 
