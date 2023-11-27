@@ -209,6 +209,15 @@ class H2ChatHistoryDao(
     }((res, ms) => s"Message fetched in ${ms} ms [messageOption]")
   }
 
+  override def messageOptionByInternalId(chat: Chat, id: MessageInternalId): Option[Message] =
+    logPerformance {
+      materializeMessagesQuery(chat.dsUuid, queries.rawMessages.selectOption(chat, id).map(_.toIndexedSeq))
+        .transact(txctr)
+        .unsafeRunSync()
+        .headOption
+        .map(_._2)
+    }((res, ms) => s"Message fetched in ${ms} ms [messageOptionByInternalId]")
+
   def copyAllFrom(dao: ChatHistoryDao): Unit = {
     StopWatch.measureAndCall {
       log.info("Starting insertAll")

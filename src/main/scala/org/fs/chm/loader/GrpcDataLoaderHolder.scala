@@ -12,18 +12,19 @@ import org.fs.chm.protobuf._
 import org.fs.chm.utility.EntityUtils
 import org.fs.chm.utility.Logging
 
-class GrpcDataLoaderHolder(rpcPort: Int) extends Logging {
+class GrpcDataLoaderHolder(rpcPort: Int, grpcDaoService: GrpcDaoService) extends Logging {
   private val channel: ManagedChannel = ManagedChannelBuilder
     .forAddress("127.0.0.1", rpcPort)
     .maxInboundMessageSize(Integer.MAX_VALUE)
     .usePlaintext()
     .build()
 
-  private lazy val myselfChooserServer: Server = {
+  private lazy val server: Server = {
     val serverPort = rpcPort + 1
     log.info(s"Starting callback server at ${serverPort}")
     val server: Server = ServerBuilder.forPort(serverPort)
       .addService(ChooseMyselfServiceGrpc.bindService(new ChooseMyselfImpl, ExecutionContext.global))
+      .addService(HistoryLoaderServiceGrpc.bindService(grpcDaoService, ExecutionContext.global))
       .addService(ProtoReflectionService.newInstance())
       .build.start
     sys.addShutdownHook {
@@ -32,7 +33,7 @@ class GrpcDataLoaderHolder(rpcPort: Int) extends Logging {
     server
   }
 
-  myselfChooserServer
+  server
 
   lazy val eagerLoader = new GrpcEagerDataLoader(channel)
 

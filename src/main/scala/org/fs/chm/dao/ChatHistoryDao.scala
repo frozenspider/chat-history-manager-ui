@@ -94,7 +94,9 @@ trait ChatHistoryDao extends AutoCloseable {
   // /** Returns N messages before and N at-or-after the given date */
   // def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message])
 
-  def messageOption(chat: Chat, source_id: MessageSourceId): Option[Message]
+  def messageOption(chat: Chat, sourceId: MessageSourceId): Option[Message]
+
+  def messageOptionByInternalId(chat: Chat, internalId: MessageInternalId): Option[Message]
 
   def isMutable: Boolean = this.isInstanceOf[MutableChatHistoryDao]
 

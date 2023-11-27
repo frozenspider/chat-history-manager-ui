@@ -68,8 +68,12 @@ class GrpcChatHistoryDao(key: String, override val name: String, rpcStub: Histor
     wrapRequest(MessagesSliceRequest(key, chat, msgId1, msgId2))(rpcStub.messagesSliceLen).messagesCount
   }
 
-  override def messageOption(chat: Chat, source_id: MessageSourceId): Option[Message] = {
-    wrapRequest(MessageOptionRequest(key, chat, source_id))(rpcStub.messageOption).message
+  override def messageOption(chat: Chat, id: MessageSourceId): Option[Message] = {
+    wrapRequest(MessageOptionRequest(key, chat, id))(rpcStub.messageOption).message
+  }
+
+  override def messageOptionByInternalId(chat: Chat, internalId: MessageInternalId): Option[Message] = {
+    wrapRequest(MessageOptionRequest(key, chat, internalId))(rpcStub.messageOption).message
   }
 
   override def isLoaded(storagePath: File): Boolean = {

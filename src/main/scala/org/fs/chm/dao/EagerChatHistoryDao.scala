@@ -136,6 +136,9 @@ class EagerChatHistoryDao(
   override def messageOption(chat: Chat, id: MessageSourceId): Option[Message] =
     chatsWithMessages.get(chat) flatMap (_ find (_.sourceIdOption contains id))
 
+  override def messageOptionByInternalId(chat: Chat, id: MessageInternalId): Option[Message] =
+    chatsWithMessages.get(chat) flatMap (_ find (_.internalId == id))
+
   /** Get a copy of this DAO with shifted time of all timestamps in the dataset to accommodate timezone differences */
   def copyWithShiftedDatasetTime(dsUuid: PbUuid, hrs: Int): EagerChatHistoryDao = {
     val tsShift = hrs * 3600L

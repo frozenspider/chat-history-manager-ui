@@ -19,12 +19,12 @@ class GrpcRemoteDataLoader(channel: ManagedChannel) extends DataLoader[GrpcChatH
       val loaded = response.file.get
       val rpcStub = HistoryLoaderServiceGrpc.blockingStub(channel)
       new GrpcChatHistoryDao(loaded.key, loaded.name + " (remote)", rpcStub)
-    }((_, ms) => log.info(s"Telegram history loaded in ${ms} ms (via gRPC, remote)"))
+    }((_, ms) => log.info(s"Remote history loaded in ${ms} ms"))
   }
 }
 
 object GrpcRemoteDataLoader extends App {
-  val holder = new GrpcDataLoaderHolder(50051)
+  val holder = new GrpcDataLoaderHolder(50051, new GrpcDaoService(f => ???))
   holder.remoteLoader
   println("Press ENTER to terminate...")
   System.in.read();

@@ -30,12 +30,12 @@ class GrpcEagerDataLoader(channel: ManagedChannel) extends DataLoader[EagerChatH
         users1             = response.users,
         _chatsWithMessages = chatsWithMessagesLM
       )
-    }((_, ms) => log.info(s"Telegram history loaded in ${ms} ms (via gRPC, eager)"))
+    }((_, ms) => log.info(s"History loaded in ${ms} ms (via gRPC, eager)"))
   }
 }
 
 object GrpcEagerDataLoader extends App {
-  val holder = new GrpcDataLoaderHolder(50051)
+  val holder = new GrpcDataLoaderHolder(50051, new GrpcDaoService(f => ???))
   holder.eagerLoader
   println("Press ENTER to terminate...")
   System.in.read();

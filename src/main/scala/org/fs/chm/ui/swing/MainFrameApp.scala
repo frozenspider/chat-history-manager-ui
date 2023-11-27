@@ -47,7 +47,7 @@ import org.fs.utility.Imports._
 import org.fs.utility.StopWatch
 import org.slf4s.Logging
 
-class MainFrameApp(grpcEagerDataLoader: GrpcEagerDataLoader, grpcRemoteDataLoader: GrpcRemoteDataLoader) //
+class MainFrameApp(grpcPort: Int) //
     extends SimpleSwingApplication
     with SimpleConfigAware
     with Logging
@@ -72,6 +72,11 @@ class MainFrameApp(grpcEagerDataLoader: GrpcEagerDataLoader, grpcRemoteDataLoade
   private val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
   private val htmlKit       = new ExtendedHtmlEditorKit(desktopOption)
   private val chatSelGroup  = new ChatListItemSelectionGroup
+
+  private lazy val grpcHolder = {
+    val grpcDaoService = new GrpcDaoService(f => DataLoaders.load(f, remote = false));
+    new GrpcDataLoaderHolder(grpcPort, grpcDaoService)
+  }
 
   /*
    * TODO:
@@ -1089,7 +1094,7 @@ class MainFrameApp(grpcEagerDataLoader: GrpcEagerDataLoader, grpcRemoteDataLoade
       if (!remote && h2ff.accept(file)) {
         h2.loadData(f)
       } else if (tgFf.accept(file) || androidFf.accept(file) || waTextFf.accept(file)) {
-        val loader = if (remote) grpcRemoteDataLoader else grpcEagerDataLoader
+        val loader = if (remote) grpcHolder.remoteLoader else grpcHolder.eagerLoader
         loader.loadData(file)
       } else if (!remote && gts5610Ff.accept(file)) {
         gts5610.loadData(f)
