@@ -19,9 +19,10 @@ import org.fs.chm.utility.LangUtils._
  */
 object TestUtils {
 
-  val noUuid   = PbUuid("00000000-0000-0000-0000-000000000000")
-  val baseDate = DateTime.parse("2019-01-02T11:15:21")
-  val rnd      = new Random()
+  val noUuid      = PbUuid("00000000-0000-0000-0000-000000000000")
+  val baseDate    = DateTime.parse("2019-01-02T11:15:21")
+  val rnd         = new Random()
+  val tmpFileName = "whatever"
 
   def makeTempDir(suffix: String = "tmp"): File = {
     val dir = Files.createTempDirectory(s"java_chm-${suffix}_").toFile
@@ -120,7 +121,8 @@ object TestUtils {
     )
     val users1       = users map (_ copy (dsUuid = ds.uuid))
     val dataPathRoot = makeTempDir("eager").asInstanceOf[DatasetRoot]
-    val amend2 = amendMessage.curried(isMaster)(dataPathRoot)
+    val amend2       = amendMessage.curried(isMaster)(dataPathRoot)
+    Files.createFile(new File(dataPathRoot, tmpFileName).toPath)
     new EagerChatHistoryDao(
       name               = "Dao " + nameSuffix,
       _dataRootFile      = dataPathRoot,
@@ -163,8 +165,6 @@ object TestUtils {
   }
 
   trait EagerMutableDaoTrait extends MutableChatHistoryDao {
-    override def storagePath: File = ???
-
     override def insertDataset(ds: Dataset): Unit = ???
 
     override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = ???

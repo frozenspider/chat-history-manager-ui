@@ -25,8 +25,8 @@ import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.dao.merge.DatasetMergerLocal
+import org.fs.chm.dao.merge.DatasetMergerRemote
 import org.fs.chm.loader._
-import org.fs.chm.loader.telegram._
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.PbUuid
@@ -148,7 +148,8 @@ class MainFrameApp(grpcPort: Int) //
       contents += dbMenu
       contents += new Menu("Edit") {
         contents += menuItem("Users")(showUsersDialog())
-        contents += menuItem("Merge Datasets")(showSelectDatasetsToMergeDialog())
+        contents += menuItem("Merge Datasets")(showSelectDatasetsToMergeDialog(remote = false))
+        contents += menuItem("Merge Datasets (remote)")(showSelectDatasetsToMergeDialog(remote = true))
       }
     }
     (menuBar, dbEmbeddedMenu)
@@ -402,7 +403,7 @@ class MainFrameApp(grpcPort: Int) //
     Dialog.showMessage(title = "Users", message = outerPanel.peer, messageType = Dialog.Message.Plain)
   }
 
-  def showSelectDatasetsToMergeDialog(): Unit = {
+  def showSelectDatasetsToMergeDialog(remote: Boolean): Unit = {
     checkEdt()
     if (loadedDaos.isEmpty) {
       showWarning("Load a database first!")
@@ -411,7 +412,7 @@ class MainFrameApp(grpcPort: Int) //
     } else if (loadedDaos.keys.flatMap(_.datasets).size == 1) {
       showWarning("Only one dataset is loaded - nothing to merge.")
     } else {
-      val selectDsDialog = new SelectMergeDatasetDialog(loadedDaos.keys.toSeq)
+      val selectDsDialog = new SelectMergeDatasetDialog(loadedDaos.keys.toSeq, remote)
       selectDsDialog.visible = true
       selectDsDialog.selection foreach {
         case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
@@ -428,7 +429,16 @@ class MainFrameApp(grpcPort: Int) //
               val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
               selectChatsDialog.visible = true
               selectChatsDialog.selection foreach { chatsToMerge =>
-                val merger = new DatasetMergerLocal(masterDao, masterDs, slaveDao, slaveDs)
+                val merger = if (!remote) {
+                  new DatasetMergerLocal(masterDao, masterDs, slaveDao, slaveDs)
+                } else {
+                  new DatasetMergerRemote(
+                    grpcHolder.channel,
+                    masterDao.asInstanceOf[GrpcChatHistoryDao], masterDs,
+                    slaveDao.asInstanceOf[GrpcChatHistoryDao], slaveDs
+                  )
+                }
+                val sw = new StopWatch
                 val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge)
                 val activeUserIds = chatsToMerge
                   .flatMap(ctm => Seq(ctm.masterCwdOption, ctm.slaveCwdOption))

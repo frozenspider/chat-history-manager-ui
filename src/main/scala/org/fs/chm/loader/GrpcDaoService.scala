@@ -33,6 +33,13 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
     }
   }
 
+  /** For testing usage only! */
+  def addDao(key: String, dao: ChatHistoryDao): Unit = {
+    Lock.synchronized {
+      DaoMap = DaoMap + (key -> dao)
+    }
+  }
+
   override def saveAs(request: SaveAsRequest): Future[LoadedFile] = {
     throw new UnsupportedOperationException("GrpcDaoService.saveAs is not supported!")
   }
@@ -101,19 +108,6 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
     withDao(request, request.key)(dao => IsLoadedResponse(
       dao.isLoaded(new File(request.storagePath))))
 
-  override def close(request: CloseRequest): Future[CloseResponse] = {
-    Future {
-      val key = request.key
-      val dao = Lock.synchronized {
-        val dao = DaoMap(key)
-        DaoMap = DaoMap - key
-        dao
-      }
-      dao.close();
-      CloseResponse(success = true)
-    }
-  }
-
   //
   // Helpers
   //
@@ -146,16 +140,15 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
 
   class GrpcHistoryLoaderService extends HistoryLoaderServiceGrpc.HistoryLoaderService {
     /** Parse/open a history file and return its DAO handle */
-    override def load(request: ParseLoadRequest): Future[LoadResponse] = {
+    override def load(request: LoadRequest): Future[LoadResponse] = {
       val file = new File(request.path)
       Future {
         loggingRequest(request) {
-          val key = request.path
           val dao = doLoad(file)
           Lock.synchronized {
-            DaoMap = DaoMap + (key -> dao)
+            DaoMap = DaoMap + (request.key -> dao)
           }
-          LoadResponse(Some(LoadedFile(key = request.path, name = dao.name)))
+          LoadResponse(name = dao.name)
         }
       }
     }
@@ -169,6 +162,19 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
         }
         GetLoadedFilesResponse(loaded.toSeq)
       })
+    }
+
+    override def close(request: CloseRequest): Future[CloseResponse] = {
+      Future {
+        val key = request.key
+        val dao = Lock.synchronized {
+          val dao = DaoMap(key)
+          DaoMap = DaoMap - key
+          dao
+        }
+        dao.close();
+        CloseResponse(success = true)
+      }
     }
   }
 }

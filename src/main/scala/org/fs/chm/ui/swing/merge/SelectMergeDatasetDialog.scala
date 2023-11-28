@@ -11,20 +11,22 @@ import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.TableModel
 
 import org.fs.chm.dao.ChatHistoryDao
+import org.fs.chm.dao.GrpcChatHistoryDao
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.protobuf.Dataset
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 
 class SelectMergeDatasetDialog(
-    daos: Seq[ChatHistoryDao]
+    daos: Seq[ChatHistoryDao],
+    remote: Boolean
 ) extends CustomDialog[((MutableChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))](takeFullHeight = false) {
 
   // All values are lazy to be accessible from parent's constructor
 
   private lazy val TableWidth = 500
 
-  private lazy val daosWithDatasets        = daos map (dao => (dao, dao.datasets))
+  private lazy val daosWithDatasets        = daos filter (!remote || _.isInstanceOf[GrpcChatHistoryDao]) map (dao => (dao, dao.datasets))
   private lazy val mutableDaosWithDatasets = daosWithDatasets filter (_._1.isMutable)
 
   private lazy val masterTable = {
