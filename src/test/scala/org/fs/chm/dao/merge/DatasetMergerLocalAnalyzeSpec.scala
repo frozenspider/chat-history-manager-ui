@@ -24,7 +24,7 @@ class DatasetMergerLocalAnalyzeSpec //
 
   test("messages stream") {
     def messagesForChat1(helper: MergerHelper, fromOption: Option[Message]) =
-      helper.merger.messagesStream(helper.dao1, helper.d1cwd.chat, fromOption.asInstanceOf[Option[TaggedMessage.M]])
+      helper.merger.messagesStream(helper.dao1, helper.d1cwd.chat, fromOption.map(_.internalId).asInstanceOf[Option[TaggedMessageId.M]])
 
     val msgs = for (i <- 1 to maxId) yield createRegularMessage(i, rndUserId)
 
@@ -62,10 +62,10 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(1),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(1)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(1),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(1)
         )
       )
     )
@@ -78,10 +78,10 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(maxId),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId)
         )
       )
     )
@@ -94,8 +94,8 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Retain(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(maxId),
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId),
         )
       )
     )
@@ -109,18 +109,18 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Retain(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(4),
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(4),
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(5),
-          lastMasterMsg  = helper.d1msgs.bySrcId(10),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(5),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(10)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(5),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(10),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(5),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(10)
         ),
         MessagesMergeDiff.Retain(
-          firstMasterMsg = helper.d1msgs.bySrcId(11),
-          lastMasterMsg  = helper.d1msgs.bySrcId(maxId),
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(11),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId),
         )
       )
     )
@@ -135,20 +135,20 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(1),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(1)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(1),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(1)
         ),
         MessagesMergeDiff.Add(
-          firstSlaveMsg = helper.d2msgs.bySrcId(2),
-          lastSlaveMsg  = helper.d2msgs.bySrcId(2)
+          firstSlaveMsgId = helper.d2msgs.internalIdBySrcId(2),
+          lastSlaveMsgId  = helper.d2msgs.internalIdBySrcId(2)
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(3),
-          lastMasterMsg  = helper.d1msgs.bySrcId(3),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(3),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(3)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(3),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(3),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(3),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(3)
         )
       )
     )
@@ -163,22 +163,22 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(1),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(1)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(1),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(1)
         ),
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(2),
-          lastMasterMsg  = helper.d1msgs.bySrcId(2),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(2),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(2)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(2),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(2),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(2),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(2)
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(3),
-          lastMasterMsg  = helper.d1msgs.bySrcId(3),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(3),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(3)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(3),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(3),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(3),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(3)
         )
       )
     )
@@ -198,14 +198,14 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Add(
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId - 1)
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId - 1)
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(maxId),
-          lastMasterMsg  = helper.d1msgs.bySrcId(maxId),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(maxId),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(maxId),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(maxId),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId)
         )
       )
     )
@@ -226,16 +226,16 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(maxId - 1),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId - 1)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId - 1),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId - 1)
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(maxId),
-          lastMasterMsg  = helper.d1msgs.bySrcId(maxId),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(maxId),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(maxId),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(maxId),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId)
         )
       )
     )
@@ -255,20 +255,20 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(1),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(1)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(1),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(1)
         ),
         MessagesMergeDiff.Add(
-          firstSlaveMsg  = helper.d2msgs.bySrcId(2),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId - 1)
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(2),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId - 1)
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(maxId),
-          lastMasterMsg  = helper.d1msgs.bySrcId(maxId),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(maxId),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(maxId),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(maxId),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId)
         )
       )
     )
@@ -289,22 +289,22 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(1),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(1)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(1),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(1)
         ),
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(2),
-          lastMasterMsg  = helper.d1msgs.bySrcId(maxId - 1),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(2),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId - 1)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(2),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId - 1),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(2),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId - 1)
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(maxId),
-          lastMasterMsg  = helper.d1msgs.bySrcId(maxId),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(maxId),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(maxId),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(maxId),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId)
         )
       )
     )
@@ -324,14 +324,14 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(1),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(1)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(1),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(1)
         ),
         MessagesMergeDiff.Add(
-          firstSlaveMsg  = helper.d2msgs.bySrcId(2),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId)
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(2),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId)
         )
       )
     )
@@ -352,16 +352,16 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(1),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(1)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(1),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(1)
         ),
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(2),
-          lastMasterMsg  = helper.d1msgs.bySrcId(maxId),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(2),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(2),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(2),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId)
         )
       )
     )
@@ -382,10 +382,10 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(maxId),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(maxId)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId)
         )
       )
     )
@@ -406,28 +406,28 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Retain(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(1),
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(1),
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(2),
-          lastMasterMsg  = helper.d1msgs.bySrcId(2),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(2),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(2)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(2),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(2),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(2),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(2)
         ),
         MessagesMergeDiff.Retain(
-          firstMasterMsg = helper.d1msgs.bySrcId(3),
-          lastMasterMsg  = helper.d1msgs.bySrcId(3),
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(3),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(3),
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(4),
-          lastMasterMsg  = helper.d1msgs.bySrcId(4),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(4),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(4)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(4),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(4),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(4),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(4)
         ),
         MessagesMergeDiff.Retain(
-          firstMasterMsg = helper.d1msgs.bySrcId(5),
-          lastMasterMsg  = helper.d1msgs.bySrcId(5),
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(5),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(5),
         )
       )
     )
@@ -451,34 +451,34 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Retain(
-          firstMasterMsg = helper.d1msgs.bySrcId(1),
-          lastMasterMsg  = helper.d1msgs.bySrcId(2),
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(2),
         ),
         MessagesMergeDiff.Add(
-          firstSlaveMsg  = helper.d2msgs.bySrcId(3),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(4)
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(3),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(4)
         ),
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(5),
-          lastMasterMsg  = helper.d1msgs.bySrcId(6),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(5),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(6)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(5),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(6),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(5),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(6)
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(7),
-          lastMasterMsg  = helper.d1msgs.bySrcId(8),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(7),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(8)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(7),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(8),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(7),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(8)
         ),
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(9),
-          lastMasterMsg  = helper.d1msgs.bySrcId(10),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(9),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(10)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(9),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(10),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(9),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(10)
         ),
         MessagesMergeDiff.Add(
-          firstSlaveMsg  = helper.d2msgs.bySrcId(11),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(12)
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(11),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(12)
         )
       )
     )
@@ -502,34 +502,34 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Add(
-          firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(2)
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(2)
         ),
         MessagesMergeDiff.Retain(
-          firstMasterMsg = helper.d1msgs.bySrcId(3),
-          lastMasterMsg  = helper.d1msgs.bySrcId(4),
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(3),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(4),
         ),
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(5),
-          lastMasterMsg  = helper.d1msgs.bySrcId(6),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(5),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(6)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(5),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(6),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(5),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(6)
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(7),
-          lastMasterMsg  = helper.d1msgs.bySrcId(8),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(7),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(8)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(7),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(8),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(7),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(8)
         ),
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(9),
-          lastMasterMsg  = helper.d1msgs.bySrcId(10),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(9),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(10)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(9),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(10),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(9),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(10)
         ),
         MessagesMergeDiff.Retain(
-          firstMasterMsg = helper.d1msgs.bySrcId(11),
-          lastMasterMsg  = helper.d1msgs.bySrcId(12),
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(11),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(12),
         )
       )
     )
@@ -656,34 +656,34 @@ class DatasetMergerLocalAnalyzeSpec //
     assert(
       analysis === Seq(
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(101L),
-          lastMasterMsg  = helper.d1msgs.bySrcId(107L),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(101L),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(107L)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(101L),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(107L),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(101L),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(107L)
         ),
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(108L),
-          lastMasterMsg  = helper.d1msgs.bySrcId(108L),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(108L),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(108L)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(108L),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(108L),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(108L),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(108L)
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(109L),
-          lastMasterMsg  = helper.d1msgs.bySrcId(113L),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(109L),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(113L)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(109L),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(113L),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(109L),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(113L)
         ),
         MessagesMergeDiff.Replace(
-          firstMasterMsg = helper.d1msgs.bySrcId(114L),
-          lastMasterMsg  = helper.d1msgs.bySrcId(114L),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(114L),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(114L)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(114L),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(114L),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(114L),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(114L)
         ),
         MessagesMergeDiff.Match(
-          firstMasterMsg = helper.d1msgs.bySrcId(115L),
-          lastMasterMsg  = helper.d1msgs.bySrcId(116L),
-          firstSlaveMsg  = helper.d2msgs.bySrcId(115L),
-          lastSlaveMsg   = helper.d2msgs.bySrcId(116L)
+          firstMasterMsgId = helper.d1msgs.internalIdBySrcId(115L),
+          lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(116L),
+          firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(115L),
+          lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(116L)
         ),
       )
     )

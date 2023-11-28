@@ -98,10 +98,10 @@ class DatasetMergerLocalMergeSpec //
       ChatMergeOption.ResolvedCombine(
         helper.d1cwd, helper.d2cwd, IndexedSeq(
           MessagesMergeDiff.DontReplace(
-            firstMasterMsg = helper.d1msgs.head,
-            lastMasterMsg  = helper.d1msgs.last,
-            firstSlaveMsg  = helper.d2msgs.head,
-            lastSlaveMsg   = helper.d2msgs.last
+            firstMasterMsgId = helper.d1msgs.head.taggedId,
+            lastMasterMsgId  = helper.d1msgs.last.taggedId,
+            firstSlaveMsgId  = helper.d2msgs.head.taggedId,
+            lastSlaveMsgId   = helper.d2msgs.last.taggedId
           )
         )
       )
@@ -111,10 +111,10 @@ class DatasetMergerLocalMergeSpec //
       ChatMergeOption.ResolvedCombine(
         helper.d1cwd, helper.d2cwd, IndexedSeq(
           MessagesMergeDiff.DontReplace(
-            firstMasterMsg = helper.d1msgs.head,
-            lastMasterMsg  = helper.d1msgs.last,
-            firstSlaveMsg  = helper.d2msgs.head,
-            lastSlaveMsg   = helper.d2msgs.last
+            firstMasterMsgId = helper.d1msgs.head.taggedId,
+            lastMasterMsgId  = helper.d1msgs.last.taggedId,
+            firstSlaveMsgId  = helper.d2msgs.head.taggedId,
+            lastSlaveMsgId   = helper.d2msgs.last.taggedId
           )
         )
       )
@@ -124,8 +124,8 @@ class DatasetMergerLocalMergeSpec //
       ChatMergeOption.ResolvedCombine(
         helper.d1cwd, helper.d2cwd, IndexedSeq(
           MessagesMergeDiff.Retain(
-            firstMasterMsg = helper.d1msgs.head,
-            lastMasterMsg  = helper.d1msgs.last,
+            firstMasterMsgId = helper.d1msgs.head.taggedId,
+            lastMasterMsgId  = helper.d1msgs.last.taggedId,
           )
         )
       )
@@ -135,8 +135,8 @@ class DatasetMergerLocalMergeSpec //
       ChatMergeOption.ResolvedCombine(
         helper.d1cwd, helper.d2cwd, IndexedSeq(
           MessagesMergeDiff.Retain(
-            firstMasterMsg = helper.d1msgs.head,
-            lastMasterMsg  = helper.d1msgs.last,
+            firstMasterMsgId = helper.d1msgs.head.taggedId,
+            lastMasterMsgId  = helper.d1msgs.last.taggedId,
           )
         )
       )
@@ -146,10 +146,10 @@ class DatasetMergerLocalMergeSpec //
       ChatMergeOption.ResolvedCombine(
         helper.d1cwd, helper.d2cwd, IndexedSeq(
           MessagesMergeDiff.Match(
-            firstMasterMsg = helper.d1msgs.head,
-            lastMasterMsg  = helper.d1msgs.last,
-            firstSlaveMsg  = helper.d2msgs.head,
-            lastSlaveMsg   = helper.d2msgs.last
+            firstMasterMsgId = helper.d1msgs.head.taggedId,
+            lastMasterMsgId  = helper.d1msgs.last.taggedId,
+            firstSlaveMsgId  = helper.d2msgs.head.taggedId,
+            lastSlaveMsgId   = helper.d2msgs.last.taggedId
           )
         )
       )
@@ -232,10 +232,10 @@ class DatasetMergerLocalMergeSpec //
         helper.d2cwd,
         IndexedSeq(
           MessagesMergeDiff.Replace(
-            firstMasterMsg = helper.d1msgs.bySrcId(1),
-            lastMasterMsg  = helper.d1msgs.bySrcId(1),
-            firstSlaveMsg  = helper.d2msgs.bySrcId(1),
-            lastSlaveMsg   = helper.d2msgs.bySrcId(1)
+            firstMasterMsgId = helper.d1msgs.internalIdBySrcId(1),
+            lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(1),
+            firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(1),
+            lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(1)
           )
         )
       )
@@ -317,10 +317,10 @@ class DatasetMergerLocalMergeSpec //
         helper.d2cwd,
         IndexedSeq(
           MessagesMergeDiff.Replace(
-            firstMasterMsg = helper.d1msgs.bySrcId(3),
-            lastMasterMsg  = helper.d1msgs.bySrcId(4),
-            firstSlaveMsg  = helper.d2msgs.bySrcId(3),
-            lastSlaveMsg   = helper.d2msgs.bySrcId(4)
+            firstMasterMsgId = helper.d1msgs.internalIdBySrcId(3),
+            lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(4),
+            firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(3),
+            lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(4)
           )
         )
       )
@@ -360,25 +360,25 @@ class DatasetMergerLocalMergeSpec //
         helper.d2cwd,
         IndexedSeq(
           MessagesMergeDiff.Add(
-            firstSlaveMsg  = helper.d2msgs.bySrcId(2),
-            lastSlaveMsg   = helper.d2msgs.bySrcId(bp1)
+            firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(2),
+            lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(bp1)
           ),
           // Don't replace - should act as normal keep
           MessagesMergeDiff.DontReplace(
-            firstMasterMsg = helper.d1msgs.bySrcId(bp1 + 1),
-            lastMasterMsg  = helper.d1msgs.bySrcId(bp2),
-            firstSlaveMsg  = helper.d2msgs.bySrcId(bp1 + 1),
-            lastSlaveMsg   = helper.d2msgs.bySrcId(bp2)
+            firstMasterMsgId = helper.d1msgs.internalIdBySrcId(bp1 + 1),
+            lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(bp2),
+            firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(bp1 + 1),
+            lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(bp2)
           ),
           MessagesMergeDiff.Retain(
-            firstMasterMsg = helper.d1msgs.bySrcId(bp2 + 1),
-            lastMasterMsg  = helper.d1msgs.bySrcId(bp3),
+            firstMasterMsgId = helper.d1msgs.internalIdBySrcId(bp2 + 1),
+            lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(bp3),
           ),
           MessagesMergeDiff.Replace(
-            firstMasterMsg = helper.d1msgs.bySrcId(bp3 + 1),
-            lastMasterMsg  = helper.d1msgs.bySrcId(maxId - 1),
-            firstSlaveMsg  = helper.d2msgs.bySrcId(bp3 + 1),
-            lastSlaveMsg   = helper.d2msgs.bySrcId(maxId - 1)
+            firstMasterMsgId = helper.d1msgs.internalIdBySrcId(bp3 + 1),
+            lastMasterMsgId  = helper.d1msgs.internalIdBySrcId(maxId - 1),
+            firstSlaveMsgId  = helper.d2msgs.internalIdBySrcId(bp3 + 1),
+            lastSlaveMsgId   = helper.d2msgs.internalIdBySrcId(maxId - 1)
           )
         )
       )
@@ -422,10 +422,10 @@ class DatasetMergerLocalMergeSpec //
         ChatMergeOption.ResolvedCombine(
           helper.d1cwd, helper.d2cwd, IndexedSeq(
             MessagesMergeDiff.Replace(
-              firstMasterMsg = helper.d1msgs.head,
-              lastMasterMsg  = helper.d1msgs.last,
-              firstSlaveMsg  = helper.d2msgs.head,
-              lastSlaveMsg   = helper.d2msgs.last
+              firstMasterMsgId = helper.d1msgs.head.taggedId,
+              lastMasterMsgId  = helper.d1msgs.last.taggedId,
+              firstSlaveMsgId  = helper.d2msgs.head.taggedId,
+              lastSlaveMsgId   = helper.d2msgs.last.taggedId
             )
           )
         )
@@ -440,10 +440,10 @@ class DatasetMergerLocalMergeSpec //
         ChatMergeOption.ResolvedCombine(
           helper.d1cwd, helper.d2cwd, IndexedSeq(
             MessagesMergeDiff.DontReplace(
-              firstMasterMsg = helper.d1msgs.head,
-              lastMasterMsg  = helper.d1msgs.last,
-              firstSlaveMsg  = helper.d2msgs.head,
-              lastSlaveMsg   = helper.d2msgs.last
+              firstMasterMsgId = helper.d1msgs.head.taggedId,
+              lastMasterMsgId  = helper.d1msgs.last.taggedId,
+              firstSlaveMsgId  = helper.d2msgs.head.taggedId,
+              lastSlaveMsgId   = helper.d2msgs.last.taggedId
             )
           )
         )
@@ -458,10 +458,10 @@ class DatasetMergerLocalMergeSpec //
         ChatMergeOption.ResolvedCombine(
           helper.d1cwd, helper.d2cwd, IndexedSeq(
             MessagesMergeDiff.Match(
-              firstMasterMsg = helper.d1msgs.head,
-              lastMasterMsg  = helper.d1msgs.last,
-              firstSlaveMsg  = helper.d2msgs.head,
-              lastSlaveMsg   = helper.d2msgs.last
+              firstMasterMsgId = helper.d1msgs.head.taggedId,
+              lastMasterMsgId  = helper.d1msgs.last.taggedId,
+              firstSlaveMsgId  = helper.d2msgs.head.taggedId,
+              lastSlaveMsgId   = helper.d2msgs.last.taggedId
             )
           )
         )
@@ -476,8 +476,8 @@ class DatasetMergerLocalMergeSpec //
         ChatMergeOption.ResolvedCombine(
           helper.d1cwd, helper.d2cwd, IndexedSeq(
             MessagesMergeDiff.Add(
-              firstSlaveMsg = helper.d2msgs.head,
-              lastSlaveMsg  = helper.d2msgs.last
+              firstSlaveMsgId = helper.d2msgs.head.taggedId,
+              lastSlaveMsgId  = helper.d2msgs.last.taggedId
             )
           )
         )
@@ -492,8 +492,8 @@ class DatasetMergerLocalMergeSpec //
         ChatMergeOption.ResolvedCombine(
           helper.d1cwd, helper.d2cwd, IndexedSeq(
             MessagesMergeDiff.Retain(
-              firstMasterMsg = helper.d1msgs.head,
-              lastMasterMsg  = helper.d1msgs.last,
+              firstMasterMsgId = helper.d1msgs.head.taggedId,
+              lastMasterMsgId  = helper.d1msgs.last.taggedId,
             )
           )
         )
@@ -636,16 +636,16 @@ class DatasetMergerLocalMergeSpec //
         helper.d2cwd,
         IndexedSeq(
           MessagesMergeDiff.Match(
-            firstMasterMsg = helper.d1msgs(0),
-            lastMasterMsg  = helper.d1msgs(1),
-            firstSlaveMsg  = helper.d2msgs(0),
-            lastSlaveMsg   = helper.d2msgs(1)
+            firstMasterMsgId = helper.d1msgs(0).taggedId,
+            lastMasterMsgId  = helper.d1msgs(1).taggedId,
+            firstSlaveMsgId  = helper.d2msgs(0).taggedId,
+            lastSlaveMsgId   = helper.d2msgs(1).taggedId
           ),
           MessagesMergeDiff.DontReplace(
-            firstMasterMsg = helper.d1msgs(2),
-            lastMasterMsg  = helper.d1msgs(3),
-            firstSlaveMsg  = helper.d2msgs(2),
-            lastSlaveMsg   = helper.d2msgs(3)
+            firstMasterMsgId = helper.d1msgs(2).taggedId,
+            lastMasterMsgId  = helper.d1msgs(3).taggedId,
+            firstSlaveMsgId  = helper.d2msgs(2).taggedId,
+            lastSlaveMsgId   = helper.d2msgs(3).taggedId
           ),
         )
       )
@@ -689,10 +689,10 @@ class DatasetMergerLocalMergeSpec //
         helper.d2cwd,
         IndexedSeq(
           MessagesMergeDiff.Match(
-            firstMasterMsg = helper.d1msgs(0),
-            lastMasterMsg  = helper.d1msgs(3),
-            firstSlaveMsg  = helper.d2msgs(0),
-            lastSlaveMsg   = helper.d2msgs(3)
+            firstMasterMsgId = helper.d1msgs(0).taggedId,
+            lastMasterMsgId  = helper.d1msgs(3).taggedId,
+            firstSlaveMsgId  = helper.d2msgs(0).taggedId,
+            lastSlaveMsgId   = helper.d2msgs(3).taggedId
           )
         )
       )

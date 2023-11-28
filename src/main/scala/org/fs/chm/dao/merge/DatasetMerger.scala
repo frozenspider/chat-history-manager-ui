@@ -92,10 +92,8 @@ object DatasetMerger {
 
   // Message tagged types
   sealed trait MessageTag
-
   object MessageTag {
     sealed trait MasterMessageTag extends MessageTag
-
     sealed trait SlaveMessageTag extends MessageTag
   }
 
@@ -106,15 +104,39 @@ object DatasetMerger {
     type S = Message with MessageTag.SlaveMessageTag
   }
 
+  // Message ID tagged types
+  sealed trait MessageIdTag
+
+  object MessageIdTag {
+    sealed trait MasterMessageIdTag extends MessageIdTag
+
+    sealed trait SlaveMessageIdTag extends MessageIdTag
+  }
+
+  type TaggedMessageId = MessageInternalId with MessageIdTag
+
+  object TaggedMessageId {
+    type M = MessageInternalId with MessageIdTag.MasterMessageIdTag
+    type S = MessageInternalId with MessageIdTag.SlaveMessageIdTag
+  }
+
+  implicit class TaggedMessageM(msg: TaggedMessage.M) {
+    def taggedId: TaggedMessageId.M = msg.internalId.asInstanceOf[TaggedMessageId.M]
+  }
+
+  implicit class TaggedMessageS(msg: TaggedMessage.S) {
+    def taggedId: TaggedMessageId.S = msg.internalId.asInstanceOf[TaggedMessageId.S]
+  }
+
   /** Represents a single merge resolution decision - same as `MessagesMergeDiff`, but with `DontReplace` added */
   sealed trait MessagesMergeDecision {
-    def firstMasterMsgOption: Option[TaggedMessage.M]
+    def firstMasterMsgIdOption: Option[TaggedMessageId.M]
 
-    def lastMasterMsgOption: Option[TaggedMessage.M]
+    def lastMasterMsgIdOption: Option[TaggedMessageId.M]
 
-    def firstSlaveMsgOption: Option[TaggedMessage.S]
+    def firstSlaveMsgIdOption: Option[TaggedMessageId.S]
 
-    def lastSlaveMsgOption: Option[TaggedMessage.S]
+    def lastSlaveMsgIdOption: Option[TaggedMessageId.S]
   }
 
   /** Represents a single merge diff: a messages that should be added, retained, merged (or skipped otherwise) */
@@ -123,79 +145,79 @@ object DatasetMerger {
   object MessagesMergeDiff {
     /** Content is only present in master */
     case class Retain(
-      firstMasterMsg: TaggedMessage.M,
-      lastMasterMsg: TaggedMessage.M
+      firstMasterMsgId: TaggedMessageId.M,
+      lastMasterMsgId: TaggedMessageId.M
     ) extends MessagesMergeDiff {
-      override def firstMasterMsgOption: Option[TaggedMessage.M] = Some(firstMasterMsg)
+      override def firstMasterMsgIdOption: Option[TaggedMessageId.M] = Some(firstMasterMsgId)
 
-      override def lastMasterMsgOption: Option[TaggedMessage.M] = Some(lastMasterMsg)
+      override def lastMasterMsgIdOption: Option[TaggedMessageId.M] = Some(lastMasterMsgId)
 
-      override def firstSlaveMsgOption: Option[TaggedMessage.S] = None
+      override def firstSlaveMsgIdOption: Option[TaggedMessageId.S] = None
 
-      override def lastSlaveMsgOption: Option[TaggedMessage.S] = None
+      override def lastSlaveMsgIdOption: Option[TaggedMessageId.S] = None
     }
 
     /** Content is only present in slave */
     case class Add(
-      firstSlaveMsg: TaggedMessage.S,
-      lastSlaveMsg: TaggedMessage.S
+      firstSlaveMsgId: TaggedMessageId.S,
+      lastSlaveMsgId: TaggedMessageId.S
     ) extends MessagesMergeDiff {
-      override def firstMasterMsgOption: Option[TaggedMessage.M] = None
+      override def firstMasterMsgIdOption: Option[TaggedMessageId.M] = None
 
-      override def lastMasterMsgOption: Option[TaggedMessage.M] = None
+      override def lastMasterMsgIdOption: Option[TaggedMessageId.M] = None
 
-      override def firstSlaveMsgOption: Option[TaggedMessage.S] = Some(firstSlaveMsg)
+      override def firstSlaveMsgIdOption: Option[TaggedMessageId.S] = Some(firstSlaveMsgId)
 
-      override def lastSlaveMsgOption: Option[TaggedMessage.S] = Some(lastSlaveMsg)
+      override def lastSlaveMsgIdOption: Option[TaggedMessageId.S] = Some(lastSlaveMsgId)
     }
 
     /** Content is present in both */
     case class Replace(
-      firstMasterMsg: TaggedMessage.M,
-      lastMasterMsg: TaggedMessage.M,
-      firstSlaveMsg: TaggedMessage.S,
-      lastSlaveMsg: TaggedMessage.S
+      firstMasterMsgId: TaggedMessageId.M,
+      lastMasterMsgId: TaggedMessageId.M,
+      firstSlaveMsgId: TaggedMessageId.S,
+      lastSlaveMsgId: TaggedMessageId.S
     ) extends MessagesMergeDiff {
-      override def firstMasterMsgOption: Option[TaggedMessage.M] = Some(firstMasterMsg)
+      override def firstMasterMsgIdOption: Option[TaggedMessageId.M] = Some(firstMasterMsgId)
 
-      override def lastMasterMsgOption: Option[TaggedMessage.M] = Some(lastMasterMsg)
+      override def lastMasterMsgIdOption: Option[TaggedMessageId.M] = Some(lastMasterMsgId)
 
-      override def firstSlaveMsgOption: Option[TaggedMessage.S] = Some(firstSlaveMsg)
+      override def firstSlaveMsgIdOption: Option[TaggedMessageId.S] = Some(firstSlaveMsgId)
 
-      override def lastSlaveMsgOption: Option[TaggedMessage.S] = Some(lastSlaveMsg)
+      override def lastSlaveMsgIdOption: Option[TaggedMessageId.S] = Some(lastSlaveMsgId)
 
-      def asDontReplace: DontReplace = DontReplace(firstMasterMsg, lastMasterMsg, firstSlaveMsg, lastSlaveMsg)
+      def asDontReplace: DontReplace = DontReplace(firstMasterMsgId, lastMasterMsgId, firstSlaveMsgId, lastSlaveMsgId)
     }
 
     case class DontReplace(
-      firstMasterMsg: TaggedMessage.M,
-      lastMasterMsg: TaggedMessage.M,
-      firstSlaveMsg: TaggedMessage.S,
-      lastSlaveMsg: TaggedMessage.S
+      firstMasterMsgId: TaggedMessageId.M,
+      lastMasterMsgId: TaggedMessageId.M,
+      firstSlaveMsgId: TaggedMessageId.S,
+      lastSlaveMsgId: TaggedMessageId.S
     ) extends MessagesMergeDecision {
-      override def firstMasterMsgOption: Option[TaggedMessage.M] = Some(firstMasterMsg)
+      override def firstMasterMsgIdOption: Option[TaggedMessageId.M] = Some(firstMasterMsgId)
 
-      override def lastMasterMsgOption: Option[TaggedMessage.M] = Some(lastMasterMsg)
+      override def lastMasterMsgIdOption: Option[TaggedMessageId.M] = Some(lastMasterMsgId)
 
-      override def firstSlaveMsgOption: Option[TaggedMessage.S] = Some(firstSlaveMsg)
+      override def firstSlaveMsgIdOption: Option[TaggedMessageId.S] = Some(firstSlaveMsgId)
 
-      override def lastSlaveMsgOption: Option[TaggedMessage.S] = Some(lastSlaveMsg)
+      override def lastSlaveMsgIdOption: Option[TaggedMessageId.S] = Some(lastSlaveMsgId)
     }
 
     /** Master and slave has matching messages - but allows content on one/both sides to be missing */
     case class Match(
-      firstMasterMsg: TaggedMessage.M,
-      lastMasterMsg: TaggedMessage.M,
-      firstSlaveMsg: TaggedMessage.S,
-      lastSlaveMsg: TaggedMessage.S
+      firstMasterMsgId: TaggedMessageId.M,
+      lastMasterMsgId: TaggedMessageId.M,
+      firstSlaveMsgId: TaggedMessageId.S,
+      lastSlaveMsgId: TaggedMessageId.S
     ) extends MessagesMergeDiff {
-      override def firstMasterMsgOption: Option[TaggedMessage.M] = Some(firstMasterMsg)
+      override def firstMasterMsgIdOption: Option[TaggedMessageId.M] = Some(firstMasterMsgId)
 
-      override def lastMasterMsgOption: Option[TaggedMessage.M] = Some(lastMasterMsg)
+      override def lastMasterMsgIdOption: Option[TaggedMessageId.M] = Some(lastMasterMsgId)
 
-      override def firstSlaveMsgOption: Option[TaggedMessage.S] = Some(firstSlaveMsg)
+      override def firstSlaveMsgIdOption: Option[TaggedMessageId.S] = Some(firstSlaveMsgId)
 
-      override def lastSlaveMsgOption: Option[TaggedMessage.S] = Some(lastSlaveMsg)
+      override def lastSlaveMsgIdOption: Option[TaggedMessageId.S] = Some(lastSlaveMsgId)
     }
   }
 }

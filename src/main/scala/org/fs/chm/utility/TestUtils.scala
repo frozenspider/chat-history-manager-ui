@@ -10,6 +10,7 @@ import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao._
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger.TaggedMessage
+import org.fs.chm.dao.merge.DatasetMerger.TaggedMessageId
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
 
@@ -155,13 +156,11 @@ object TestUtils {
 
   implicit class RichMsgSeq(msgs: Seq[Message]) {
     def bySrcId[TM <: Message with TaggedMessage](id: Long): TM =
-      tag(msgs.find(_.sourceIdTypedOption.get == id).get)
+      msgs.find(_.sourceIdTypedOption.get == id).get.asInstanceOf[TM]
+
+    def internalIdBySrcId[TMId <: MessageInternalId with TaggedMessageId](id: Long): TMId =
+      msgs.find(_.sourceIdTypedOption.get == id).get.internalId.asInstanceOf[TMId]
   }
-
-  def tag[TM <: Message with TaggedMessage](m: Message): TM = m.asInstanceOf[TM]
-
-  def tag[TM <: Message with TaggedMessage](id: Int)(implicit msgs: Seq[Message]): TM =
-    msgs.bySrcId(id)
 
   trait EagerMutableDaoTrait extends MutableChatHistoryDao {
     override def storagePath: File = ???

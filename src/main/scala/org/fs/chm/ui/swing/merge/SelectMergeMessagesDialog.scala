@@ -95,8 +95,8 @@ object SelectMergeMessagesDialog {
       }
 
       diffs map { diff =>
-        val masterFetchResult = masterCxtFetcher(diff.firstMasterMsgOption, diff.lastMasterMsgOption)
-        val slaveFetchResult  = slaveCxtFetcher(diff.firstSlaveMsgOption, diff.lastSlaveMsgOption)
+        val masterFetchResult = masterCxtFetcher(diff.firstMasterMsgIdOption, diff.lastMasterMsgIdOption)
+        val slaveFetchResult  = slaveCxtFetcher(diff.firstSlaveMsgIdOption, diff.lastSlaveMsgIdOption)
         val masterValue = RenderableDiff(diff, cxtToRaw(masterFetchResult), masterDao, masterCwd, masterRoot)
         val slaveValue  = RenderableDiff(diff, cxtToRaw(slaveFetchResult),  slaveDao,  slaveCwd,  slaveRoot)
         diff match {
@@ -190,15 +190,15 @@ object SelectMergeMessagesDialog {
   }
 
   class ContextFetcher(dao: ChatHistoryDao, chat: Chat) {
-    private type FirstMsg = Message
-    private type LastMsg  = Message
+    private type FirstMsgId = MessageInternalId
+    private type LastMsgId  = MessageInternalId
 
     // We don't necessarily need a lock, but it's still nice to avoid double-fetches
     val cacheLock = new Object
 
     def apply(
-        firstOption: Option[FirstMsg],
-        lastOption: Option[LastMsg]
+        firstOption: Option[FirstMsgId],
+        lastOption: Option[LastMsgId]
     ): CxtFetchResult = {
       if (firstOption.isEmpty && lastOption.isEmpty) {
         CxtFetchResult.Continuous(Seq.empty)
@@ -207,9 +207,9 @@ object SelectMergeMessagesDialog {
 
         if (fetch1.isEmpty) {
           CxtFetchResult.Continuous(Seq.empty)
-        } else if (lastOption.isDefined && (fetch1 contains lastOption.get)) {
+        } else if (lastOption.isDefined && (fetch1.map(_.internalId) contains lastOption.get)) {
           // Continuous sequence
-          CxtFetchResult.Continuous(fetch1 dropRightWhile (_ != lastOption.get))
+          CxtFetchResult.Continuous(fetch1 dropRightWhile (_.internalId != lastOption.get))
         } else {
           val subfetch1    = fetch1.take(MaxCutoffMsgsPartLength)
           val subfetch1Set = subfetch1.toSet
@@ -228,17 +228,17 @@ object SelectMergeMessagesDialog {
       }
     }
 
-    private def fetchMsgsAfterInc(firstOption: Option[FirstMsg], howMany: Int): Seq[Message] = {
+    private def fetchMsgsAfterInc(firstOption: Option[LastMsgId], howMany: Int): Seq[Message] = {
       firstOption map { first =>
-        dao.messagesAfter(chat, first.internalIdTyped, howMany)
+        dao.messagesAfter(chat, first, howMany)
       } getOrElse {
         dao.firstMessages(chat, howMany)
       }
     }
 
-    private def fetchMsgsBeforeInc(lastOption: Option[LastMsg], howMany: Int): Seq[Message] = {
+    private def fetchMsgsBeforeInc(lastOption: Option[LastMsgId], howMany: Int): Seq[Message] = {
       lastOption map { last =>
-        dao.messagesBefore(chat, last.internalIdTyped, howMany)
+        dao.messagesBefore(chat, last, howMany)
       } getOrElse {
         dao.lastMessages(chat, howMany)
       }
@@ -275,64 +275,64 @@ object SelectMergeMessagesDialog {
     val mismatches = IndexedSeq(
       // Prefix
       MessagesMergeDiff.Retain(
-        firstMasterMsg = mMsgsI.bySrcId(10),
-        lastMasterMsg  = mMsgsI.bySrcId(15),
+        firstMasterMsgId = mMsgsI.bySrcId(10),
+        lastMasterMsgId  = mMsgsI.bySrcId(15),
       ),
 
       MessagesMergeDiff.Match(
-        firstMasterMsg = mMsgsI.bySrcId(15),
-        lastMasterMsg  = mMsgsI.bySrcId(39),
-        firstSlaveMsg  = sMsgsI.bySrcId(15),
-        lastSlaveMsg   = sMsgsI.bySrcId(39)
+        firstMasterMsgId = mMsgsI.bySrcId(15),
+        lastMasterMsgId  = mMsgsI.bySrcId(39),
+        firstSlaveMsgId  = sMsgsI.bySrcId(15),
+        lastSlaveMsgId   = sMsgsI.bySrcId(39)
       ),
 
       MessagesMergeDiff.Retain(
-        firstMasterMsg = mMsgsI.bySrcId(40),
-        lastMasterMsg  = mMsgsI.bySrcId(40),
+        firstMasterMsgId = mMsgsI.bySrcId(40),
+        lastMasterMsgId  = mMsgsI.bySrcId(40),
       ),
 
 //      // Addition
 //      MessagesMergeDiff.Add(
-//        firstSlaveMsg = sMsgsI.bySrcId(41),
-//        lastSlaveMsg  = sMsgsI.bySrcId(60)
+//        firstSlaveMsgId = sMsgsI.bySrcId(41),
+//        lastSlaveMsgId  = sMsgsI.bySrcId(60)
 //      )
 
 //      // Conflict
 //      MessagesMergeDiff.Replace(
-//        firstMasterMsg = mMsgsI.bySrcId(41),
-//        lastMasterMsg  = mMsgsI.bySrcId(60),
-//        firstSlaveMsg  = sMsgsI.bySrcId(41),
-//        lastSlaveMsg   = sMsgsI.bySrcId(60)
+//        firstMasterMsgId = mMsgsI.bySrcId(41),
+//        lastMasterMsgId  = mMsgsI.bySrcId(60),
+//        firstSlaveMsgId  = sMsgsI.bySrcId(41),
+//        lastSlaveMsgId   = sMsgsI.bySrcId(60)
 //      ),
 
       // Addition + conflict + addition
       MessagesMergeDiff.Add(
-        firstSlaveMsg = sMsgsI.bySrcId(41),
-        lastSlaveMsg  = sMsgsI.bySrcId(42)
+        firstSlaveMsgId = sMsgsI.bySrcId(41),
+        lastSlaveMsgId  = sMsgsI.bySrcId(42)
       ),
       MessagesMergeDiff.Replace(
-        firstMasterMsg = mMsgsI.bySrcId(43),
-        lastMasterMsg  = mMsgsI.bySrcId(44),
-        firstSlaveMsg  = sMsgsI.bySrcId(43),
-        lastSlaveMsg   = sMsgsI.bySrcId(44)
+        firstMasterMsgId = mMsgsI.bySrcId(43),
+        lastMasterMsgId  = mMsgsI.bySrcId(44),
+        firstSlaveMsgId  = sMsgsI.bySrcId(43),
+        lastSlaveMsgId   = sMsgsI.bySrcId(44)
       ),
       MessagesMergeDiff.Add(
-        firstSlaveMsg = sMsgsI.bySrcId(45),
-        lastSlaveMsg  = sMsgsI.bySrcId(46)
+        firstSlaveMsgId = sMsgsI.bySrcId(45),
+        lastSlaveMsgId  = sMsgsI.bySrcId(46)
       ),
 
       // Suffix
       MessagesMergeDiff.Match(
-        firstMasterMsg = mMsgsI.bySrcId(200),
-        lastMasterMsg  = mMsgsI.bySrcId(201),
-        firstSlaveMsg  = sMsgsI.bySrcId(200),
-        lastSlaveMsg   = sMsgsI.bySrcId(201)
+        firstMasterMsgId = mMsgsI.bySrcId(200),
+        lastMasterMsgId  = mMsgsI.bySrcId(201),
+        firstSlaveMsgId  = sMsgsI.bySrcId(200),
+        lastSlaveMsgId   = sMsgsI.bySrcId(201)
       ),
       MessagesMergeDiff.Match(
-        firstMasterMsg = mMsgsI.bySrcId(202),
-        lastMasterMsg  = mMsgsI.bySrcId(400),
-        firstSlaveMsg  = sMsgsI.bySrcId(202),
-        lastSlaveMsg   = sMsgsI.bySrcId(400)
+        firstMasterMsgId = mMsgsI.bySrcId(202),
+        lastMasterMsgId  = mMsgsI.bySrcId(400),
+        firstSlaveMsgId  = sMsgsI.bySrcId(202),
+        lastSlaveMsgId   = sMsgsI.bySrcId(400)
       )
     )
 

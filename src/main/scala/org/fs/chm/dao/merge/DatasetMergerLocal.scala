@@ -48,22 +48,22 @@ class DatasetMergerLocal(
   }
 
   /** Stream messages, either from the beginning or from the given one (exclusive) */
-  protected[merge] def messagesStream[T <: TaggedMessage](
+  protected[merge] def messagesStream[TM <: TaggedMessage, TMId <: TaggedMessageId](
       dao: ChatHistoryDao,
       chat: Chat,
-      fromMessageOption: Option[Message with T]
-  ): Stream[T] = {
-    messageBatchesStream(dao, chat, fromMessageOption).flatten
+      fromMessageIdOption: Option[TMId]
+  ): Stream[TM] = {
+    messageBatchesStream[TM, TMId](dao, chat, fromMessageIdOption).flatten
   }
 
   /** Stream messages, either from the beginning or from the given one (exclusive) */
-  protected[merge] def messageBatchesStream[TM <: TaggedMessage](
+  protected[merge] def messageBatchesStream[TM <: TaggedMessage, TMId <: TaggedMessageId](
       dao: ChatHistoryDao,
       chat: Chat,
-      fromMessageOption: Option[TM]
+      fromMessageIdOption: Option[TMId]
   ): Stream[IndexedSeq[TM]] = {
-    val batch = fromMessageOption
-      .map(from => dao.messagesAfter(chat, from.internalIdTyped, BatchSize + 1).drop(1))
+    val batch = fromMessageIdOption
+      .map(fromId => dao.messagesAfter(chat, fromId, BatchSize + 1).drop(1))
       .getOrElse(dao.firstMessages(chat, BatchSize))
       .asInstanceOf[IndexedSeq[TM]]
     if (batch.isEmpty) {
@@ -71,7 +71,7 @@ class DatasetMergerLocal(
     } else if (batch.size < BatchSize) {
       Stream(batch)
     } else {
-      Stream(batch) #::: messageBatchesStream[TM](dao, chat, Some(batch.last))
+      Stream(batch) #::: messageBatchesStream[TM, TMId](dao, chat, Some(batch.last.internalId.asInstanceOf[TMId]))
     }
   }
 
@@ -81,30 +81,30 @@ class DatasetMergerLocal(
     state match {
       case MatchInProgress(_, startMasterMsg, _, startSlaveMsg) =>
         MessagesMergeDiff.Match(
-          firstMasterMsg = startMasterMsg,
-          lastMasterMsg  = cxt.prevMm.get,
-          firstSlaveMsg  = startSlaveMsg,
-          lastSlaveMsg   = cxt.prevSm.get
+          firstMasterMsgId = startMasterMsg.taggedId,
+          lastMasterMsgId  = cxt.prevMm.get.taggedId,
+          firstSlaveMsgId  = startSlaveMsg.taggedId,
+          lastSlaveMsgId   = cxt.prevSm.get.taggedId
         )
       case RetentionInProgress(_, startMasterMsg, _) =>
         MessagesMergeDiff.Retain(
-          firstMasterMsg = startMasterMsg,
-          lastMasterMsg  = cxt.prevMm.get,
+          firstMasterMsgId = startMasterMsg.taggedId,
+          lastMasterMsgId  = cxt.prevMm.get.taggedId,
         )
       case AdditionInProgress(prevMasterMsgOption, prevSlaveMsgOption, startSlaveMsg) =>
         assert(cxt.prevMm == prevMasterMsgOption) // Master stream hasn't advanced
         assert(cxt.prevSm.isDefined)
         MessagesMergeDiff.Add(
-          firstSlaveMsg = startSlaveMsg,
-          lastSlaveMsg  = cxt.prevSm.get
+          firstSlaveMsgId = startSlaveMsg.taggedId,
+          lastSlaveMsgId  = cxt.prevSm.get.taggedId
         )
       case ConflictInProgress(prevMasterMsgOption, startMasterMsg, prevSlaveMsgOption, startSlaveMsg) =>
         assert(cxt.prevMm.isDefined && cxt.prevSm.isDefined)
         MessagesMergeDiff.Replace(
-          firstMasterMsg = startMasterMsg,
-          lastMasterMsg  = cxt.prevMm.get,
-          firstSlaveMsg  = startSlaveMsg,
-          lastSlaveMsg   = cxt.prevSm.get
+          firstMasterMsgId = startMasterMsg.taggedId,
+          lastMasterMsgId  = cxt.prevMm.get.taggedId,
+          firstSlaveMsgId  = startSlaveMsg.taggedId,
+          lastSlaveMsgId   = cxt.prevSm.get.taggedId
         )
     }
   }
@@ -315,11 +315,11 @@ class DatasetMergerLocal(
           // Messages
           val messageBatches: Stream[(DatasetRoot, IndexedSeq[Message])] = cmo match {
             case ChatMergeOption.Keep(mcwd) =>
-              messageBatchesStream[TaggedMessage.M](masterDao, mcwd.chat, None)
+              messageBatchesStream[TaggedMessage.M, TaggedMessageId.M](masterDao, mcwd.chat, None)
                 .map(_.map(fixupMessageWithMembers(mcwd, finalUsers)))
                 .map(mb => (masterDao.datasetRoot(masterDs.uuid), mb))
             case ChatMergeOption.Add(scwd) =>
-              messageBatchesStream[TaggedMessage.S](slaveDao, scwd.chat, None)
+              messageBatchesStream[TaggedMessage.S, TaggedMessageId.S](slaveDao, scwd.chat, None)
                 .map(_.map(fixupMessageWithMembers(scwd, finalUsers)))
                 .map(mb => (slaveDao.datasetRoot(slaveDs.uuid), mb))
             case ChatMergeOption.ResolvedCombine(mc, sc, resolution) =>
@@ -529,29 +529,30 @@ class DatasetMergerLocal(
     }
   }
 
-  private def batchLoadMsgsUntilInc[TM <: TaggedMessage](
+  private def batchLoadMsgsUntilInc[TMId <: TaggedMessageId](
       finalUsers: Seq[User],
       dao: ChatHistoryDao,
       ds: Dataset,
       cwd: ChatWithDetails,
-      firstMsg: TM,
-      lastMsg: TM
+      firstMsgId: TMId,
+      lastMsgId: TMId
   ): Stream[(DatasetRoot, IndexedSeq[Message])] = {
+    // TODO: Inefficient!
     takeMsgsFromBatchUntilInc(
-      IndexedSeq(firstMsg) #:: messageBatchesStream(dao, cwd.chat, Some(firstMsg)),
-      lastMsg
+      IndexedSeq(dao.messageOptionByInternalId(cwd.chat, firstMsgId).get) #:: messageBatchesStream(dao, cwd.chat, Some(firstMsgId)),
+      lastMsgId
     ) map (mb => (dao.datasetRoot(ds.uuid), mb.map(fixupMessageWithMembers(cwd, finalUsers))))
   }
 
-  private def takeMsgsFromBatchUntilInc[T <: TaggedMessage](
+  private def takeMsgsFromBatchUntilInc[TM <: TaggedMessage, TMId <: TaggedMessageId](
       stream: Stream[IndexedSeq[Message]],
-      m: Message
+      lastMsgId: TMId
   ): Stream[IndexedSeq[Message]] = {
     var lastFound = false
     stream.map { mb =>
       if (!lastFound) {
         mb.takeWhile { m2 =>
-          val isLast = m2.sourceIdOption == m.sourceIdOption && m2.internalId == m.internalId
+          val isLast = m2.internalId == lastMsgId
           lastFound |= isLast
           isLast || !lastFound
         }
