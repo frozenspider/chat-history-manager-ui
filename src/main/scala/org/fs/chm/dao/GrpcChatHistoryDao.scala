@@ -9,7 +9,7 @@ import org.fs.chm.utility.Logging
 import org.fs.chm.loader.GrpcDataLoaderHolder.wrapRequest
 
 /** Acts as a remote history DAO */
-class GrpcChatHistoryDao(key: String, override val name: String, rpcStub: HistoryLoaderServiceBlockingStub)
+class GrpcChatHistoryDao(val key: String, override val name: String, rpcStub: HistoryLoaderServiceBlockingStub)
   extends ChatHistoryDao with Logging {
 
   override lazy val storagePath: File = {
@@ -85,5 +85,10 @@ class GrpcChatHistoryDao(key: String, override val name: String, rpcStub: Histor
     if (!wrapRequest(CloseRequest(key))(rpcStub.close).success) {
       log.warn(s"Failed to close remote DAO '${name}'!")
     }
+  }
+
+  def saveAsRemote(file: File): GrpcChatHistoryDao = {
+    val loaded = wrapRequest(SaveAsRequest(key, file.getName))(rpcStub.saveAs)
+    new GrpcChatHistoryDao(loaded.key, loaded.name, rpcStub)
   }
 }

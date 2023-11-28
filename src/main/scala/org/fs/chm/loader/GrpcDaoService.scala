@@ -56,6 +56,10 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
     })
   }
 
+  override def saveAs(request: SaveAsRequest): Future[LoadedFile] = {
+    throw new UnsupportedOperationException("GrpcDaoService.saveAs is not supported!")
+  }
+
   override def name(request: NameRequest): Future[NameResponse] =
     withDao(request, request.key)(dao => NameResponse(dao.name))
 

@@ -348,7 +348,7 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  def showPickH2Dialog(callback: JFile => Unit): Unit = {
+  def showPickDirDialog(callback: JFile => Unit): Unit = {
     val chooser = DataLoaders.saveAsChooser
     for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
       val lastFile = new JFile(lastFileString)
@@ -590,8 +590,17 @@ class MainFrameApp(grpcPort: Int) //
 
   def daoListChanged(): Unit = {
     def saveAs(dao: ChatHistoryDao): Unit = {
-      showPickH2Dialog { file =>
+      showPickDirDialog { file =>
         val dstDao = DataLoaders.saveAsH2(dao, file)
+        Swing.onEDTWait {
+          loadDaoInEDT(dstDao, Some(dao))
+        }
+      }
+    }
+
+    def saveAsRemote(dao: GrpcChatHistoryDao): Unit = {
+      showPickDirDialog { file =>
+        val dstDao = dao.saveAsRemote(file)
         Swing.onEDTWait {
           loadDaoInEDT(dstDao, Some(dao))
         }
@@ -603,7 +612,11 @@ class MainFrameApp(grpcPort: Int) //
       val daoMenu = new Menu(dao.name) {
         contents += menuItem("Save As...")(saveAs(dao))
         dao match {
-          case dao: GrpcChatHistoryDao => contents += menuItem("Verify")(verifyRemoteDao(dao))
+          case dao: GrpcChatHistoryDao =>
+            contents += menuItem("Save As (remote)...")(saveAsRemote(dao))
+            if (dao.key.endsWith(H2DataManager.DefaultExt)) {
+              contents += menuItem("Verify")(verifyRemoteDao(dao))
+            }
           case _ => // NOOP
         }
         contents += new Separator()
@@ -1086,6 +1099,10 @@ class MainFrameApp(grpcPort: Int) //
       h2.preload()
     }
 
+    private val sqliteFf = easyFileFilter(
+      s"${BuildInfo.name} database (sqlite)"
+    ) { f => f.getName == "data.sqlite" }
+
     private val h2ff = easyFileFilter(
       s"${BuildInfo.name} database (*.${H2DataManager.DefaultExt})"
     )(_.getName endsWith ("." + H2DataManager.DefaultExt))
@@ -1108,6 +1125,7 @@ class MainFrameApp(grpcPort: Int) //
 
     def openChooser(remote: Boolean): FileChooser = new FileChooser(null) {
       title = "Select a database to open"
+      peer.addChoosableFileFilter(sqliteFf)
       if (!remote) {
         peer.addChoosableFileFilter(h2ff)
       }
@@ -1123,7 +1141,7 @@ class MainFrameApp(grpcPort: Int) //
       val f = file.getParentFile
       if (!remote && h2ff.accept(file)) {
         h2.loadData(f)
-      } else if (tgFf.accept(file) || androidFf.accept(file) || waTextFf.accept(file)) {
+      } else if (sqliteFf.accept(file) || tgFf.accept(file) || androidFf.accept(file) || waTextFf.accept(file)) {
         val loader = if (remote) grpcHolder.remoteLoader else grpcHolder.eagerLoader
         loader.loadData(file)
       } else if (!remote && gts5610Ff.accept(file)) {
