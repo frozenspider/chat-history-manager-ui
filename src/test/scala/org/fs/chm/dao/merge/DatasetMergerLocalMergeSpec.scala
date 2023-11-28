@@ -22,7 +22,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.slf4s.Logging
 
 @RunWith(classOf[org.scalatestplus.junit.JUnitRunner])
-class DatasetMergerMergeSpec //
+class DatasetMergerLocalMergeSpec //
     extends AnyFunSuite
     with TestHelper
     with WithH2Dao
@@ -775,8 +775,8 @@ class DatasetMergerMergeSpec //
     val dao3: H2ChatHistoryDao =
       createH2Dao()
 
-    def merger: DatasetMerger =
-      new DatasetMerger(dao1, d1ds, dao2, d2ds)
+    def merger: DatasetMergerLocal =
+      new DatasetMergerLocal(dao1, d1ds, dao2, d2ds)
   }
 
   object H2MergerHelper {

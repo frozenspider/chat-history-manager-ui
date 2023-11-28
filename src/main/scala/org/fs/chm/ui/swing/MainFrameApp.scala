@@ -24,6 +24,7 @@ import org.fs.chm.dao.GrpcChatHistoryDao
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
+import org.fs.chm.dao.merge.DatasetMergerLocal
 import org.fs.chm.loader._
 import org.fs.chm.loader.telegram._
 import org.fs.chm.protobuf.Chat
@@ -427,7 +428,7 @@ class MainFrameApp(grpcPort: Int) //
               val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
               selectChatsDialog.visible = true
               selectChatsDialog.selection foreach { chatsToMerge =>
-                val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
+                val merger = new DatasetMergerLocal(masterDao, masterDs, slaveDao, slaveDs)
                 val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge)
                 val activeUserIds = chatsToMerge
                   .flatMap(ctm => Seq(ctm.masterCwdOption, ctm.slaveCwdOption))
@@ -438,7 +439,7 @@ class MainFrameApp(grpcPort: Int) //
                 selectUsersDialog.visible = true
                 selectUsersDialog.selection match {
                   case Some(usersToMerge) =>
-                    analyzeChatsF.future.foreach(analyzed => mergeDatasets(merger, analyzed, usersToMerge, newDbPath))
+                    analyzeChatsF.future.foreach(analyzed => mergeDatasets(merger, masterDao, slaveDao, analyzed, usersToMerge, newDbPath))
                   case None =>
                     analyzeChatsF.cancel()
                 }
@@ -479,6 +480,8 @@ class MainFrameApp(grpcPort: Int) //
 
   def mergeDatasets(
       merger: DatasetMerger,
+      masterDao: ChatHistoryDao,
+      slaveDao: ChatHistoryDao,
       analyzed: Seq[AnalyzedChatMergeOption],
       usersToMerge: Seq[UserMergeOption],
       newDbPath: JFile
@@ -502,7 +505,7 @@ class MainFrameApp(grpcPort: Int) //
                 if (Thread.interrupted()) throw new InterruptedException("Cancelled")
                 StopWatch.measureAndCall {
                   // I *HOPE* that creating model alone outside of EDT doesn't cause issues
-                  new MergeModel(merger.masterDao, mcwd, merger.slaveDao, scwd, diffs, htmlKit)
+                  new MergeModel(masterDao, mcwd, slaveDao, scwd, diffs, htmlKit)
                 }((_, t) => log.info(s"Model for chats merge ${cmo.title} created in $t ms"))
               })
               (resolved, cmosWithLazyModels :+ next)
