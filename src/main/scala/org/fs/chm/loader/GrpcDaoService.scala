@@ -133,7 +133,7 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
       res
     } catch {
       case th: Throwable =>
-        log.debug(s"<<< Failure:  ${th.toString.take(150)}")
+        log.debug(s"<<< Failure", th)
         throw th
     }
   }

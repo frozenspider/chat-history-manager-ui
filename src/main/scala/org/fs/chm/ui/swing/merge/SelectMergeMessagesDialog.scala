@@ -161,15 +161,16 @@ object SelectMergeMessagesDialog {
         case RowData.InMasterOnly(mmd, _) => mmd.diff
         case RowData.InSlaveOnly(smd, _)  => smd.diff
       }
-      diff match {
-        case diff: MessagesMergeDiff.Retain               => Some(diff)
-        case diff: MessagesMergeDiff.Match                => Some(diff)
+      Some(diff match {
+        case diff: MessagesMergeDiff.Retain               => diff
+        case diff: MessagesMergeDiff.Match                => diff
 
-        case diff: MessagesMergeDiff.Add if selected      => Some(diff)
-        case diff: MessagesMergeDiff.Add                  => None
-        case diff: MessagesMergeDiff.Replace if selected  => Some(diff)
-        case diff: MessagesMergeDiff.Replace              => Some(diff.asDontReplace)
-      }
+        case diff: MessagesMergeDiff.Add if selected      => diff
+        case diff: MessagesMergeDiff.Add                  => diff.asDontAdd
+
+        case diff: MessagesMergeDiff.Replace if selected  => diff
+        case diff: MessagesMergeDiff.Replace              => diff.asDontReplace
+      })
     }
   }
 

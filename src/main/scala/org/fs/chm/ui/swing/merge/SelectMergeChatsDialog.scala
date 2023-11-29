@@ -94,22 +94,22 @@ class SelectMergeChatsDialog(
         rd: RowData[(ChatHistoryDao, ChatWithDetails)],
         isSelected: Boolean
     ): Option[SelectedChatMergeOption] = {
-      rd match {
+      Some(rd match {
         case RowData.InMasterOnly((_, mcwd), _) =>
-          Some(ChatMergeOption.Keep(mcwd))
-        case RowData.InBoth((_, mcwd), (_, scwd), true) =>
+          ChatMergeOption.Keep(mcwd)
+        case RowData.InBoth((_, mcwd), (_, scwd), _) =>
           if (isSelected) {
-            Some(ChatMergeOption.SelectedCombine(mcwd, scwd))
+            ChatMergeOption.SelectedCombine(mcwd, scwd)
           } else {
-            Some(ChatMergeOption.Keep(mcwd))
+            ChatMergeOption.Keep(mcwd)
           }
-        case RowData.InSlaveOnly((_, scwd), true) =>
+        case RowData.InSlaveOnly((_, scwd), _) =>
           if (isSelected) {
-            Some(ChatMergeOption.Add(scwd))
+            ChatMergeOption.Add(scwd)
           } else {
-            None
+            ChatMergeOption.DontAdd(scwd)
           }
-      }
+      })
     }
   }
 }

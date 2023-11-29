@@ -11,10 +11,12 @@ import org.fs.chm.utility.RpcUtils._
 
 /** Acts as a remote history DAO */
 class GrpcChatHistoryDao(val key: String,
-                         override val name: String,
+                         initial_name: String,
                          daoRpcStub: HistoryDaoServiceBlockingStub,
                          loaderRpcStub: HistoryLoaderServiceBlockingStub)
   extends MutableChatHistoryDao with Logging {
+
+  override val name: String = initial_name + " (remote)"
 
   override lazy val storagePath: File = {
     new File(sendRequest(StoragePathRequest(key))(daoRpcStub.storagePath).path)

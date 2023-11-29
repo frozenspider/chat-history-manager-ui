@@ -1,7 +1,9 @@
 package org.fs.chm.dao.merge
 
+import java.io.File
+
 import org.fs.chm.dao.Entities._
-import org.fs.chm.dao.MutableChatHistoryDao
+import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.Logging
 
@@ -15,22 +17,26 @@ trait DatasetMerger extends Logging {
    */
   def analyze(masterCwd: ChatWithDetails, slaveCwd: ChatWithDetails, title: String): IndexedSeq[MessagesMergeDiff]
 
-  def merge(explicitUsersToMerge: Seq[UserMergeOption],
+  def merge(usersToMerge: Seq[UserMergeOption],
             chatsToMerge: Seq[ResolvedChatMergeOption],
-            newDao: MutableChatHistoryDao): Dataset
+            newDbPath: File): (ChatHistoryDao, Dataset)
 
 }
 
 object DatasetMerger {
   /** Represents a single merge decision: a user that should be added, retained, merged (or skipped otherwise) */
-  sealed abstract class UserMergeOption(val userToInsert: User)
+  sealed abstract class UserMergeOption(val userToInsertOption: Option[User])
 
   object UserMergeOption {
-    case class Keep(masterUser: User) extends UserMergeOption(masterUser)
+    case class Retain(masterUser: User) extends UserMergeOption(Some(masterUser))
 
-    case class Add(slaveUser: User) extends UserMergeOption(slaveUser)
+    case class Add(slaveUser: User) extends UserMergeOption(Some(slaveUser))
 
-    case class Replace(masterUser: User, slaveUser: User) extends UserMergeOption(slaveUser)
+    case class DontAdd(slaveUser: User) extends UserMergeOption(None)
+
+    case class Replace(masterUser: User, slaveUser: User) extends UserMergeOption(Some(slaveUser))
+
+    case class MatchOrDontReplace(masterUser: User, slaveUser: User) extends UserMergeOption(Some(masterUser))
   }
 
   /** Represents a single merge decision: a chat that should be added, retained, merged (or skipped otherwise) */
@@ -61,6 +67,9 @@ object DatasetMerger {
       with SelectedChatMergeOption with AnalyzedChatMergeOption with ResolvedChatMergeOption
 
     case class Add(slaveCwd: ChatWithDetails) extends AbstractChatMergeOption(None, Some(slaveCwd))
+      with SelectedChatMergeOption with AnalyzedChatMergeOption with ResolvedChatMergeOption
+
+    case class DontAdd(slaveCwd: ChatWithDetails) extends AbstractChatMergeOption(None, Some(slaveCwd))
       with SelectedChatMergeOption with AnalyzedChatMergeOption with ResolvedChatMergeOption
 
     case class SelectedCombine(
@@ -139,7 +148,7 @@ object DatasetMerger {
     def lastSlaveMsgIdOption: Option[TaggedMessageId.S]
   }
 
-  /** Represents a single merge diff: a messages that should be added, retained, merged (or skipped otherwise) */
+  /** Represents a single merge diff: a messages that should be added, retained, merged, or skipped */
   sealed trait MessagesMergeDiff extends MessagesMergeDecision
 
   object MessagesMergeDiff {
@@ -162,6 +171,22 @@ object DatasetMerger {
       firstSlaveMsgId: TaggedMessageId.S,
       lastSlaveMsgId: TaggedMessageId.S
     ) extends MessagesMergeDiff {
+      override def firstMasterMsgIdOption: Option[TaggedMessageId.M] = None
+
+      override def lastMasterMsgIdOption: Option[TaggedMessageId.M] = None
+
+      override def firstSlaveMsgIdOption: Option[TaggedMessageId.S] = Some(firstSlaveMsgId)
+
+      override def lastSlaveMsgIdOption: Option[TaggedMessageId.S] = Some(lastSlaveMsgId)
+
+      def asDontAdd: DontAdd = DontAdd(firstSlaveMsgId, lastSlaveMsgId)
+    }
+
+    /** Content is only present in slave */
+    case class DontAdd(
+      firstSlaveMsgId: TaggedMessageId.S,
+      lastSlaveMsgId: TaggedMessageId.S
+    ) extends MessagesMergeDecision {
       override def firstMasterMsgIdOption: Option[TaggedMessageId.M] = None
 
       override def lastMasterMsgIdOption: Option[TaggedMessageId.M] = None

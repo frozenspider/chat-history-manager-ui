@@ -943,6 +943,8 @@ class H2ChatHistoryDao(
 
   object Raws {
     def toChat(rc: RawChat): Chat = {
+      val me = myself(rc.dsUuid)
+      val memberIds = me.id +: (rc.memberIdsOption map (_.filter(_ != me.id)) getOrElse Seq.empty)
       Chat(
         dsUuid        = rc.dsUuid,
         id            = rc.id,
@@ -950,7 +952,7 @@ class H2ChatHistoryDao(
         sourceType    = rc.sourceType,
         tpe           = rc.tpe,
         imgPathOption = rc.imgPathOption map (_.makeRelativePath),
-        memberIds     = rc.memberIdsOption map (_.toSeq) getOrElse Seq.empty,
+        memberIds     = memberIds,
         msgCount      = rc.msgCount
       )
     }

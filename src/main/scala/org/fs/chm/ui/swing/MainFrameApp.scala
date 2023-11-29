@@ -153,6 +153,7 @@ class MainFrameApp(grpcPort: Int) //
         contents += menuItem("Users")(showUsersDialog())
         contents += menuItem("Merge Datasets")(showSelectDatasetsToMergeDialog(remote = false))
         contents += menuItem("Merge Datasets (remote)")(showSelectDatasetsToMergeDialog(remote = true))
+        contents += menuItem("Compare Datasets")(showSelectDatasetsToCompareDialog())
       }
     }
     (menuBar, dbEmbeddedMenu)
@@ -414,14 +415,14 @@ class MainFrameApp(grpcPort: Int) //
             initial = storagePath.getName
           ) foreach { newDbName =>
             val newDbPath = new JFile(storagePath.getParentFile, newDbName)
-            if (newDbPath.exists) {
-              showError(s"Database exists: ${newDbPath.getAbsolutePath}")
+            if (newDbPath.exists && newDbPath.list().nonEmpty) {
+              showError(s"Database directory ${newDbPath.getAbsolutePath} exists and is not empty")
             } else {
               val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
               selectChatsDialog.visible = true
               selectChatsDialog.selection foreach { chatsToMerge =>
                 val merger = if (!remote) {
-                  new DatasetMergerLocal(masterDao, masterDs, slaveDao, slaveDs)
+                  new DatasetMergerLocal(masterDao, masterDs, slaveDao, slaveDs, DataLoaders.createH2)
                 } else {
                   new DatasetMergerRemote(
                     grpcHolder.channel,
@@ -432,6 +433,7 @@ class MainFrameApp(grpcPort: Int) //
                 val sw = new StopWatch
                 val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge)
                 val activeUserIds = chatsToMerge
+                  .filter(!_.isInstanceOf[ChatMergeOption.DontAdd])
                   .flatMap(ctm => Seq(ctm.masterCwdOption, ctm.slaveCwdOption))
                   .yieldDefined
                   .flatMap(_.chat.memberIds)
@@ -446,6 +448,25 @@ class MainFrameApp(grpcPort: Int) //
                 }
               }
             }
+          }
+      }
+    }
+  }
+
+  def showSelectDatasetsToCompareDialog(): Unit = {
+    checkEdt()
+    if (loadedDaos.size < 2) {
+      showWarning("Load at least two databases first!")
+    } else if (loadedDaos.keys.flatMap(_.datasets).size == 1) {
+      showWarning("Only one dataset is loaded - nothing to compare.")
+    } else {
+      val selectDsDialog = new SelectCompareDatasetDialog(loadedDaos.keys.toSeq)
+      selectDsDialog.visible = true
+      selectDsDialog.selection foreach {
+        case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
+          worldFreezingIFuture("Comparing datasets...") {
+            ChatHistoryDao.ensureDatasetsAreEqual(slaveDao, masterDao, slaveDs.uuid, masterDs.uuid)
+            showWarning("Datasets are same!")
           }
       }
     }
@@ -474,6 +495,7 @@ class MainFrameApp(grpcPort: Int) //
             }
             cmo.analyzed(diffs)
           case cmo: ChatMergeOption.Add => cmo
+          case cmo: ChatMergeOption.DontAdd => cmo
           case cmo: ChatMergeOption.Keep => cmo
         }
       }
@@ -512,6 +534,8 @@ class MainFrameApp(grpcPort: Int) //
               (resolved, cmosWithLazyModels :+ next)
             }
           case ((resolved, cmosWithLazyModels), cmo: ChatMergeOption.Add) =>
+            (resolved :+ cmo, cmosWithLazyModels)
+          case ((resolved, cmosWithLazyModels), cmo: ChatMergeOption.DontAdd) =>
             (resolved :+ cmo, cmosWithLazyModels)
           case ((resolved, cmosWithLazyModels), cmo: ChatMergeOption.Keep) =>
             (resolved :+ cmo, cmosWithLazyModels)
@@ -563,9 +587,7 @@ class MainFrameApp(grpcPort: Int) //
       // Merge
       worldFreezingIFuture("Merging...") {
         newDbPath.mkdir()
-        val newDao = DataLoaders.createH2(newDbPath)
-
-        merger.merge(usersToMerge, chatsMergeResolutions, newDao)
+        val (newDao, _) = merger.merge(usersToMerge, chatsMergeResolutions, newDbPath)
         Swing.onEDTWait {
           loadDaoInEDT(newDao)
         }

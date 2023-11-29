@@ -112,30 +112,36 @@ object ChatHistoryDao extends Logging {
   private val BATCH_SIZE = 5_000
 
   def ensureDataSourcesAreEqual(srcDao: ChatHistoryDao, dstDao: ChatHistoryDao, dsUuid: PbUuid): Unit = {
+    ensureDatasetsAreEqual(srcDao, srcDao, dsUuid, dsUuid)
+  }
+
+  def ensureDatasetsAreEqual(srcDao: ChatHistoryDao, dstDao: ChatHistoryDao, srcDsUuid: PbUuid, dstDsUuid: PbUuid): Unit = {
     StopWatch.measureAndCall {
       // Dataset
-      val srcDsOption = srcDao.datasets.find(_.uuid == dsUuid)
+      val srcDsOption = srcDao.datasets.find(_.uuid == srcDsUuid)
       require(srcDsOption.isDefined, "Source dataset not found")
       val srcDs = srcDsOption.get;
-      val dstDaoOption = dstDao.datasets.find(_.uuid == dsUuid)
+      val dstDaoOption = dstDao.datasets.find(_.uuid == dstDsUuid)
       require(
-        dstDaoOption.isDefined && srcDs == dstDaoOption.get,
-        s"dataset differs:\nWas    $srcDs\nBecame ${dstDaoOption getOrElse "<none>"}")
-      val srcDsRoot = srcDao.datasetRoot(dsUuid)
-      val dstDsRoot = dstDao.datasetRoot(dsUuid)
+        dstDaoOption.isDefined && dstDaoOption.isDefined,
+        s"Dataset missing:\nWas    $srcDs\nBecame ${dstDaoOption getOrElse "<none>"}")
+      val srcDsRoot = srcDao.datasetRoot(srcDsUuid)
+      val dstDsRoot = dstDao.datasetRoot(dstDsUuid)
 
       // Users
-      require(srcDao.myself(dsUuid) == dstDao.myself(dsUuid), s"'myself' differs:\nWas    ${srcDao.myself(dsUuid)}\nBecame ${dstDao.myself(dsUuid)}")
+      require(srcDao.myself(srcDsUuid) == dstDao.myself(dstDsUuid).copy(dsUuid = srcDsUuid),
+        s"'myself' differs:\nWas    ${srcDao.myself(srcDsUuid)}\nBecame ${dstDao.myself(dstDsUuid)}")
       require(
-        srcDao.users(dsUuid) == dstDao.users(dsUuid),
-        s"Users differ:\nWas    ${srcDao.users(dsUuid)}\nBecame ${dstDao.users(dsUuid)}")
-      val srcChats = srcDao.chats(dsUuid)
-      val dstChats = dstDao.chats(dsUuid)
+        srcDao.users(srcDsUuid) == dstDao.users(dstDsUuid).map(_.copy(dsUuid = srcDsUuid)),
+        s"Users differ:\nWas    ${srcDao.users(srcDsUuid)}\nBecame ${dstDao.users(dstDsUuid)}")
+      val srcChats = srcDao.chats(srcDsUuid)
+      val dstChats = dstDao.chats(dstDsUuid)
       require(srcChats.size == dstChats.size, s"Chat size differs:\nWas    ${srcChats.size}\nBecame ${dstChats.size}")
       for (((srcCwd, dstCwd), i) <- srcChats.zip(dstChats).zipWithIndex) {
         StopWatch.measureAndCall {
           log.info(s"Checking chat '${srcCwd.chat.nameOption.getOrElse("")}' with ${srcCwd.chat.msgCount} messages")
-          require(srcCwd.chat == dstCwd.chat, s"Chat #$i differs:\nWas    ${srcCwd.chat}\nBecame ${dstCwd.chat}")
+          require(srcCwd.chat == dstCwd.chat.copy(dsUuid = srcDsUuid),
+            s"Chat #$i differs:\nWas    ${srcCwd.chat}\nBecame ${dstCwd.chat}")
 
           var offset = 0
           while (offset < srcCwd.chat.msgCount) {

@@ -19,7 +19,7 @@ class GrpcRemoteDataLoader(channel: ManagedChannel) extends DataLoader[GrpcChatH
         loaderRpcStub.load(request)
       }
       val daoRpcStub = HistoryDaoServiceGrpc.blockingStub(channel)
-      new GrpcChatHistoryDao(key, response.name + " (remote)", daoRpcStub, loaderRpcStub)
+      new GrpcChatHistoryDao(key, response.name, daoRpcStub, loaderRpcStub)
     }((_, ms) => log.info(s"Remote history loaded in ${ms} ms"))
   }
 }

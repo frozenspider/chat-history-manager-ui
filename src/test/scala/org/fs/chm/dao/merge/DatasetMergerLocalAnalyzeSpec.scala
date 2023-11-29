@@ -6,6 +6,7 @@ import java.nio.file.Files
 import org.fs.chm.TestHelper
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger._
+import org.fs.chm.loader.H2DataManager
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
 import org.fs.chm.utility.TestUtils._
@@ -700,7 +701,7 @@ class DatasetMergerLocalAnalyzeSpec //
     val (dao2, d2ds, d2root, d2users, d2cwd, d2msgs) = createDaoAndEntities(isMaster = false, "Two", msgs2, maxUserId)
 
     def merger: DatasetMergerLocal =
-      new DatasetMergerLocal(dao1, d1ds, dao2, d2ds)
+      new DatasetMergerLocal(dao1, d1ds, dao2, d2ds, _ => fail())
 
     private def createDaoAndEntities(isMaster: Boolean,
                                      nameSuffix: String,

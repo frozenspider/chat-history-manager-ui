@@ -1,5 +1,7 @@
 package org.fs.chm.dao.merge
 
+import java.io.File
+
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
@@ -7,6 +9,7 @@ import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger._
+import org.fs.chm.loader.H2DataManager
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
@@ -16,7 +19,8 @@ class DatasetMergerLocal(
     val masterDao: ChatHistoryDao,
     val masterDs: Dataset,
     val slaveDao: ChatHistoryDao,
-    val slaveDs: Dataset
+    val slaveDs: Dataset,
+    createDao: File => MutableChatHistoryDao,
 ) extends DatasetMerger {
   import DatasetMergerLocal._
 
@@ -240,10 +244,11 @@ class DatasetMergerLocal(
   }
 
   override def merge(
-      explicitUsersToMerge: Seq[UserMergeOption],
+      usersToMerge: Seq[UserMergeOption],
       chatsToMerge: Seq[ResolvedChatMergeOption],
-      newDao: MutableChatHistoryDao
-  ): Dataset = {
+      newDbPath: File
+  ): (ChatHistoryDao, Dataset) = {
+    val newDao = createDao(newDbPath)
     StopWatch.measureAndCall {
       try {
         if (newDao.datasets.nonEmpty) {
@@ -256,23 +261,6 @@ class DatasetMergerLocal(
         )
         newDao.insertDataset(newDs)
 
-        // Account for users who were skipped from usersToMerge due to their chat merge skipped, treated as Keep
-        val usersToMerge: Seq[UserMergeOption] = {
-          val usersToKeep = {
-            val masterUsersIdsToMerge = explicitUsersToMerge.collect {
-              case UserMergeOption.Keep(mu) => mu.id
-              case UserMergeOption.Replace(mu, _) => mu.id
-            }.toSet
-
-            masterDao
-              .users(masterDs.uuid)
-              .filter(mu => !masterUsersIdsToMerge.contains(mu.id))
-              .map(UserMergeOption.Keep)
-          }
-
-          explicitUsersToMerge ++ usersToKeep
-        }
-
         // Sanity check
         for {
           firstMasterChat <- chatsToMerge.find(_.masterCwdOption.isDefined)
@@ -282,17 +270,20 @@ class DatasetMergerLocal(
         // Users
         val masterSelf = masterDao.myself(masterDs.uuid)
         require(
-          usersToMerge.map(_.userToInsert).count(_.id == masterSelf.id) == 1,
+          usersToMerge.map(_.userToInsertOption).yieldDefined.count(_.id == masterSelf.id) == 1,
           "User merges should contain exactly one self user!"
         )
-        for (sourceUser <- usersToMerge) {
-          val user2 = sourceUser.userToInsert.copy(dsUuid = newDs.uuid)
+        for {
+          sourceUser <- usersToMerge
+          userToInsert <- sourceUser.userToInsertOption
+        } {
+          val user2 = userToInsert.copy(dsUuid = newDs.uuid)
           newDao.insertUser(user2, user2.id == masterSelf.id)
         }
         val finalUsers = newDao.users(newDs.uuid)
 
         // Chats
-        for (cmo <- chatsToMerge) {
+        for (cmo <- chatsToMerge if !cmo.isInstanceOf[ChatMergeOption.DontAdd]) {
           val (dsRoot, chat) = {
             Seq(
               cmo.slaveCwdOption.map(cwd => (slaveDao.datasetRoot(cwd.dsUuid), cwd.chat)),
@@ -318,6 +309,8 @@ class DatasetMergerLocal(
               messageBatchesStream[TaggedMessage.M, TaggedMessageId.M](masterDao, mcwd.chat, None)
                 .map(_.map(fixupMessageWithMembers(mcwd, finalUsers)))
                 .map(mb => (masterDao.datasetRoot(masterDs.uuid), mb))
+            case ChatMergeOption.DontAdd(_) =>
+              Stream.empty
             case ChatMergeOption.Add(scwd) =>
               messageBatchesStream[TaggedMessage.S, TaggedMessageId.S](slaveDao, scwd.chat, None)
                 .map(_.map(fixupMessageWithMembers(scwd, finalUsers)))
@@ -329,6 +322,8 @@ class DatasetMergerLocal(
                     batchLoadMsgsUntilInc(finalUsers, masterDao, masterDs, cmo.masterCwdOption.get, firstMasterMsg, lastMasterMsg)
                   case MessagesMergeDiff.Add(firstSlaveMsg, lastSlaveMsg) =>
                     batchLoadMsgsUntilInc(finalUsers, slaveDao, slaveDs, cmo.slaveCwdOption.get, firstSlaveMsg, lastSlaveMsg)
+                  case MessagesMergeDiff.DontAdd(_, _) =>
+                    Stream.empty
                   case MessagesMergeDiff.Replace(firstMasterMsg, lastMasterMsg, firstSlaveMsg, lastSlaveMsg) =>
                     // Treat exactly as Add
                     // TODO: Should we analyze content and make sure nothing is lost?
@@ -377,7 +372,7 @@ class DatasetMergerLocal(
           }
         }
 
-        newDs
+        (newDao, newDs)
       } finally {
         newDao.enableBackups()
       }
