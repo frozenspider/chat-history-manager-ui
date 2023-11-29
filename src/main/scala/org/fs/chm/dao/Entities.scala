@@ -526,6 +526,9 @@ object Entities {
     def makeStrikethrough(text: String): RichTextElement =
       make(RichTextElement.Val.Strikethrough(RteStrikethrough(text)))
 
+    def makeBlockquote(text: String): RichTextElement =
+      make(RichTextElement.Val.Blockquote(RteBlockquote(text)))
+
     def makeSpoiler(text: String): RichTextElement =
       make(RichTextElement.Val.Spoiler(RteSpoiler(text)))
 
@@ -553,6 +556,7 @@ object Entities {
         case el: RteItalic        => el.text.toOption
         case el: RteUnderline     => el.text.toOption
         case el: RteStrikethrough => el.text.toOption
+        case el: RteBlockquote    => el.text.toOption
         case el: RteSpoiler       => el.text.toOption
         case el: RteLink          => el.textOption
         case el: RtePrefmtInline  => el.text.toOption

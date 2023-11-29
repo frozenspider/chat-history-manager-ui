@@ -15,7 +15,8 @@ import org.fs.chm.utility.Logging
 
 /** Acts as server API for a local history DAO */
 class GrpcDaoService(doLoad: File => ChatHistoryDao)
-  extends HistoryLoaderServiceGrpc.HistoryLoaderService
+  extends HistoryDaoServiceGrpc.HistoryDaoService
+    //HistoryLoaderServiceGrpc.HistoryLoaderService
     with Logging {
   implicit private val ec: ExecutionContextExecutor = ExecutionContext.global
 
@@ -24,36 +25,12 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
 
   private var DaoMap: Map[String, ChatHistoryDao] = Map.empty
 
+  val loader: GrpcHistoryLoaderService = new GrpcHistoryLoaderService()
+
   def getDao[T](path: File): Option[ChatHistoryDao] = {
     Lock.synchronized {
       DaoMap.values.find(_.storagePath == path)
     }
-  }
-
-  /** Parse/open a history file and return its DAO handle */
-  override def load(request: ParseLoadRequest): Future[LoadResponse] = {
-    val file = new File(request.path)
-    Future {
-      loggingRequest(request) {
-        val key = request.path
-        val dao = doLoad(file)
-        Lock.synchronized {
-          DaoMap = DaoMap + (key -> dao)
-        }
-        LoadResponse(Some(LoadedFile(key = request.path, name = dao.name)))
-      }
-    }
-  }
-
-  override def getLoadedFiles(request: GetLoadedFilesRequest): Future[GetLoadedFilesResponse] = {
-    Future.successful(loggingRequest(request) {
-      val loaded = Lock.synchronized {
-        for {
-          (key, dao) <- DaoMap
-        } yield LoadedFile(key, dao.name)
-      }
-      GetLoadedFilesResponse(loaded.toSeq)
-    })
   }
 
   override def saveAs(request: SaveAsRequest): Future[LoadedFile] = {
@@ -141,6 +118,8 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
   // Helpers
   //
 
+  private implicit def toInternal(l: Long): MessageInternalId = l.asInstanceOf[MessageInternalId]
+
   private def withDao[T](req: Object, key: String)(f: ChatHistoryDao => T): Future[T] = {
     Future {
       loggingRequest(req) {
@@ -165,6 +144,31 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
     }
   }
 
+  class GrpcHistoryLoaderService extends HistoryLoaderServiceGrpc.HistoryLoaderService {
+    /** Parse/open a history file and return its DAO handle */
+    override def load(request: ParseLoadRequest): Future[LoadResponse] = {
+      val file = new File(request.path)
+      Future {
+        loggingRequest(request) {
+          val key = request.path
+          val dao = doLoad(file)
+          Lock.synchronized {
+            DaoMap = DaoMap + (key -> dao)
+          }
+          LoadResponse(Some(LoadedFile(key = request.path, name = dao.name)))
+        }
+      }
+    }
 
-  private implicit def toInternal(l: Long): MessageInternalId = l.asInstanceOf[MessageInternalId]
+    override def getLoadedFiles(request: GetLoadedFilesRequest): Future[GetLoadedFilesResponse] = {
+      Future.successful(loggingRequest(request) {
+        val loaded = Lock.synchronized {
+          for {
+            (key, dao) <- DaoMap
+          } yield LoadedFile(key, dao.name)
+        }
+        GetLoadedFilesResponse(loaded.toSeq)
+      })
+    }
+  }
 }

@@ -1054,6 +1054,8 @@ class H2ChatHistoryDao(
           RichText.makeUnderline(text = r.text)
         case "strikethrough" =>
           RichText.makeStrikethrough(text = r.text)
+        case "blockquote" =>
+          RichText.makeBlockquote(text = r.text)
         case "spoiler" =>
           RichText.makeSpoiler(text = r.text)
         case "link" =>
@@ -1351,6 +1353,7 @@ class H2ChatHistoryDao(
         case _: RteItalic        => template.copy(elementType = "italic")
         case _: RteUnderline     => template.copy(elementType = "underline")
         case _: RteStrikethrough => template.copy(elementType = "strikethrough")
+        case _: RteBlockquote    => template.copy(elementType = "blockquote")
         case _: RteSpoiler       => template.copy(elementType = "spoiler")
         case link: RteLink =>
           template.copy(

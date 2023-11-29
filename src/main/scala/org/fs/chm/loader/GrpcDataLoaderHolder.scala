@@ -24,7 +24,8 @@ class GrpcDataLoaderHolder(rpcPort: Int, val grpcDaoService: GrpcDaoService) ext
     log.info(s"Starting callback server at ${serverPort}")
     val server: Server = ServerBuilder.forPort(serverPort)
       .addService(ChooseMyselfServiceGrpc.bindService(new ChooseMyselfImpl, ExecutionContext.global))
-      .addService(HistoryLoaderServiceGrpc.bindService(grpcDaoService, ExecutionContext.global))
+      .addService(HistoryDaoServiceGrpc.bindService(grpcDaoService, ExecutionContext.global))
+      .addService(HistoryLoaderServiceGrpc.bindService(grpcDaoService.loader, ExecutionContext.global))
       .addService(ProtoReflectionService.newInstance())
       .build.start
     sys.addShutdownHook {
