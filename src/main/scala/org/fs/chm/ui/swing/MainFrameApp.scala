@@ -26,8 +26,9 @@ import org.fs.chm.dao.GrpcChatHistoryDao
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
+import org.fs.chm.dao.merge.DatasetMergerLocal
+import org.fs.chm.dao.merge.DatasetMergerRemote
 import org.fs.chm.loader._
-import org.fs.chm.loader.telegram._
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.PbUuid
@@ -150,7 +151,9 @@ class MainFrameApp(grpcPort: Int) //
       contents += dbMenu
       contents += new Menu("Edit") {
         contents += menuItem("Users")(showUsersDialog())
-        contents += menuItem("Merge Datasets")(showSelectDatasetsToMergeDialog())
+        contents += menuItem("Merge Datasets")(showSelectDatasetsToMergeDialog(remote = false))
+        contents += menuItem("Merge Datasets (remote)")(showSelectDatasetsToMergeDialog(remote = true))
+        contents += menuItem("Compare Datasets")(showSelectDatasetsToCompareDialog())
       }
     }
     (menuBar, dbEmbeddedMenu)
@@ -392,7 +395,7 @@ class MainFrameApp(grpcPort: Int) //
     Dialog.showMessage(title = "Users", message = outerPanel.peer, messageType = Dialog.Message.Plain)
   }
 
-  def showSelectDatasetsToMergeDialog(): Unit = {
+  def showSelectDatasetsToMergeDialog(remote: Boolean): Unit = {
     checkEdt()
     if (loadedDaos.isEmpty) {
       showWarning("Load a database first!")
@@ -401,7 +404,7 @@ class MainFrameApp(grpcPort: Int) //
     } else if (loadedDaos.keys.flatMap(_.datasets).size == 1) {
       showWarning("Only one dataset is loaded - nothing to merge.")
     } else {
-      val selectDsDialog = new SelectMergeDatasetDialog(loadedDaos.keys.toSeq)
+      val selectDsDialog = new SelectMergeDatasetDialog(loadedDaos.keys.toSeq, remote)
       selectDsDialog.visible = true
       selectDsDialog.selection foreach {
         case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
@@ -412,15 +415,25 @@ class MainFrameApp(grpcPort: Int) //
             initial = storagePath.getName
           ) foreach { newDbName =>
             val newDbPath = new JFile(storagePath.getParentFile, newDbName)
-            if (newDbPath.exists) {
-              showError(s"Database exists: ${newDbPath.getAbsolutePath}")
+            if (newDbPath.exists && newDbPath.list().nonEmpty) {
+              showError(s"Database directory ${newDbPath.getAbsolutePath} exists and is not empty")
             } else {
               val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
               selectChatsDialog.visible = true
               selectChatsDialog.selection foreach { chatsToMerge =>
-                val merger = new DatasetMerger(masterDao, masterDs, slaveDao, slaveDs)
+                val merger = if (!remote) {
+                  new DatasetMergerLocal(masterDao, masterDs, slaveDao, slaveDs, DataLoaders.createH2)
+                } else {
+                  new DatasetMergerRemote(
+                    grpcHolder.channel,
+                    masterDao.asInstanceOf[GrpcChatHistoryDao], masterDs,
+                    slaveDao.asInstanceOf[GrpcChatHistoryDao], slaveDs
+                  )
+                }
+                val sw = new StopWatch
                 val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge)
                 val activeUserIds = chatsToMerge
+                  .filter(!_.isInstanceOf[ChatMergeOption.DontAdd])
                   .flatMap(ctm => Seq(ctm.masterCwdOption, ctm.slaveCwdOption))
                   .yieldDefined
                   .flatMap(_.chat.memberIds)
@@ -429,12 +442,31 @@ class MainFrameApp(grpcPort: Int) //
                 selectUsersDialog.visible = true
                 selectUsersDialog.selection match {
                   case Some(usersToMerge) =>
-                    analyzeChatsF.future.foreach(analyzed => mergeDatasets(merger, analyzed, usersToMerge, newDbPath))
+                    analyzeChatsF.future.foreach(analyzed => mergeDatasets(merger, masterDao, slaveDao, analyzed, usersToMerge, newDbPath))
                   case None =>
                     analyzeChatsF.cancel()
                 }
               }
             }
+          }
+      }
+    }
+  }
+
+  def showSelectDatasetsToCompareDialog(): Unit = {
+    checkEdt()
+    if (loadedDaos.size < 2) {
+      showWarning("Load at least two databases first!")
+    } else if (loadedDaos.keys.flatMap(_.datasets).size == 1) {
+      showWarning("Only one dataset is loaded - nothing to compare.")
+    } else {
+      val selectDsDialog = new SelectCompareDatasetDialog(loadedDaos.keys.toSeq)
+      selectDsDialog.visible = true
+      selectDsDialog.selection foreach {
+        case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
+          worldFreezingIFuture("Comparing datasets...") {
+            ChatHistoryDao.ensureDatasetsAreEqual(slaveDao, masterDao, slaveDs.uuid, masterDs.uuid)
+            showWarning("Datasets are same!")
           }
       }
     }
@@ -463,6 +495,7 @@ class MainFrameApp(grpcPort: Int) //
             }
             cmo.analyzed(diffs)
           case cmo: ChatMergeOption.Add => cmo
+          case cmo: ChatMergeOption.DontAdd => cmo
           case cmo: ChatMergeOption.Keep => cmo
         }
       }
@@ -470,6 +503,8 @@ class MainFrameApp(grpcPort: Int) //
 
   def mergeDatasets(
       merger: DatasetMerger,
+      masterDao: ChatHistoryDao,
+      slaveDao: ChatHistoryDao,
       analyzed: Seq[AnalyzedChatMergeOption],
       usersToMerge: Seq[UserMergeOption],
       newDbPath: JFile
@@ -493,12 +528,14 @@ class MainFrameApp(grpcPort: Int) //
                 if (Thread.interrupted()) throw new InterruptedException("Cancelled")
                 StopWatch.measureAndCall {
                   // I *HOPE* that creating model alone outside of EDT doesn't cause issues
-                  new MergeModel(merger.masterDao, mcwd, merger.slaveDao, scwd, diffs, htmlKit)
+                  new MergeModel(masterDao, mcwd, slaveDao, scwd, diffs, htmlKit)
                 }((_, t) => log.info(s"Model for chats merge ${cmo.title} created in $t ms"))
               })
               (resolved, cmosWithLazyModels :+ next)
             }
           case ((resolved, cmosWithLazyModels), cmo: ChatMergeOption.Add) =>
+            (resolved :+ cmo, cmosWithLazyModels)
+          case ((resolved, cmosWithLazyModels), cmo: ChatMergeOption.DontAdd) =>
             (resolved :+ cmo, cmosWithLazyModels)
           case ((resolved, cmosWithLazyModels), cmo: ChatMergeOption.Keep) =>
             (resolved :+ cmo, cmosWithLazyModels)
@@ -550,9 +587,7 @@ class MainFrameApp(grpcPort: Int) //
       // Merge
       worldFreezingIFuture("Merging...") {
         newDbPath.mkdir()
-        val newDao = DataLoaders.createH2(newDbPath)
-
-        merger.merge(usersToMerge, chatsMergeResolutions, newDao)
+        val (newDao, _) = merger.merge(usersToMerge, chatsMergeResolutions, newDbPath)
         Swing.onEDTWait {
           loadDaoInEDT(newDao)
         }

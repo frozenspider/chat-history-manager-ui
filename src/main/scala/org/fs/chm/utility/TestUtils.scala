@@ -10,6 +10,7 @@ import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao._
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger.TaggedMessage
+import org.fs.chm.dao.merge.DatasetMerger.TaggedMessageId
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.LangUtils._
 
@@ -18,9 +19,10 @@ import org.fs.chm.utility.LangUtils._
  */
 object TestUtils {
 
-  val noUuid   = PbUuid("00000000-0000-0000-0000-000000000000")
-  val baseDate = DateTime.parse("2019-01-02T11:15:21")
-  val rnd      = new Random()
+  val noUuid      = PbUuid("00000000-0000-0000-0000-000000000000")
+  val baseDate    = DateTime.parse("2019-01-02T11:15:21")
+  val rnd         = new Random()
+  val tmpFileName = "whatever"
 
   def makeTempDir(suffix: String = "tmp"): File = {
     val dir = Files.createTempDirectory(s"java_chm-${suffix}_").toFile
@@ -119,7 +121,8 @@ object TestUtils {
     )
     val users1       = users map (_ copy (dsUuid = ds.uuid))
     val dataPathRoot = makeTempDir("eager").asInstanceOf[DatasetRoot]
-    val amend2 = amendMessage.curried(isMaster)(dataPathRoot)
+    val amend2       = amendMessage.curried(isMaster)(dataPathRoot)
+    Files.createFile(new File(dataPathRoot, tmpFileName).toPath)
     new EagerChatHistoryDao(
       name               = "Dao " + nameSuffix,
       _dataRootFile      = dataPathRoot,
@@ -155,17 +158,13 @@ object TestUtils {
 
   implicit class RichMsgSeq(msgs: Seq[Message]) {
     def bySrcId[TM <: Message with TaggedMessage](id: Long): TM =
-      tag(msgs.find(_.sourceIdTypedOption.get == id).get)
+      msgs.find(_.sourceIdTypedOption.get == id).get.asInstanceOf[TM]
+
+    def internalIdBySrcId[TMId <: MessageInternalId with TaggedMessageId](id: Long): TMId =
+      msgs.find(_.sourceIdTypedOption.get == id).get.internalId.asInstanceOf[TMId]
   }
 
-  def tag[TM <: Message with TaggedMessage](m: Message): TM = m.asInstanceOf[TM]
-
-  def tag[TM <: Message with TaggedMessage](id: Int)(implicit msgs: Seq[Message]): TM =
-    msgs.bySrcId(id)
-
   trait EagerMutableDaoTrait extends MutableChatHistoryDao {
-    override def storagePath: File = ???
-
     override def insertDataset(ds: Dataset): Unit = ???
 
     override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = ???

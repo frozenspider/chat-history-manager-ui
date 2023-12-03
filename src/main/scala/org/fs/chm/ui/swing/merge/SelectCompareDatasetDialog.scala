@@ -1,8 +1,5 @@
 package org.fs.chm.ui.swing.merge
 
-import scala.annotation.tailrec
-import scala.swing.GridBagPanel._
-import scala.swing._
 import javax.swing.DefaultListSelectionModel
 import javax.swing.ListSelectionModel
 import javax.swing.border.LineBorder
@@ -10,38 +7,39 @@ import javax.swing.table.AbstractTableModel
 import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.TableModel
 
+import scala.annotation.tailrec
+import scala.swing.GridBagPanel._
+import scala.swing._
+
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.GrpcChatHistoryDao
-import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.protobuf.Dataset
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 
-class SelectMergeDatasetDialog(
+// This is pretty much a copy-paste of SelectMergeDatasetDialog, which is ok since this one is temporary anyway
+class SelectCompareDatasetDialog(
     daos: Seq[ChatHistoryDao],
-    remote: Boolean
-) extends CustomDialog[((MutableChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))](takeFullHeight = false) {
+) extends CustomDialog[((ChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))](takeFullHeight = false) {
 
   // All values are lazy to be accessible from parent's constructor
 
   private lazy val TableWidth = 500
 
-  private lazy val daosWithDatasets        = daos filter (!remote || _.isInstanceOf[GrpcChatHistoryDao]) map (dao => (dao, dao.datasets))
-  private lazy val mutableDaosWithDatasets = daosWithDatasets filter (_._1.isMutable)
+  private lazy val daosWithDatasets        = daos map (dao => (dao, dao.datasets))
 
   private lazy val masterTable = {
     checkEdt()
-    createTable("Base dataset", mutableDaosWithDatasets)
+    createTable("Left dataset", daosWithDatasets)
   }
   private lazy val slaveTable  = {
     checkEdt()
-    createTable("Dataset to be added to it", daosWithDatasets)
+    createTable("Right dataset", daosWithDatasets)
   }
 
   private def createTable(title: String, data: Seq[(ChatHistoryDao, Seq[Dataset])]): Table = {
-    val models = new MergeDatasetModels(title, data)
+    val models = new CompareDatasetModels(title, data)
     new Table(models.tableModel) {
-      peer.setDefaultRenderer(classOf[Any], new MergeDatasetCellRenderer())
+      peer.setDefaultRenderer(classOf[Any], new CompareDatasetCellRenderer())
       peer.setSelectionModel(models.selectionModel)
       val col = peer.getColumnModel.getColumn(0)
       col.setMinWidth(TableWidth)
@@ -72,7 +70,7 @@ class SelectMergeDatasetDialog(
       add(slaveTable, c)
     }
 
-  override def validateChoices(): Option[((MutableChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))] = {
+  override def validateChoices(): Option[((ChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))] = {
     /** Find the DAO for the given dataset row by abusing the table structure */
     @tailrec
     def findDao(tm: TableModel, idx: Int): ChatHistoryDao = tm.getValueAt(idx, 0) match {
@@ -86,10 +84,10 @@ class SelectMergeDatasetDialog(
       case (Some(masterRow), Some(slaveRow)) =>
         val masterDs  = masterTable.model.getValueAt(masterRow, 0).asInstanceOf[Dataset]
         val slaveDs   = slaveTable.model.getValueAt(slaveRow, 0).asInstanceOf[Dataset]
-        val masterDao = findDao(masterTable.model, masterRow).asInstanceOf[MutableChatHistoryDao]
+        val masterDao = findDao(masterTable.model, masterRow)
         val slaveDao  = findDao(slaveTable.model, slaveRow)
         if (masterDao == slaveDao && masterDs == slaveDs) {
-          showWarning("Can't merge dataset with itself.")
+          showWarning("Can't compare dataset with itself.")
           None
         } else {
           Some((masterDao, masterDs), (slaveDao, slaveDs))
@@ -101,7 +99,7 @@ class SelectMergeDatasetDialog(
   }
 }
 
-private class MergeDatasetModels(title: String, values: Seq[(ChatHistoryDao, Seq[Dataset])]) {
+private class CompareDatasetModels(title: String, values: Seq[(ChatHistoryDao, Seq[Dataset])]) {
   private val elements: IndexedSeq[AnyRef] =
     (for {
       (dao, daoDatasets) <- values
@@ -131,7 +129,7 @@ private class MergeDatasetModels(title: String, values: Seq[(ChatHistoryDao, Seq
   }
 }
 
-private class MergeDatasetCellRenderer extends DefaultTableCellRenderer {
+private class CompareDatasetCellRenderer extends DefaultTableCellRenderer {
   override def setValue(v: AnyRef): Unit = v match {
     case dao: ChatHistoryDao =>
       setText(dao.name)

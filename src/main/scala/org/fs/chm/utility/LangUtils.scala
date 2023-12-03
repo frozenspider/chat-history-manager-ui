@@ -74,7 +74,7 @@ object LangUtils extends Logging {
       val dpp = rootFile.getAbsolutePath
       val fp = f.getAbsolutePath
       assert(fp startsWith dpp, s"Expected ${fp} to start with ${dpp}")
-      fp.drop(dpp.length)
+      fp.drop(dpp.length + 1)
     }
 
     @tailrec

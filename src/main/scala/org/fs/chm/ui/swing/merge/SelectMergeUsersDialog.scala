@@ -21,7 +21,8 @@ import org.fs.utility.Imports._
  * - There will be a merge option in the output for every user in master and slave DSs
  * - Master users will precede slave-only users
  * - Checkbox option will ONLY be present for users that actually changed
- * - Users whose chat was skipped entirely won't have a checkbox, and won't be selected
+ * - Users whose chat was skipped entirely won't have a checkbox
+ * - Result will contain an entry for every user in either datasets
  * This means that the only thing that could be controlled is whether to merge changed users or keep an old ones
  */
 class SelectMergeUsersDialog(
@@ -66,7 +67,7 @@ class SelectMergeUsersDialog(
 
       // Exclude non-active users
       val merges: Seq[RowData[UserWithDao]] =
-        for (su <- slaveUsers if activeUserIds contains su.id) yield {
+        for (su <- slaveUsers) yield {
           masterUsersMap.get(su.id) match {
             case None =>
               RowData.InSlaveOnly(UserWithDao(su, slaveDao), selectable = false)
@@ -88,8 +89,8 @@ class SelectMergeUsersDialog(
 
       // 1) Combined and unchanged users
       val combinesMasterToDataMap: Map[User, RowData.InBoth[UserWithDao]] =
-        merges.collect { case rd @ RowData.InBoth(mu, su, _) => (mu.user, rd) }.toMap
-      for (mu <- masterUsers if activeUserIds contains mu.id) {
+        merges.collect { case rd @ RowData.InBoth(mu, _, _) => (mu.user, rd) }.toMap
+      for (mu <- masterUsers) {
         combinesMasterToDataMap.get(mu) match {
           case Some(rd) => mergesAcc = mergesAcc :+ rd
           case None     => mergesAcc = mergesAcc :+ RowData.InMasterOnly(UserWithDao(mu, masterDao), selectable = false)
@@ -130,10 +131,11 @@ class SelectMergeUsersDialog(
         isSelected: Boolean
     ): Option[UserMergeOption] = {
       Some(rd match {
-        case RowData.InMasterOnly(muwd, _) => UserMergeOption.Keep(muwd.user)
-        case RowData.InSlaveOnly(suwd, _)  => UserMergeOption.Add(suwd.user)
-        case RowData.InBoth(muwd, suwd, _) =>
-          if (isSelected) UserMergeOption.Replace(muwd.user, suwd.user) else UserMergeOption.Keep(muwd.user)
+        case RowData.InMasterOnly(muwd, _)                                        => UserMergeOption.Retain(muwd.user)
+        case RowData.InSlaveOnly(suwd, _) if activeUserIds.contains(suwd.user.id) => UserMergeOption.Add(suwd.user)
+        case RowData.InSlaveOnly(suwd, _)                                         => UserMergeOption.DontAdd(suwd.user)
+        case RowData.InBoth(muwd, suwd, _) if isSelected                          => UserMergeOption.Replace(muwd.user, suwd.user)
+        case RowData.InBoth(muwd, suwd, _)                                        => UserMergeOption.MatchOrDontReplace(muwd.user, suwd.user)
       })
     }
   }
@@ -143,8 +145,6 @@ class SelectMergeUsersDialog(
 
 object SelectMergeUsersDialog {
   def main(args: Array[String]): Unit = {
-    import java.nio.file.Files
-
     import scala.collection.immutable.ListMap
 
     import org.fs.chm.utility.TestUtils._
@@ -179,7 +179,7 @@ object SelectMergeUsersDialog {
     }
     val (sDs, _, _, _, _) = getSimpleDaoEntities(sDao)
 
-    val activeUserIds = Seq(mDao.users(mDs.uuid), sDao.users(sDs.uuid)).flatten.map(_.id).toSet
+    val activeUserIds = Seq(mDao.users(mDs.uuid), sDao.users(sDs.uuid)).flatten.map(_.id).sorted.dropRight(1).toSet
 
     val dialog = new SelectMergeUsersDialog(mDao, mDs, sDao, sDs, activeUserIds)
     dialog.visible = true

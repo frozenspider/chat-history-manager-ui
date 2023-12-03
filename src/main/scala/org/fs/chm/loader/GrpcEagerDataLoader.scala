@@ -7,14 +7,15 @@ import scala.collection.immutable.ListMap
 import io.grpc.ManagedChannel
 import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.protobuf._
+import org.fs.chm.utility.RpcUtils
 import org.fs.utility.StopWatch
 
 class GrpcEagerDataLoader(channel: ManagedChannel) extends DataLoader[EagerChatHistoryDao] {
   override protected def loadDataInner(path: JFile, createNew: Boolean): EagerChatHistoryDao = {
-    val request = ParseLoadRequest(path = path.getAbsolutePath)
+    val request = ParseRequest(path = path.getAbsolutePath)
     log.info(s"Sending gRPC parse request (eager): ${request}")
     StopWatch.measureAndCall {
-      val response: ParseResponse = GrpcDataLoaderHolder.wrapRequestNoParams {
+      val response: ParseResponse = RpcUtils.sendRequestNoParams {
         val blockingStub = HistoryParserServiceGrpc.blockingStub(channel)
         blockingStub.parse(request)
       }
