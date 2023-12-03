@@ -16,6 +16,8 @@ import com.github.nscala_time.time.Imports._
 import javax.swing.SwingUtilities
 import javax.swing.event.HyperlinkEvent
 
+import scala.util.Failure
+
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.EagerChatHistoryDao
@@ -107,9 +109,10 @@ class MainFrameApp(grpcPort: Int) //
     contents = ui
     size     = new Dimension(1000, 700)
     peer.setLocationRelativeTo(null)
+    Thread.setDefaultUncaughtExceptionHandler(handleException);
 
     Swing.onEDTWait {
-      // Install EDT exception handler
+      // Install EDT exception handler (may be unnecessary due to default handler)
       Thread.currentThread.setUncaughtExceptionHandler(handleException)
 
       if (initialFileOption.isDefined) {
@@ -117,7 +120,7 @@ class MainFrameApp(grpcPort: Int) //
       }
     }
 
-    initialFileOption map (f => Future { Swing.onEDT { openDb(f, remote = false) } })
+    initialFileOption map (f => futureHandlingExceptions { Swing.onEDT { openDb(f, remote = false) } })
   }
 
   lazy val ui = new BorderPanel {
@@ -287,20 +290,11 @@ class MainFrameApp(grpcPort: Int) //
     checkEdt()
     freezeTheWorld("Loading data...")
     config.update(DataLoaders.LastFileKey, file.getAbsolutePath)
-    Future { // To release UI lock
-      try {
-        val dao = DataLoaders.load(file, remote)
-        Swing.onEDT {
-          try {
-            loadDaoInEDT(dao)
-          } finally {
-            unfreezeTheWorld()
-          }
-        }
-      } catch {
-        case th: Throwable =>
-          Swing.onEDT { unfreezeTheWorld() }
-          handleException(th)
+    futureHandlingExceptions { // To release UI lock
+      val dao = DataLoaders.load(file, remote)
+      Swing.onEDT {
+        loadDaoInEDT(dao)
+        unfreezeTheWorld()
       }
     }
   }
@@ -308,18 +302,15 @@ class MainFrameApp(grpcPort: Int) //
   def closeDb(dao: ChatHistoryDao): Unit = {
     checkEdt()
     freezeTheWorld("Closing...")
-    Future {
+    futureHandlingExceptions {
       Swing.onEDT {
-        try {
-          MutationLock.synchronized {
-            loadedDaos = loadedDaos - dao
-            chatList.replaceWith(loadedDaos.keys.toSeq)
-            dao.close()
-          }
-          daoListChanged()
-        } finally {
-          unfreezeTheWorld()
+        MutationLock.synchronized {
+          loadedDaos = loadedDaos - dao
+          chatList.replaceWith(loadedDaos.keys.toSeq)
+          dao.close()
         }
+        daoListChanged()
+        unfreezeTheWorld()
       }
     }
   }
@@ -327,7 +318,7 @@ class MainFrameApp(grpcPort: Int) //
   def verifyRemoteDao(rpcDao: GrpcChatHistoryDao): Unit = {
     checkEdt()
     freezeTheWorld("Verifying...")
-    Future {
+    futureHandlingExceptions {
       val path = rpcDao.storagePath
       try {
         grpcHolder.grpcDaoService.getDao(path) match {
@@ -736,7 +727,7 @@ class MainFrameApp(grpcPort: Int) //
       }
       freezeTheWorld("Loading chat...")
     }
-    Future {
+    futureHandlingExceptions {
       MutationLock.synchronized {
         currentChatOption = Some(dao -> cwd)
         loadMessagesInProgress = true
@@ -757,7 +748,7 @@ class MainFrameApp(grpcPort: Int) //
   override def navigateToBeginning(): Unit = {
     checkEdt()
     freezeTheWorld("Navigating...")
-    Future {
+    futureHandlingExceptions {
       currentChatOption match {
         case Some((dao, cwd)) =>
           val cache = loadedDaos(dao)(cwd.chat)
@@ -786,7 +777,7 @@ class MainFrameApp(grpcPort: Int) //
   override def navigateToEnd(): Unit = {
     checkEdt()
     freezeTheWorld("Navigating...")
-    Future {
+    futureHandlingExceptions {
       currentChatOption match {
         case Some((dao, cwd)) =>
           val cache = loadedDaos(dao)(cwd.chat)
@@ -816,7 +807,7 @@ class MainFrameApp(grpcPort: Int) //
     // FIXME: This doesn't work!
     checkEdt()
     freezeTheWorld("Navigating...")
-    Future {
+    futureHandlingExceptions {
       currentChatOption match {
         case Some((dao, cwd)) =>
           // TODO: Don't replace a document if currently cached document already contains message?
@@ -897,7 +888,7 @@ class MainFrameApp(grpcPort: Int) //
     chatInfoOption match {
       case Some((loadStatus, dao, cwd)) =>
         msgRenderer.updateStarted()
-        val f = Future {
+        val f = futureHandlingExceptions {
           Swing.onEDTWait(msgRenderer.prependLoading())
           val (addedMessages, loadStatus2) = load(dao, cwd, loadStatus)
           log.debug(s"Loading messages: Loaded ${addedMessages.size} messages")
@@ -905,19 +896,12 @@ class MainFrameApp(grpcPort: Int) //
             val md = addToRender(dao, cwd, addedMessages, loadStatus2)
             log.debug("Loading messages: Reloaded message container")
             updateCache(dao, cwd.chat, ChatCache(Some(md), Some(loadStatus2)))
+
+            msgRenderer.updateFinished()
+            loadMessagesInProgress = false
+            unfreezeTheWorld()
           })
         }
-        f.onComplete(res => {
-          res.failed.toOption match {
-            case Some(th) => handleException(th)
-            case None =>
-              Swing.onEDTWait(MutationLock.synchronized {
-                msgRenderer.updateFinished()
-                loadMessagesInProgress = false
-                unfreezeTheWorld()
-              })
-          }
-        })
       case None => /* NOOP */
     }
   }
@@ -1062,7 +1046,22 @@ class MainFrameApp(grpcPort: Int) //
           log.error("Caught an exception:", ex)
           SwingUtils.showError(ex.getMessage)
       }
+      if (isEdt()) {
+        unfreezeTheWorld()
+      } else
+        Swing.onEDT {
+          unfreezeTheWorld()
+        }
     }
+
+  private def futureHandlingExceptions[T](code: => T): Future[T] = {
+    val f = Future(code)
+    f.onComplete {
+      case Failure(th) => handleException(th)
+      case _ => // NOOP
+    }
+    f
+  }
 
   private class DaoChatItem(dao: ChatHistoryDao)
       extends DaoItem(

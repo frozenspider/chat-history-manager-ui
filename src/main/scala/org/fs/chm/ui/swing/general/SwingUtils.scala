@@ -89,9 +89,11 @@ object SwingUtils extends Logging {
       gridx   = 0
     }
 
+  def isEdt():Boolean = EventQueue.isDispatchThread
+
   def checkEdt() = {
     require(
-      EventQueue.isDispatchThread, {
+      isEdt(), {
         log.error("Should be called from EDT!", new IllegalArgumentException("Should be called from EDT!"))
         "Should be called from EDT! "
       }
@@ -100,7 +102,7 @@ object SwingUtils extends Logging {
 
   /** Execute a code block on EDT, returning the result */
   def onEdtReturning[A](cb: => A) = {
-    require(!EventQueue.isDispatchThread, "Shouldn't be called from EDT!")
+    require(!isEdt(), "Shouldn't be called from EDT!")
     val holder = new ResultHolder[A]
     Swing.onEDTWait {
       holder.res = cb
