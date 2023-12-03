@@ -10,6 +10,7 @@ import scala.language.implicitConversions
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities.MessageInternalId
 import org.fs.chm.dao.Entities.MessageSourceId
+import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.protobuf._
 import org.fs.chm.utility.Logging
 
@@ -109,6 +110,26 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
       dao.isLoaded(new File(request.storagePath))))
 
   //
+  // Mutable DAO endpoints
+  //
+
+  override def backup(request: BackupRequest): Future[Empty] = {
+    withDao(request, request.key)(dao => {
+      require(dao.isMutable, "Dao is immutable!")
+      dao.asInstanceOf[MutableChatHistoryDao].backup()
+      Empty()
+    })
+  }
+
+  override def updateUser(request: UpdateUserRequest): Future[UpdateUserResponse] = {
+    withDao(request, request.key)(dao => {
+      require(dao.isMutable, "Dao is immutable!")
+      dao.asInstanceOf[MutableChatHistoryDao].updateUser(request.user)
+      UpdateUserResponse(dao.users(request.user.dsUuid).find(_.id == request.user.id).get)
+    })
+  }
+
+  //
   // Helpers
   //
 
@@ -153,7 +174,7 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
       }
     }
 
-    override def getLoadedFiles(request: GetLoadedFilesRequest): Future[GetLoadedFilesResponse] = {
+    override def getLoadedFiles(request: Empty): Future[GetLoadedFilesResponse] = {
       Future.successful(loggingRequest(request) {
         val loaded = Lock.synchronized {
           for {

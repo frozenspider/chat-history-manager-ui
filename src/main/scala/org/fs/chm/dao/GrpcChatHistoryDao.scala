@@ -16,6 +16,8 @@ class GrpcChatHistoryDao(val key: String,
                          loaderRpcStub: HistoryLoaderServiceBlockingStub)
   extends MutableChatHistoryDao with Logging {
 
+  private var backupsEnabled = true
+
   override val name: String = initial_name + " (remote)"
 
   override lazy val storagePath: File = {
@@ -112,8 +114,10 @@ class GrpcChatHistoryDao(val key: String,
   /** Insert a new user. It should not yet exist */
   override def insertUser(user: User, isMyself: Boolean): Unit = ???
 
-  /** Sets the data (names and phone only) for a user with the given `id` and `dsUuid` to the given state */
-  override def updateUser(user: User): Unit = ???
+  override def updateUser(user: User): Unit = {
+    if (backupsEnabled) this.backup()
+    sendRequest(UpdateUserRequest(key, user))(daoRpcStub.updateUser)
+  }
 
   /**
    * Merge absorbed user into base user, moving its personal chat messages into base user personal chat.
@@ -137,11 +141,17 @@ class GrpcChatHistoryDao(val key: String,
   override def insertMessages(srcDsRoot: DatasetRoot, chat: Chat, msgs: Seq[Message]): Unit = ???
 
   /** Don't do automatic backups on data changes until re-enabled */
-  override def disableBackups(): Unit = ???
+  override def disableBackups(): Unit = {
+    this.backupsEnabled = false
+  }
 
   /** Start doing backups automatically once again */
-  override def enableBackups(): Unit = ???
+  override def enableBackups(): Unit = {
+    this.backupsEnabled = true
+  }
 
   /** Create a backup, if enabled, otherwise do nothing */
-  override def backup(): Unit = ???
+  override def backup(): Unit = {
+    sendRequest(BackupRequest(key))(daoRpcStub.backup)
+  }
 }
