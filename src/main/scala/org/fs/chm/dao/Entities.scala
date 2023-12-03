@@ -64,6 +64,7 @@ object Entities {
       case RteItalic(text, _)                => text
       case RteUnderline(text, _)             => text
       case RteStrikethrough(text, _)         => text
+      case RteBlockquote(text, _)            => text
       case RteSpoiler(text, _)               => text
       case RteLink(textOpt, href, hidden, _) => textOpt.filter(_ != href).getOrElse(" ") + " " + href
       case RtePrefmtInline(text, _)          => text

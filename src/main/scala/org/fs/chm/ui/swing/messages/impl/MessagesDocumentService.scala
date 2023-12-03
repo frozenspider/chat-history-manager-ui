@@ -329,6 +329,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         case _: RteItalic        => s"<i>${toHtmlPlaintext(text)}</i>"
         case _: RteUnderline     => s"<u>${toHtmlPlaintext(text)}</u>"
         case _: RteStrikethrough => s"<strike>${toHtmlPlaintext(text)}</strike>"
+        case _: RteBlockquote    => s"<blockquote>${toHtmlPlaintext(text)}</blockquote>"
         case _: RteSpoiler       => s"<i><strike>${toHtmlPlaintext(text)}</strike></i>"
         case link: RteLink       => renderLink(rt, link)
         case _: RtePrefmtBlock   => s"""<pre>${text}</pre>"""
