@@ -17,7 +17,6 @@ import org.fs.chm.utility.Logging
 /** Acts as server API for a local history DAO */
 class GrpcDaoService(doLoad: File => ChatHistoryDao)
   extends HistoryDaoServiceGrpc.HistoryDaoService
-    //HistoryLoaderServiceGrpc.HistoryLoaderService
     with Logging {
   implicit private val ec: ExecutionContextExecutor = ExecutionContext.global
 
@@ -118,6 +117,14 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
       require(dao.isMutable, "Dao is immutable!")
       dao.asInstanceOf[MutableChatHistoryDao].backup()
       Empty()
+    })
+  }
+
+  override def updateDataset(request: UpdateDatasetRequest): Future[UpdateDatasetResponse] = {
+    withDao(request, request.key)(dao => {
+      require(dao.isMutable, "Dao is immutable!")
+      dao.asInstanceOf[MutableChatHistoryDao].renameDataset(request.dataset.uuid, request.dataset.alias)
+      UpdateDatasetResponse(dao.datasets.find(_.uuid == request.dataset.uuid).get)
     })
   }
 

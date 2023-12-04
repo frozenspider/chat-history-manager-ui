@@ -24,7 +24,7 @@ class GrpcChatHistoryDao(val key: String,
     new File(sendRequest(StoragePathRequest(key))(daoRpcStub.storagePath).path)
   }
 
-  override lazy val datasets: Seq[Dataset] = {
+  override def datasets: Seq[Dataset] = {
     sendRequest(DatasetsRequest(key))(daoRpcStub.datasets).datasets
   }
 
@@ -102,15 +102,20 @@ class GrpcChatHistoryDao(val key: String,
     new GrpcChatHistoryDao(loaded.key, loaded.name, daoRpcStub, loaderRpcStub)
   }
 
+  // Not used ouside of merge
   override def insertDataset(ds: Dataset): Unit = ???
 
-  override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = ???
+  override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = {
+    if (backupsEnabled) this.backup()
+    sendRequest(UpdateDatasetRequest(key, Dataset(dsUuid, newName)))(daoRpcStub.updateDataset).dataset
+  }
 
   override def deleteDataset(dsUuid: PbUuid): Unit = ???
 
   /** Shift time of all timestamps in the dataset to accommodate timezone differences */
   override def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): Unit = ???
 
+  // Not used ouside of merge
   /** Insert a new user. It should not yet exist */
   override def insertUser(user: User, isMyself: Boolean): Unit = ???
 
@@ -124,6 +129,7 @@ class GrpcChatHistoryDao(val key: String,
    */
   override def mergeUsers(baseUser: User, absorbedUser: User): Unit = ???
 
+  // Not used ouside of merge
   /**
    * Insert a new chat.
    * It should have a proper DS UUID set, should not yet exist, and all users must already be inserted.
@@ -133,6 +139,7 @@ class GrpcChatHistoryDao(val key: String,
 
   override def deleteChat(chat: Chat): Unit = ???
 
+  // Not used ouside of merge
   /**
    * Insert a new message for the given chat.
    * Internal ID will be ignored.
