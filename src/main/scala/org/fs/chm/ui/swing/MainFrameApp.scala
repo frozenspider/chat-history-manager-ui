@@ -20,10 +20,8 @@ import scala.util.Failure
 
 import org.fs.chm.BuildInfo
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.GrpcChatHistoryDao
-import org.fs.chm.dao.H2ChatHistoryDao
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
@@ -68,9 +66,9 @@ class MainFrameApp(grpcPort: Int) //
 
   private var initialFileOption: Option[JFile] = None
 
-  private var loadedDaos: ListMap[ChatHistoryDao, Map[Chat, ChatCache]] = ListMap.empty
+  private var loadedDaos: ListMap[GrpcChatHistoryDao, Map[Chat, ChatCache]] = ListMap.empty
 
-  private var currentChatOption:      Option[(ChatHistoryDao, ChatWithDetails)] = None
+  private var currentChatOption:      Option[(GrpcChatHistoryDao, ChatWithDetails)] = None
   private var loadMessagesInProgress: Boolean                                   = false
 
   private val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
@@ -78,8 +76,7 @@ class MainFrameApp(grpcPort: Int) //
   private val chatSelGroup  = new ChatListItemSelectionGroup
 
   private lazy val grpcHolder = {
-    val grpcDaoService = new GrpcDaoService(f => DataLoaders.loadH2(f));
-    new GrpcDataLoaderHolder(grpcPort, grpcDaoService)
+    new GrpcDataLoaderHolder(grpcPort)
   }
 
   /*
@@ -97,20 +94,13 @@ class MainFrameApp(grpcPort: Int) //
    *  - cache document view position
    */
 
-  val preloadResult: Future[_] = {
-    val futureSeq = Seq(
-      DataLoaders.preload(),
-    ).flatten
-    futureSeq.reduce((a, b) => a.flatMap(_ => b))
-  }
-
   override lazy val top = new MainFrame {
     import org.fs.chm.BuildInfo._
     title    = s"$name v${version} b${new DateTime(builtAtMillis).toString("yyyyMMdd-HHmmss")}"
     contents = ui
     size     = new Dimension(1000, 700)
     peer.setLocationRelativeTo(null)
-    Thread.setDefaultUncaughtExceptionHandler(handleException);
+    Thread.setDefaultUncaughtExceptionHandler(handleException)
 
     Swing.onEDTWait {
       // Install EDT exception handler (may be unnecessary due to default handler)
@@ -300,7 +290,7 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  def closeDb(dao: ChatHistoryDao): Unit = {
+  def closeDb(dao: GrpcChatHistoryDao): Unit = {
     checkEdt()
     freezeTheWorld("Closing...")
     futureHandlingExceptions {
@@ -312,30 +302,6 @@ class MainFrameApp(grpcPort: Int) //
         }
         daoListChanged()
         unfreezeTheWorld()
-      }
-    }
-  }
-
-  def verifyRemoteDao(rpcDao: GrpcChatHistoryDao): Unit = {
-    checkEdt()
-    freezeTheWorld("Verifying...")
-    futureHandlingExceptions {
-      val path = rpcDao.storagePath
-      try {
-        grpcHolder.grpcDaoService.getDao(path) match {
-          case Some(localDao) =>
-            for (ds <- localDao.datasets) {
-              // This throws and exception if something is wrong
-              ChatHistoryDao.ensureDataSourcesAreEqual(localDao, rpcDao, ds.uuid)
-            }
-            showWarning("DAOs match!")
-          case None => showError(s"DAO with path ${path} wasn't found!")
-        }
-      } catch {
-        case th: Throwable =>
-          showError(s"Found a problem: ${th}")
-      } finally {
-        Swing.onEDT { unfreezeTheWorld() }
       }
     }
   }
@@ -495,7 +461,7 @@ class MainFrameApp(grpcPort: Int) //
     }
 
   def mergeDatasets(
-      merger: DatasetMerger,
+      merger: DatasetMergerRemote,
       masterDao: ChatHistoryDao,
       slaveDao: ChatHistoryDao,
       analyzed: Seq[AnalyzedChatMergeOption],
@@ -588,7 +554,7 @@ class MainFrameApp(grpcPort: Int) //
     })
   }
 
-  def loadDaoInEDT(dao: ChatHistoryDao, daoToReplaceOption: Option[ChatHistoryDao] = None): Unit = {
+  def loadDaoInEDT(dao: GrpcChatHistoryDao, daoToReplaceOption: Option[GrpcChatHistoryDao] = None): Unit = {
     checkEdt()
     MutationLock.synchronized {
       daoToReplaceOption match {
@@ -620,14 +586,7 @@ class MainFrameApp(grpcPort: Int) //
     dbEmbeddedMenu.clear()
     for (dao <- loadedDaos.keys) {
       val daoMenu = new Menu(dao.name) {
-        dao match {
-          case dao: GrpcChatHistoryDao =>
-            contents += menuItem("Save As...")(saveAs(dao))
-            if (dao.key.endsWith(H2DataManager.DefaultExt)) {
-              contents += menuItem("Verify")(verifyRemoteDao(dao))
-            }
-          case _ => // NOOP
-        }
+        contents += menuItem("Save As...")(saveAs(dao))
         contents += new Separator()
         contents += menuItem("Close")(closeDb(dao))
       }
@@ -637,14 +596,15 @@ class MainFrameApp(grpcPort: Int) //
     chatsOuterPanel.repaint()
   }
 
-  def renameDataset(dao: ChatHistoryDao, dsUuid: PbUuid, newName: String): Unit = {
+  def renameDataset(_dao: ChatHistoryDao, dsUuid: PbUuid, newName: String): Unit = {
     checkEdt()
-    require(dao.isMutable, "DAO is immutable!")
+    require(_dao.isInstanceOf[GrpcChatHistoryDao])
+    val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
     freezeTheWorld("Renaming...")
     Swing.onEDT { // To release UI lock
       try {
         MutationLock.synchronized {
-          dao match { case dao: MutableChatHistoryDao => dao.renameDataset(dsUuid, newName) }
+          dao.renameDataset(dsUuid, newName)
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
         chatsOuterPanel.revalidate()
@@ -655,14 +615,15 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  def deleteDataset(dao: ChatHistoryDao, dsUuid: PbUuid): Unit = {
+  def deleteDataset(_dao: ChatHistoryDao, dsUuid: PbUuid): Unit = {
     checkEdt()
-    require(dao.isMutable, "DAO is immutable!")
+    require(_dao.isInstanceOf[GrpcChatHistoryDao])
+    val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
     freezeTheWorld("Deleting...")
     Swing.onEDT { // To release UI lock
       try {
         MutationLock.synchronized {
-          dao match { case dao: MutableChatHistoryDao => dao.deleteDataset(dsUuid) }
+          dao.deleteDataset(dsUuid)
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
         chatsOuterPanel.revalidate()
@@ -673,20 +634,15 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  def shiftDatasetTime(dao: ChatHistoryDao, dsUuid: PbUuid, hrs: Int): Unit = {
+  def shiftDatasetTime(_dao: ChatHistoryDao, dsUuid: PbUuid, hrs: Int): Unit = {
     checkEdt()
-    require(dao.isMutable || dao.isInstanceOf[EagerChatHistoryDao], "DAO is immutable!")
+    require(_dao.isInstanceOf[GrpcChatHistoryDao])
+    val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
     freezeTheWorld("Shifting time...")
     Swing.onEDT { // To release UI lock
       try {
         MutationLock.synchronized {
-          dao match {
-            case dao: MutableChatHistoryDao =>
-              dao.shiftDatasetTime(dsUuid, hrs)
-            case dao: EagerChatHistoryDao =>
-              val newDao = dao.copyWithShiftedDatasetTime(dsUuid, hrs)
-              loadDaoInEDT(newDao, Some(dao))
-          }
+          dao.shiftDatasetTime(dsUuid, hrs)
           MutationLock.synchronized {
             // Clear cache
             if (loadedDaos.contains(dao)) {
@@ -703,33 +659,38 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  override def userEdited(user: User, dao: ChatHistoryDao): Unit = {
+  override def userEdited(user: User, _dao: ChatHistoryDao): Unit = {
     checkEdt()
-    require(dao.isMutable, "DAO is immutable!")
+    require(_dao.isInstanceOf[GrpcChatHistoryDao])
+    val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
     freezeTheWorld("Modifying...")
     asyncChangeUsers(dao, {
-      dao match { case dao: MutableChatHistoryDao => dao.updateUser(user) }
+      dao.updateUser(user)
       Seq(user.id)
     })
   }
 
-  override def usersMerged(baseUser: User, absorbedUser: User, dao: ChatHistoryDao): Unit = {
+  override def usersMerged(baseUser: User, absorbedUser: User, _dao: ChatHistoryDao): Unit = {
     checkEdt()
-    require(dao.isMutable, "DAO is immutable!")
+    require(_dao.isInstanceOf[GrpcChatHistoryDao])
+    val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
     require(baseUser.dsUuid == absorbedUser.dsUuid, "Users are from different datasets!")
+    ??? // TODO: Implement me differently!
     freezeTheWorld("Modifying...")
     asyncChangeUsers(dao, {
-      dao match { case dao: MutableChatHistoryDao => dao.mergeUsers(baseUser, absorbedUser) }
+      // dao.mergeUsers(baseUser, absorbedUser)
       Seq(baseUser.id, absorbedUser.id)
     })
   }
 
-  override def deleteChat(dao: ChatHistoryDao, chat: Chat): Unit = {
+  override def deleteChat(_dao: ChatHistoryDao, chat: Chat): Unit = {
+    require(_dao.isInstanceOf[GrpcChatHistoryDao])
+    val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
     freezeTheWorld("Deleting...")
     Swing.onEDT {
       try {
         MutationLock.synchronized {
-          dao match { case dao: MutableChatHistoryDao => dao.deleteChat(chat) }
+          dao.deleteChat(chat)
           evictFromCache(dao, chat)
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
@@ -741,8 +702,10 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  override def selectChat(dao: ChatHistoryDao, cwd: ChatWithDetails): Unit = {
+  override def selectChat(_dao: ChatHistoryDao, cwd: ChatWithDetails): Unit = {
     checkEdt()
+    require(_dao.isInstanceOf[GrpcChatHistoryDao])
+    val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
     MutationLock.synchronized {
       currentChatOption = None
       msgRenderer.renderPleaseWait()
@@ -930,7 +893,7 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  def loadFirstMessagesAndUpdateCache(dao: ChatHistoryDao, cwd: ChatWithDetails): Unit = {
+  def loadFirstMessagesAndUpdateCache(dao: GrpcChatHistoryDao, cwd: ChatWithDetails): Unit = {
     val msgs = dao.firstMessages(cwd.chat, MsgBatchLoadSize)
     Swing.onEDTWait {
       val md = msgRenderer.render(dao, cwd, msgs, true, true)
@@ -944,7 +907,7 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  def loadLastMessagesAndUpdateCache(dao: ChatHistoryDao, cwd: ChatWithDetails): Unit = {
+  def loadLastMessagesAndUpdateCache(dao: GrpcChatHistoryDao, cwd: ChatWithDetails): Unit = {
     val msgs = dao.lastMessages(cwd.chat, MsgBatchLoadSize)
     Swing.onEDTWait {
       val md = msgRenderer.render(dao, cwd, msgs, msgs.size < MsgBatchLoadSize, false)
@@ -982,7 +945,7 @@ class MainFrameApp(grpcPort: Int) //
   }
 
   /** Asynchronously apply the given change (under mutation lock) and refresh UI to reflect it */
-  def asyncChangeUsers(dao: ChatHistoryDao, applyChangeAndReturnChangedIds: => Seq[Long]): Unit = {
+  def asyncChangeUsers(dao: GrpcChatHistoryDao, applyChangeAndReturnChangedIds: => Seq[Long]): Unit = {
     Future { // To release UI lock
       try {
         val userIds = MutationLock.synchronized {
@@ -1027,12 +990,12 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  def updateCache(dao: ChatHistoryDao, chat: Chat, cache: ChatCache): Unit =
+  def updateCache(dao: GrpcChatHistoryDao, chat: Chat, cache: ChatCache): Unit =
     MutationLock.synchronized {
       loadedDaos = loadedDaos + (dao -> (loadedDaos(dao) + (chat -> cache)))
     }
 
-  def evictFromCache(dao: ChatHistoryDao, chat: Chat): Unit =
+  def evictFromCache(dao: GrpcChatHistoryDao, chat: Chat): Unit =
     MutationLock.synchronized {
       if (loadedDaos.contains(dao)) {
         loadedDaos = loadedDaos + (dao -> (loadedDaos(dao) - chat))
@@ -1114,20 +1077,9 @@ class MainFrameApp(grpcPort: Int) //
   private object DataLoaders {
     val LastFileKey = "last_database_file"
 
-    private val h2       = new H2DataManager
-
-    /** Initializes DAOs to speed up subsequent calls */
-    def preload(): Seq[Future[_]] = {
-      h2.preload()
-    }
-
     private val sqliteFf = easyFileFilter(
       s"${BuildInfo.name} database (sqlite)"
     ) { f => f.getName == "data.sqlite" }
-
-    private val h2ff = easyFileFilter(
-      s"${BuildInfo.name} database (*.${H2DataManager.DefaultExt})"
-    )(_.getName endsWith ("." + H2DataManager.DefaultExt))
 
     private val tgFf = easyFileFilter(
       "Telegram export JSON database (result.json)"
@@ -1144,22 +1096,12 @@ class MainFrameApp(grpcPort: Int) //
     def openChooser(): FileChooser = new FileChooser(null) {
       title = "Select a database to open"
       peer.addChoosableFileFilter(sqliteFf)
-      peer.addChoosableFileFilter(h2ff)
       peer.addChoosableFileFilter(tgFf)
       peer.addChoosableFileFilter(androidFf)
       peer.addChoosableFileFilter(waTextFf)
     }
 
-    def loadH2(file: JFile): H2ChatHistoryDao = {
-      val f = file.getParentFile
-      if (h2ff.accept(file)) {
-        h2.loadData(f)
-      } else {
-        throw new IllegalStateException("Unknown file type!")
-      }
-    }
-
-    def load(file: JFile): ChatHistoryDao = {
+    def load(file: JFile): GrpcChatHistoryDao = {
       if (sqliteFf.accept(file) || tgFf.accept(file) || androidFf.accept(file) || waTextFf.accept(file)) {
         grpcHolder.remoteLoader.loadData(file)
       } else {
@@ -1171,12 +1113,6 @@ class MainFrameApp(grpcPort: Int) //
       title             = "Choose a directory where the new database will be stored"
       fileSelectionMode = FileChooser.SelectionMode.DirectoriesOnly
       peer.setAcceptAllFileFilterUsed(false)
-    }
-
-    def saveAsH2(srcDao: ChatHistoryDao, dir: JFile): MutableChatHistoryDao = {
-      val dstDao = h2.create(dir)
-      dstDao.copyAllFrom(srcDao)
-      dstDao
     }
   }
 }

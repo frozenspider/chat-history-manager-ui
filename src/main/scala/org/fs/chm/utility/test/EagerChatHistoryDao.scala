@@ -1,10 +1,10 @@
-package org.fs.chm.dao
+package org.fs.chm.utility.test
 
 import java.io.File
 
 import scala.collection.immutable.ListMap
 
-import com.github.nscala_time.time.Imports._
+import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Dataset
@@ -17,6 +17,7 @@ import org.fs.utility.Imports._
 /**
  * Serves as in-memory ChatHistoryDao.
  * Guarantees `internalId` ordering to match order in  `_chatsWithMessages`.
+ * Used for local testing only.
  */
 class EagerChatHistoryDao(
     override val name: String,

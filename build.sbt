@@ -83,13 +83,7 @@ libraryDependencies ++= Seq(
   "org.apache.commons"            %  "commons-lang3"              % "3.12.0",
   "com.github.nscala-time"        %% "nscala-time"                % "2.32.0",
   "org.scala-lang.modules"        %% "scala-parallel-collections" % "1.0.4",
-  // Database
-  "org.tpolecat"                  %% "doobie-core"                % "1.0.0-RC2",
-  "org.tpolecat"                  %% "doobie-h2"                  % "1.0.0-RC2",
-  "org.flywaydb"                  %  "flyway-core"                % "6.1.3",
   // Other
-  "org.json4s"                    %% "json4s-jackson"             % "4.1.0-M2",
-  "org.json4s"                    %% "json4s-ext"                 % "4.1.0-M2",
   "com.typesafe"                  %  "config"                     % "1.4.2",
   "org.scala-lang.modules"        %% "scala-parser-combinators"   % "2.2.0",
   // Protobuf

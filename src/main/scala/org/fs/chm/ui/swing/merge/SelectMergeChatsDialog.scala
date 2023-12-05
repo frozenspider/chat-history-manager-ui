@@ -3,7 +3,6 @@ package org.fs.chm.ui.swing.merge
 import scala.swing._
 
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger._
@@ -120,7 +119,8 @@ object SelectMergeChatsDialog {
 
     import scala.collection.immutable.ListMap
 
-    import org.fs.chm.utility.TestUtils._
+    import org.fs.chm.utility.test.TestUtils._
+    import org.fs.chm.utility.test.EagerChatHistoryDao
 
     def createMultiChatDao(chatsProducer: (Dataset, Seq[User]) => Seq[Chat]): MutableChatHistoryDao = {
       val ds = Dataset(

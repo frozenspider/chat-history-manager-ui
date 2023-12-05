@@ -249,7 +249,7 @@ object SelectMergeMessagesDialog {
   def main(args: Array[String]): Unit = {
     import java.awt.Desktop
     import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
-    import org.fs.chm.utility.TestUtils._
+    import org.fs.chm.utility.test.TestUtils._
 
     val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
     val htmlKit = new ExtendedHtmlEditorKit(desktopOption)

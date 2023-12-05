@@ -25,7 +25,7 @@ class GrpcRemoteDataLoader(channel: ManagedChannel) extends DataLoader[GrpcChatH
 }
 
 object GrpcRemoteDataLoader extends App {
-  val holder = new GrpcDataLoaderHolder(50051, new GrpcDaoService(f => ???))
+  val holder = new GrpcDataLoaderHolder(50051)
   holder.remoteLoader
   println("Press ENTER to terminate...")
   System.in.read();

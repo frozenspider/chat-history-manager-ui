@@ -102,9 +102,6 @@ class GrpcChatHistoryDao(val key: String,
     new GrpcChatHistoryDao(loaded.key, loaded.name, daoRpcStub, loaderRpcStub)
   }
 
-  // Not used ouside of merge
-  override def insertDataset(ds: Dataset): Unit = ???
-
   override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = {
     if (backupsEnabled) this.backup()
     sendRequest(UpdateDatasetRequest(key, Dataset(dsUuid, newName)))(daoRpcStub.updateDataset).dataset
@@ -121,49 +118,14 @@ class GrpcChatHistoryDao(val key: String,
     sendRequest(ShiftDatasetTimeRequest(key, dsUuid, hrs))(daoRpcStub.shiftDatasetTime)
   }
 
-  // Not used ouside of merge
-  /** Insert a new user. It should not yet exist */
-  override def insertUser(user: User, isMyself: Boolean): Unit = ???
-
   override def updateUser(user: User): Unit = {
     if (backupsEnabled) this.backup()
     sendRequest(UpdateUserRequest(key, user))(daoRpcStub.updateUser)
   }
 
-  /**
-   * Merge absorbed user into base user, moving its personal chat messages into base user personal chat.
-   */
-  override def mergeUsers(baseUser: User, absorbedUser: User): Unit = ???
-
-  // Not used ouside of merge
-  /**
-   * Insert a new chat.
-   * It should have a proper DS UUID set, should not yet exist, and all users must already be inserted.
-   * Content will be resolved based on the given dataset root and copied accordingly.
-   */
-  override def insertChat(srcDsRoot: DatasetRoot, chat: Chat): Unit = ???
-
   override def deleteChat(chat: Chat): Unit = {
     if (backupsEnabled) this.backup()
     sendRequest(DeleteChatRequest(key, chat))(daoRpcStub.deleteChat)
-  }
-
-  // Not used ouside of merge
-  /**
-   * Insert a new message for the given chat.
-   * Internal ID will be ignored.
-   * Content will be resolved based on the given dataset root and copied accordingly.
-   */
-  override def insertMessages(srcDsRoot: DatasetRoot, chat: Chat, msgs: Seq[Message]): Unit = ???
-
-  /** Don't do automatic backups on data changes until re-enabled */
-  override def disableBackups(): Unit = {
-    this.backupsEnabled = false
-  }
-
-  /** Start doing backups automatically once again */
-  override def enableBackups(): Unit = {
-    this.backupsEnabled = true
   }
 
   /** Create a backup, if enabled, otherwise do nothing */

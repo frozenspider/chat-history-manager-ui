@@ -48,7 +48,7 @@ class DatasetMergerRemote(channel: ManagedChannel,
 
   override def merge(usersToMerge: Seq[UserMergeOption],
                      chatsToMerge: Seq[ResolvedChatMergeOption],
-                     newDbPath: File): (ChatHistoryDao, Dataset) = {
+                     newDbPath: File): (GrpcChatHistoryDao, Dataset) = {
     StopWatch.measureAndCall {
       val userMerges = usersToMerge.map {
         case UserMergeOption.Retain(masterUser) => UserMerge(UserMergeType.Retain, masterUser.id)

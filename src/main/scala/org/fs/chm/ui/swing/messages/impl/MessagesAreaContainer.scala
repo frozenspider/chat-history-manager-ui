@@ -231,9 +231,9 @@ object MessagesAreaContainer {
 
     import scala.collection.immutable.ListMap
 
-    import org.fs.chm.dao._
     import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
-    import org.fs.chm.utility.TestUtils._
+    import org.fs.chm.utility.test.TestUtils._
+    import org.fs.chm.utility.test.EagerChatHistoryDao
 
     val dao = {
       val ds = Dataset(

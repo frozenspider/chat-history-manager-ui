@@ -1,4 +1,4 @@
-package org.fs.chm.utility
+package org.fs.chm.utility.test
 
 import java.io.File
 import java.nio.file.Files
@@ -7,8 +7,8 @@ import scala.collection.immutable.ListMap
 import scala.util.Random
 
 import com.github.nscala_time.time.Imports._
-import org.fs.chm.dao._
 import org.fs.chm.dao.Entities._
+import org.fs.chm.dao._
 import org.fs.chm.dao.merge.DatasetMerger.TaggedMessage
 import org.fs.chm.dao.merge.DatasetMerger.TaggedMessageId
 import org.fs.chm.protobuf._
@@ -165,29 +165,15 @@ object TestUtils {
   }
 
   trait EagerMutableDaoTrait extends MutableChatHistoryDao {
-    override def insertDataset(ds: Dataset): Unit = ???
-
     override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = ???
 
     override def deleteDataset(dsUuid: PbUuid): Unit = ???
 
     override def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): Unit = ???
 
-    override def insertUser(user: User, isMyself: Boolean): Unit = ???
-
     override def updateUser(user: User): Unit = ???
 
-    override def mergeUsers(baseUser: User, absorbedUser: User): Unit = ???
-
-    override def insertChat(srcDsRoot: DatasetRoot, chat: Chat): Unit = ???
-
     override def deleteChat(chat: Chat): Unit = ???
-
-    override def insertMessages(srcDsRoot: DatasetRoot, chat: Chat, msgs: Seq[Message]): Unit = ???
-
-    override def disableBackups(): Unit = ???
-
-    override def enableBackups(): Unit = ???
 
     override def backup(): Unit = ???
   }
