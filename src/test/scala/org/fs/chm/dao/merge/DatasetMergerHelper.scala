@@ -7,7 +7,7 @@ import org.fs.chm.utility.TestUtils._
 
 object DatasetMergerHelper {
 
-  val maxId     = (DatasetMergerLocal.BatchSize * 3)
+  val maxId     = (1000 * 3)
   val maxUserId = 3
   def rndUserId = 1 + rnd.nextInt(maxUserId)
 

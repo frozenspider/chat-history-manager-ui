@@ -19,19 +19,17 @@ import org.fs.chm.ui.swing.general.SwingUtils._
 
 class SelectMergeDatasetDialog(
     daos: Seq[ChatHistoryDao],
-    remote: Boolean
 ) extends CustomDialog[((MutableChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))](takeFullHeight = false) {
 
   // All values are lazy to be accessible from parent's constructor
 
   private lazy val TableWidth = 500
 
-  private lazy val daosWithDatasets        = daos filter (!remote || _.isInstanceOf[GrpcChatHistoryDao]) map (dao => (dao, dao.datasets))
-  private lazy val mutableDaosWithDatasets = daosWithDatasets filter (_._1.isMutable)
+  private lazy val daosWithDatasets        = daos filter (_.isInstanceOf[GrpcChatHistoryDao]) map (dao => (dao, dao.datasets))
 
   private lazy val masterTable = {
     checkEdt()
-    createTable("Base dataset", mutableDaosWithDatasets)
+    createTable("Base dataset", daosWithDatasets)
   }
   private lazy val slaveTable  = {
     checkEdt()

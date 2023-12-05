@@ -36,8 +36,6 @@ class GrpcDataLoaderHolder(rpcPort: Int, val grpcDaoService: GrpcDaoService) ext
 
   server
 
-  lazy val eagerLoader = new GrpcEagerDataLoader(channel)
-
   lazy val remoteLoader = new GrpcRemoteDataLoader(channel)
 
   private class ChooseMyselfImpl extends ChooseMyselfServiceGrpc.ChooseMyselfService {

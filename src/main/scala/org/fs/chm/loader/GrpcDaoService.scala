@@ -15,7 +15,7 @@ import org.fs.chm.protobuf._
 import org.fs.chm.utility.Logging
 
 /** Acts as server API for a local history DAO */
-class GrpcDaoService(doLoad: File => ChatHistoryDao)
+class GrpcDaoService(doLoadH2: File => ChatHistoryDao)
   extends HistoryDaoServiceGrpc.HistoryDaoService
     with Logging {
   implicit private val ec: ExecutionContextExecutor = ExecutionContext.global
@@ -27,7 +27,7 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
 
   val loader: GrpcHistoryLoaderService = new GrpcHistoryLoaderService()
 
-  def getDao[T](path: File): Option[ChatHistoryDao] = {
+  def getDao(path: File): Option[ChatHistoryDao] = {
     Lock.synchronized {
       DaoMap.values.find(_.storagePath == path)
     }
@@ -197,7 +197,7 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
       val file = new File(request.path)
       Future {
         loggingRequest(request) {
-          val dao = doLoad(file)
+          val dao = doLoadH2(file)
           Lock.synchronized {
             DaoMap = DaoMap + (request.key -> dao)
           }

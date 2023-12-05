@@ -23,10 +23,10 @@ import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.EagerChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.GrpcChatHistoryDao
+import org.fs.chm.dao.H2ChatHistoryDao
 import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
-import org.fs.chm.dao.merge.DatasetMergerLocal
 import org.fs.chm.dao.merge.DatasetMergerRemote
 import org.fs.chm.loader._
 import org.fs.chm.protobuf.Chat
@@ -78,7 +78,7 @@ class MainFrameApp(grpcPort: Int) //
   private val chatSelGroup  = new ChatListItemSelectionGroup
 
   private lazy val grpcHolder = {
-    val grpcDaoService = new GrpcDaoService(f => DataLoaders.load(f, remote = false));
+    val grpcDaoService = new GrpcDaoService(f => DataLoaders.loadH2(f));
     new GrpcDataLoaderHolder(grpcPort, grpcDaoService)
   }
 
@@ -121,7 +121,7 @@ class MainFrameApp(grpcPort: Int) //
       }
     }
 
-    initialFileOption map (f => futureHandlingExceptions { Swing.onEDT { openDb(f, remote = false) } })
+    initialFileOption map (f => futureHandlingExceptions { Swing.onEDT { openDb(f) } })
   }
 
   lazy val ui = new BorderPanel {
@@ -141,8 +141,7 @@ class MainFrameApp(grpcPort: Int) //
     val separatorBeforeDb = new Separator()
     val separatorAfterDb  = new Separator()
     val dbMenu = new Menu("Database") {
-      contents += menuItem("Open")(showOpenDbDialog(remote = false))
-      contents += menuItem("Open (Remote)")(showOpenDbDialog(remote = true))
+      contents += menuItem("Open")(showOpenDbDialog())
       contents += separatorBeforeDb
       contents += separatorAfterDb
     }
@@ -151,8 +150,7 @@ class MainFrameApp(grpcPort: Int) //
       contents += dbMenu
       contents += new Menu("Edit") {
         contents += menuItem("Users")(showUsersDialog())
-        contents += menuItem("Merge Datasets")(showSelectDatasetsToMergeDialog(remote = false))
-        contents += menuItem("Merge Datasets (remote)")(showSelectDatasetsToMergeDialog(remote = true))
+        contents += menuItem("Merge Datasets")(showSelectDatasetsToMergeDialog())
         contents += menuItem("Compare Datasets")(showSelectDatasetsToCompareDialog())
       }
     }
@@ -272,8 +270,8 @@ class MainFrameApp(grpcPort: Int) //
   // Events
   //
 
-  def showOpenDbDialog(remote: Boolean): Unit = {
-    val chooser = DataLoaders.openChooser(remote)
+  def showOpenDbDialog(): Unit = {
+    val chooser = DataLoaders.openChooser()
     for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
       val lastFile = new JFile(lastFileString)
       chooser.peer.setCurrentDirectory(lastFile.nearestExistingDir)
@@ -285,16 +283,16 @@ class MainFrameApp(grpcPort: Int) //
       case FileChooser.Result.Approve if loadedDaos.keys.exists(_ isLoaded chooser.selectedFile.getParentFile) =>
         showWarning(s"File '${chooser.selectedFile}' is already loaded")
       case FileChooser.Result.Approve =>
-        openDb(chooser.selectedFile, remote)
+        openDb(chooser.selectedFile)
     }
   }
 
-  def openDb(file: JFile, remote: Boolean): Unit = {
+  def openDb(file: JFile): Unit = {
     checkEdt()
     freezeTheWorld("Loading data...")
     config.update(DataLoaders.LastFileKey, file.getAbsolutePath)
     futureHandlingExceptions { // To release UI lock
-      val dao = DataLoaders.load(file, remote)
+      val dao = DataLoaders.load(file)
       Swing.onEDT {
         loadDaoInEDT(dao)
         unfreezeTheWorld()
@@ -395,7 +393,7 @@ class MainFrameApp(grpcPort: Int) //
     Dialog.showMessage(title = "Users", message = outerPanel.peer, messageType = Dialog.Message.Plain)
   }
 
-  def showSelectDatasetsToMergeDialog(remote: Boolean): Unit = {
+  def showSelectDatasetsToMergeDialog(): Unit = {
     checkEdt()
     if (loadedDaos.isEmpty) {
       showWarning("Load a database first!")
@@ -404,7 +402,7 @@ class MainFrameApp(grpcPort: Int) //
     } else if (loadedDaos.keys.flatMap(_.datasets).size == 1) {
       showWarning("Only one dataset is loaded - nothing to merge.")
     } else {
-      val selectDsDialog = new SelectMergeDatasetDialog(loadedDaos.keys.toSeq, remote)
+      val selectDsDialog = new SelectMergeDatasetDialog(loadedDaos.keys.toSeq)
       selectDsDialog.visible = true
       selectDsDialog.selection foreach {
         case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
@@ -421,16 +419,11 @@ class MainFrameApp(grpcPort: Int) //
               val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
               selectChatsDialog.visible = true
               selectChatsDialog.selection foreach { chatsToMerge =>
-                val merger = if (!remote) {
-                  new DatasetMergerLocal(masterDao, masterDs, slaveDao, slaveDs, DataLoaders.createH2)
-                } else {
-                  new DatasetMergerRemote(
-                    grpcHolder.channel,
-                    masterDao.asInstanceOf[GrpcChatHistoryDao], masterDs,
-                    slaveDao.asInstanceOf[GrpcChatHistoryDao], slaveDs
-                  )
-                }
-                val sw = new StopWatch
+                val merger = new DatasetMergerRemote(
+                  grpcHolder.channel,
+                  masterDao.asInstanceOf[GrpcChatHistoryDao], masterDs,
+                  slaveDao.asInstanceOf[GrpcChatHistoryDao], slaveDs
+                )
                 val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge)
                 val activeUserIds = chatsToMerge
                   .filter(!_.isInstanceOf[ChatMergeOption.DontAdd])
@@ -615,16 +608,7 @@ class MainFrameApp(grpcPort: Int) //
   }
 
   def daoListChanged(): Unit = {
-    def saveAs(dao: ChatHistoryDao): Unit = {
-      showPickDirDialog { file =>
-        val dstDao = DataLoaders.saveAsH2(dao, file)
-        Swing.onEDTWait {
-          loadDaoInEDT(dstDao, Some(dao))
-        }
-      }
-    }
-
-    def saveAsRemote(dao: GrpcChatHistoryDao): Unit = {
+    def saveAs(dao: GrpcChatHistoryDao): Unit = {
       showPickDirDialog { file =>
         val dstDao = dao.saveAsRemote(file)
         Swing.onEDTWait {
@@ -636,10 +620,9 @@ class MainFrameApp(grpcPort: Int) //
     dbEmbeddedMenu.clear()
     for (dao <- loadedDaos.keys) {
       val daoMenu = new Menu(dao.name) {
-        contents += menuItem("Save As...")(saveAs(dao))
         dao match {
           case dao: GrpcChatHistoryDao =>
-            contents += menuItem("Save As (remote)...")(saveAsRemote(dao))
+            contents += menuItem("Save As...")(saveAs(dao))
             if (dao.key.endsWith(H2DataManager.DefaultExt)) {
               contents += menuItem("Verify")(verifyRemoteDao(dao))
             }
@@ -1132,7 +1115,6 @@ class MainFrameApp(grpcPort: Int) //
     val LastFileKey = "last_database_file"
 
     private val h2       = new H2DataManager
-    private val gts5610  = new GTS5610DataLoader
 
     /** Initializes DAOs to speed up subsequent calls */
     def preload(): Seq[Future[_]] = {
@@ -1151,10 +1133,6 @@ class MainFrameApp(grpcPort: Int) //
       "Telegram export JSON database (result.json)"
     )(_.getName == "result.json")
 
-    private val gts5610Ff = easyFileFilter(
-      s"Samsung GT-S5610 export vMessage files [choose any in folder] (*.${GTS5610DataLoader.DefaultExt})"
-    ) { _.getName endsWith ("." + GTS5610DataLoader.DefaultExt) }
-
     private val androidFf = easyFileFilter(
       s"Supported app's Android database"
     ) { _.getName.endsWith(".db") }
@@ -1163,29 +1141,27 @@ class MainFrameApp(grpcPort: Int) //
       s"WhatsApp text export"
     ) { f => f.getName.startsWith("WhatsApp Chat with ") && f.getName.endsWith(".txt") }
 
-    def openChooser(remote: Boolean): FileChooser = new FileChooser(null) {
+    def openChooser(): FileChooser = new FileChooser(null) {
       title = "Select a database to open"
       peer.addChoosableFileFilter(sqliteFf)
-      if (!remote) {
-        peer.addChoosableFileFilter(h2ff)
-      }
+      peer.addChoosableFileFilter(h2ff)
       peer.addChoosableFileFilter(tgFf)
       peer.addChoosableFileFilter(androidFf)
       peer.addChoosableFileFilter(waTextFf)
-      if (!remote) {
-        peer.addChoosableFileFilter(gts5610Ff)
+    }
+
+    def loadH2(file: JFile): H2ChatHistoryDao = {
+      val f = file.getParentFile
+      if (h2ff.accept(file)) {
+        h2.loadData(f)
+      } else {
+        throw new IllegalStateException("Unknown file type!")
       }
     }
 
-    def load(file: JFile, remote: Boolean): ChatHistoryDao = {
-      val f = file.getParentFile
-      if (!remote && h2ff.accept(file)) {
-        h2.loadData(f)
-      } else if (sqliteFf.accept(file) || tgFf.accept(file) || androidFf.accept(file) || waTextFf.accept(file)) {
-        val loader = if (remote) grpcHolder.remoteLoader else grpcHolder.eagerLoader
-        loader.loadData(file)
-      } else if (!remote && gts5610Ff.accept(file)) {
-        gts5610.loadData(f)
+    def load(file: JFile): ChatHistoryDao = {
+      if (sqliteFf.accept(file) || tgFf.accept(file) || androidFf.accept(file) || waTextFf.accept(file)) {
+        grpcHolder.remoteLoader.loadData(file)
       } else {
         throw new IllegalStateException("Unknown file type!")
       }
@@ -1195,10 +1171,6 @@ class MainFrameApp(grpcPort: Int) //
       title             = "Choose a directory where the new database will be stored"
       fileSelectionMode = FileChooser.SelectionMode.DirectoriesOnly
       peer.setAcceptAllFileFilterUsed(false)
-    }
-
-    def createH2(dir: JFile): MutableChatHistoryDao = {
-      h2.create(dir)
     }
 
     def saveAsH2(srcDao: ChatHistoryDao, dir: JFile): MutableChatHistoryDao = {
