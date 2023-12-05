@@ -59,9 +59,7 @@ class GrpcChatHistoryDao(val key: String,
 
   override protected def messagesBeforeImpl(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message] = {
     // Due to different conventions, we query the message itself separately
-    val msg = sendRequest(MessageOptionByInternalIdRequest(key, chat, msgId))(daoRpcStub.messageOptionByInternalId).message.get
-    val msgs = sendRequest(MessagesBeforeRequest(key, chat, msgId, limit))(daoRpcStub.messagesBefore).messages
-    (msgs :+ msg).toIndexedSeq.takeRight(limit)
+    sendRequest(MessagesBeforeRequest(key, chat, msgId, limit))(daoRpcStub.messagesBefore).messages.toIndexedSeq
   }
 
   override protected def messagesAfterImpl(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message] = {

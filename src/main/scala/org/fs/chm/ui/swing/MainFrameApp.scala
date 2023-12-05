@@ -805,7 +805,7 @@ class MainFrameApp(grpcPort: Int) //
     tryLoadMessages(
       ls => !ls.beginReached,
       (dao, cwd, ls) => {
-        val newMsgs = dao.messagesBefore(cwd.chat, ls.firstOption.get.internalIdTyped, MsgBatchLoadSize + 1).dropRight(1)
+        val newMsgs = dao.messagesBefore(cwd.chat, ls.firstOption.get.internalIdTyped, MsgBatchLoadSize + 1)
         val ls2     = ls.copy(firstOption = newMsgs.headOption, beginReached = newMsgs.size < MsgBatchLoadSize)
         (newMsgs, ls2)
       },
@@ -820,7 +820,7 @@ class MainFrameApp(grpcPort: Int) //
     tryLoadMessages(
       ls => !ls.endReached,
       (dao, cwd, ls) => {
-        val newMsgs = dao.messagesAfter(cwd.chat, ls.lastOption.get.internalIdTyped, MsgBatchLoadSize + 1).drop(1)
+        val newMsgs = dao.messagesAfter(cwd.chat, ls.lastOption.get.internalIdTyped, MsgBatchLoadSize + 1)
         val ls2     = ls.copy(lastOption = newMsgs.lastOption, endReached = newMsgs.size < MsgBatchLoadSize)
         (newMsgs, ls2)
       },

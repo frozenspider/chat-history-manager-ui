@@ -57,23 +57,15 @@ trait ChatHistoryDao extends AutoCloseable {
 
   def lastMessages(chat: Chat, limit: Int): IndexedSeq[Message]
 
-  /**
-   * Return N messages before the given one (inclusive).
-   * Message must be present, so the result would contain at least one element.
-   */
+  /** Return N messages before the given one (exclusive). */
   final def messagesBefore(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message] =
-    messagesBeforeImpl(chat, msgId, limit).ensuring(seq =>
-      seq.nonEmpty && seq.size <= limit && seq.last.internalId == msgId)
+    messagesBeforeImpl(chat, msgId, limit).ensuring(seq => seq.size <= limit)
 
   protected def messagesBeforeImpl(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message]
 
-  /**
-   * Return N messages after the given one (inclusive).
-   * Message must be present, so the result would contain at least one element.
-   */
+  /** Return N messages after the given one (exclusive). */
   final def messagesAfter(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message] =
-    messagesAfterImpl(chat, msgId, limit).ensuring(seq =>
-      seq.nonEmpty && seq.size <= limit && seq.head.internalId == msgId)
+    messagesAfterImpl(chat, msgId, limit).ensuring(seq => seq.size <= limit)
 
   protected def messagesAfterImpl(chat: Chat, msgId: MessageInternalId, limit: Int): IndexedSeq[Message]
 

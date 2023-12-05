@@ -204,7 +204,10 @@ object SelectMergeMessagesDialog {
       if (firstOption.isEmpty && lastOption.isEmpty) {
         CxtFetchResult.Continuous(Seq.empty)
       } else {
-        val fetch1 = fetchMsgsAfterInc(firstOption, MaxContinuousMsgsLength)
+        val fetch1 = firstOption match {
+          case None        => dao.firstMessages(chat, MaxContinuousMsgsLength)
+          case Some(first) => dao.messageOptionByInternalId(chat, first).get +: dao.messagesAfter(chat, first, MaxContinuousMsgsLength)
+        }
 
         if (fetch1.isEmpty) {
           CxtFetchResult.Continuous(Seq.empty)
@@ -214,7 +217,10 @@ object SelectMergeMessagesDialog {
         } else {
           val subfetch1    = fetch1.take(MaxCutoffMsgsPartLength)
           val subfetch1Set = subfetch1.toSet
-          val fetch2 = fetchMsgsBeforeInc(lastOption, MaxCutoffMsgsPartLength).dropWhile { m =>
+          val fetch2 = (lastOption match {
+            case None       => dao.lastMessages(chat, MaxContinuousMsgsLength)
+            case Some(last) => dao.messagesBefore(chat, last, MaxContinuousMsgsLength) :+ dao.messageOptionByInternalId(chat, last).get
+          }).dropWhile { m =>
             (subfetch1Set contains m) || m.time < subfetch1.last.time
           }
 
@@ -226,22 +232,6 @@ object SelectMergeMessagesDialog {
             CxtFetchResult.Discrete(subfetch1, nBetween, fetch2)
           }
         }
-      }
-    }
-
-    private def fetchMsgsAfterInc(firstOption: Option[LastMsgId], howMany: Int): Seq[Message] = {
-      firstOption map { first =>
-        dao.messagesAfter(chat, first, howMany)
-      } getOrElse {
-        dao.firstMessages(chat, howMany)
-      }
-    }
-
-    private def fetchMsgsBeforeInc(lastOption: Option[LastMsgId], howMany: Int): Seq[Message] = {
-      lastOption map { last =>
-        dao.messagesBefore(chat, last, howMany)
-      } getOrElse {
-        dao.lastMessages(chat, howMany)
       }
     }
   }
@@ -276,64 +266,64 @@ object SelectMergeMessagesDialog {
     val mismatches = IndexedSeq(
       // Prefix
       MessagesMergeDiff.Retain(
-        firstMasterMsgId = mMsgsI.bySrcId(10),
-        lastMasterMsgId  = mMsgsI.bySrcId(15),
+        firstMasterMsgId = mMsgsI.internalIdBySrcId(10),
+        lastMasterMsgId  = mMsgsI.internalIdBySrcId(15),
       ),
 
       MessagesMergeDiff.Match(
-        firstMasterMsgId = mMsgsI.bySrcId(15),
-        lastMasterMsgId  = mMsgsI.bySrcId(39),
-        firstSlaveMsgId  = sMsgsI.bySrcId(15),
-        lastSlaveMsgId   = sMsgsI.bySrcId(39)
+        firstMasterMsgId = mMsgsI.internalIdBySrcId(16),
+        lastMasterMsgId  = mMsgsI.internalIdBySrcId(39),
+        firstSlaveMsgId  = sMsgsI.internalIdBySrcId(16),
+        lastSlaveMsgId   = sMsgsI.internalIdBySrcId(39)
       ),
 
       MessagesMergeDiff.Retain(
-        firstMasterMsgId = mMsgsI.bySrcId(40),
-        lastMasterMsgId  = mMsgsI.bySrcId(40),
+        firstMasterMsgId = mMsgsI.internalIdBySrcId(40),
+        lastMasterMsgId  = mMsgsI.internalIdBySrcId(40),
       ),
 
 //      // Addition
 //      MessagesMergeDiff.Add(
-//        firstSlaveMsgId = sMsgsI.bySrcId(41),
-//        lastSlaveMsgId  = sMsgsI.bySrcId(60)
+//        firstSlaveMsgId = sMsgsI.internalIdBySrcId(41),
+//        lastSlaveMsgId  = sMsgsI.internalIdBySrcId(60)
 //      )
 
 //      // Conflict
 //      MessagesMergeDiff.Replace(
-//        firstMasterMsgId = mMsgsI.bySrcId(41),
-//        lastMasterMsgId  = mMsgsI.bySrcId(60),
-//        firstSlaveMsgId  = sMsgsI.bySrcId(41),
-//        lastSlaveMsgId   = sMsgsI.bySrcId(60)
+//        firstMasterMsgId = mMsgsI.internalIdBySrcId(41),
+//        lastMasterMsgId  = mMsgsI.internalIdBySrcId(60),
+//        firstSlaveMsgId  = sMsgsI.internalIdBySrcId(41),
+//        lastSlaveMsgId   = sMsgsI.internalIdBySrcId(60)
 //      ),
 
       // Addition + conflict + addition
       MessagesMergeDiff.Add(
-        firstSlaveMsgId = sMsgsI.bySrcId(41),
-        lastSlaveMsgId  = sMsgsI.bySrcId(42)
+        firstSlaveMsgId = sMsgsI.internalIdBySrcId(41),
+        lastSlaveMsgId  = sMsgsI.internalIdBySrcId(42)
       ),
       MessagesMergeDiff.Replace(
-        firstMasterMsgId = mMsgsI.bySrcId(43),
-        lastMasterMsgId  = mMsgsI.bySrcId(44),
-        firstSlaveMsgId  = sMsgsI.bySrcId(43),
-        lastSlaveMsgId   = sMsgsI.bySrcId(44)
+        firstMasterMsgId = mMsgsI.internalIdBySrcId(43),
+        lastMasterMsgId  = mMsgsI.internalIdBySrcId(44),
+        firstSlaveMsgId  = sMsgsI.internalIdBySrcId(43),
+        lastSlaveMsgId   = sMsgsI.internalIdBySrcId(44)
       ),
       MessagesMergeDiff.Add(
-        firstSlaveMsgId = sMsgsI.bySrcId(45),
-        lastSlaveMsgId  = sMsgsI.bySrcId(46)
+        firstSlaveMsgId = sMsgsI.internalIdBySrcId(45),
+        lastSlaveMsgId  = sMsgsI.internalIdBySrcId(46)
       ),
 
       // Suffix
       MessagesMergeDiff.Match(
-        firstMasterMsgId = mMsgsI.bySrcId(200),
-        lastMasterMsgId  = mMsgsI.bySrcId(201),
-        firstSlaveMsgId  = sMsgsI.bySrcId(200),
-        lastSlaveMsgId   = sMsgsI.bySrcId(201)
+        firstMasterMsgId = mMsgsI.internalIdBySrcId(200),
+        lastMasterMsgId  = mMsgsI.internalIdBySrcId(201),
+        firstSlaveMsgId  = sMsgsI.internalIdBySrcId(200),
+        lastSlaveMsgId   = sMsgsI.internalIdBySrcId(201)
       ),
       MessagesMergeDiff.Match(
-        firstMasterMsgId = mMsgsI.bySrcId(202),
-        lastMasterMsgId  = mMsgsI.bySrcId(400),
-        firstSlaveMsgId  = sMsgsI.bySrcId(202),
-        lastSlaveMsgId   = sMsgsI.bySrcId(400)
+        firstMasterMsgId = mMsgsI.internalIdBySrcId(202),
+        lastMasterMsgId  = mMsgsI.internalIdBySrcId(400),
+        firstSlaveMsgId  = sMsgsI.internalIdBySrcId(202),
+        lastSlaveMsgId   = sMsgsI.internalIdBySrcId(400)
       )
     )
 
