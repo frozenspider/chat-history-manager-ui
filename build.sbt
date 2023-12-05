@@ -1,5 +1,5 @@
 name           := "chat-history-manager"
-version        := "0.1-SNAPSHOT"
+version        := "0.2-SNAPSHOT"
 homepage       := Some(url("https://github.com/frozenspider/chat-history-manager"))
 scalaVersion   := "2.13.10"
 
