@@ -8,7 +8,7 @@ import scala.swing.Panel
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.ui.swing.general.SwingUtils._
 
-class DaoList[I <: Panel](createItem: ChatHistoryDao => DaoItem[I]) {
+class DaoList[I <: Panel, Dao <: ChatHistoryDao](createItem: Dao => DaoItem[I]) {
   // GridBagPanel is a much better fit than BoxPanel for a vertical list that enforces children's width
   val panel = new GridBagPanel()
 
@@ -21,14 +21,14 @@ class DaoList[I <: Panel](createItem: ChatHistoryDao => DaoItem[I]) {
     contents.clear()
   }
 
-  def append(dao: ChatHistoryDao): Unit = {
+  def append(dao: Dao): Unit = {
     checkEdt()
     if (panel.contents.nonEmpty)
       panel.layout(new FillerComponent(false, 20)) = constraints
     panel.layout(createItem(dao)) = constraints
   }
 
-  def replaceWith(daos: Seq[ChatHistoryDao]): Unit = {
+  def replaceWith(daos: Seq[Dao]): Unit = {
     checkEdt()
     clear()
     daos foreach append

@@ -4,7 +4,6 @@ import java.awt.Desktop
 import java.awt.Toolkit
 import java.awt.event.AdjustmentEvent
 import java.io.{File => JFile}
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.annotation.tailrec
 import scala.collection.immutable.ListMap
@@ -22,7 +21,6 @@ import org.fs.chm.BuildInfo
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.GrpcChatHistoryDao
-import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.dao.merge.DatasetMerger
 import org.fs.chm.dao.merge.DatasetMerger._
 import org.fs.chm.dao.merge.DatasetMergerRemote
@@ -147,7 +145,7 @@ class MainFrameApp(grpcPort: Int) //
     (menuBar, dbEmbeddedMenu)
   }
 
-  lazy val chatList = new DaoList(dao => new DaoChatItem(dao))
+  lazy val chatList = new DaoList[ChatListItem, GrpcChatHistoryDao](dao => new DaoChatItem(dao))
 
   lazy val statusLabel = new Label(" ")
 
@@ -315,7 +313,7 @@ class MainFrameApp(grpcPort: Int) //
   }
 
   def showUsersDialog(): Unit = {
-    val userList = new DaoList({ dao =>
+    val userList = new DaoList[UserDetailsPane, GrpcChatHistoryDao]({ dao =>
       new DaoItem(
         dao,
         { ds =>
@@ -371,11 +369,7 @@ class MainFrameApp(grpcPort: Int) //
               val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
               selectChatsDialog.visible = true
               selectChatsDialog.selection foreach { chatsToMerge =>
-                val merger = new DatasetMergerRemote(
-                  grpcHolder.channel,
-                  masterDao.asInstanceOf[GrpcChatHistoryDao], masterDs,
-                  slaveDao.asInstanceOf[GrpcChatHistoryDao], slaveDs
-                )
+                val merger = new DatasetMergerRemote(grpcHolder.channel, masterDao, masterDs, slaveDao, slaveDs)
                 val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge)
                 val activeUserIds = chatsToMerge
                   .filter(!_.isInstanceOf[ChatMergeOption.DontAdd])
@@ -448,8 +442,8 @@ class MainFrameApp(grpcPort: Int) //
 
   def mergeDatasets(
       merger: DatasetMergerRemote,
-      masterDao: ChatHistoryDao,
-      slaveDao: ChatHistoryDao,
+      masterDao: GrpcChatHistoryDao,
+      slaveDao: GrpcChatHistoryDao,
       analyzed: Seq[AnalyzedChatMergeOption],
       usersToMerge: Seq[UserMergeOption],
       newDbPath: JFile
@@ -832,8 +826,8 @@ class MainFrameApp(grpcPort: Int) //
 
   def tryLoadMessages(
       shouldLoad: LoadStatus => Boolean,
-      load: (ChatHistoryDao, ChatWithDetails, LoadStatus) => (IndexedSeq[Message], LoadStatus),
-      addToRender: (ChatHistoryDao, ChatWithDetails, IndexedSeq[Message], LoadStatus) => MD
+      load: (GrpcChatHistoryDao, ChatWithDetails, LoadStatus) => (IndexedSeq[Message], LoadStatus),
+      addToRender: (GrpcChatHistoryDao, ChatWithDetails, IndexedSeq[Message], LoadStatus) => MD
   ): Unit = {
     val chatInfoOption = MutationLock.synchronized {
       currentChatOption match {
@@ -1036,8 +1030,8 @@ class MainFrameApp(grpcPort: Int) //
     f
   }
 
-  private class DaoChatItem(dao: ChatHistoryDao)
-      extends DaoItem(
+  private class DaoChatItem(dao: GrpcChatHistoryDao)
+      extends DaoItem[ChatListItem](
         dao             = dao,
         getInnerItems = { ds =>
           dao.chats(ds.uuid) map (cwd => new ChatListItem(dao, cwd, Some(chatSelGroup), Some(this)))
@@ -1093,12 +1087,6 @@ class MainFrameApp(grpcPort: Int) //
       } else {
         throw new IllegalStateException("Unknown file type!")
       }
-    }
-
-    val saveAsChooser = new FileChooser(null) {
-      title             = "Choose a directory where the new database will be stored"
-      fileSelectionMode = FileChooser.SelectionMode.DirectoriesOnly
-      peer.setAcceptAllFileFilterUsed(false)
     }
   }
 }

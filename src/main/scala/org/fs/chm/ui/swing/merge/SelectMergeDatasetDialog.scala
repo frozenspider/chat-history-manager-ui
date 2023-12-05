@@ -11,21 +11,19 @@ import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.TableModel
 
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.GrpcChatHistoryDao
-import org.fs.chm.dao.MutableChatHistoryDao
 import org.fs.chm.protobuf.Dataset
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 
-class SelectMergeDatasetDialog(
-    daos: Seq[ChatHistoryDao],
-) extends CustomDialog[((MutableChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))](takeFullHeight = false) {
+class SelectMergeDatasetDialog[Dao <: ChatHistoryDao](
+    daos: Seq[Dao],
+) extends CustomDialog[((Dao, Dataset), (Dao, Dataset))](takeFullHeight = false) {
 
   // All values are lazy to be accessible from parent's constructor
 
   private lazy val TableWidth = 500
 
-  private lazy val daosWithDatasets        = daos filter (_.isInstanceOf[GrpcChatHistoryDao]) map (dao => (dao, dao.datasets))
+  private lazy val daosWithDatasets = daos map (dao => (dao, dao.datasets))
 
   private lazy val masterTable = {
     checkEdt()
@@ -36,7 +34,7 @@ class SelectMergeDatasetDialog(
     createTable("Dataset to be added to it", daosWithDatasets)
   }
 
-  private def createTable(title: String, data: Seq[(ChatHistoryDao, Seq[Dataset])]): Table = {
+  private def createTable(title: String, data: Seq[(Dao, Seq[Dataset])]): Table = {
     val models = new MergeDatasetModels(title, data)
     new Table(models.tableModel) {
       peer.setDefaultRenderer(classOf[Any], new MergeDatasetCellRenderer())
@@ -70,11 +68,11 @@ class SelectMergeDatasetDialog(
       add(slaveTable, c)
     }
 
-  override def validateChoices(): Option[((MutableChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))] = {
+  override def validateChoices(): Option[((Dao, Dataset), (Dao, Dataset))] = {
     /** Find the DAO for the given dataset row by abusing the table structure */
     @tailrec
-    def findDao(tm: TableModel, idx: Int): ChatHistoryDao = tm.getValueAt(idx, 0) match {
-      case dao: ChatHistoryDao => dao
+    def findDao(tm: TableModel, idx: Int): Dao = tm.getValueAt(idx, 0) match {
+      case dao: ChatHistoryDao => dao.asInstanceOf[Dao]
       case _                   => findDao(tm, idx - 1)
     }
 
@@ -84,7 +82,7 @@ class SelectMergeDatasetDialog(
       case (Some(masterRow), Some(slaveRow)) =>
         val masterDs  = masterTable.model.getValueAt(masterRow, 0).asInstanceOf[Dataset]
         val slaveDs   = slaveTable.model.getValueAt(slaveRow, 0).asInstanceOf[Dataset]
-        val masterDao = findDao(masterTable.model, masterRow).asInstanceOf[MutableChatHistoryDao]
+        val masterDao = findDao(masterTable.model, masterRow)
         val slaveDao  = findDao(slaveTable.model, slaveRow)
         if (masterDao == slaveDao && masterDs == slaveDs) {
           showWarning("Can't merge dataset with itself.")
