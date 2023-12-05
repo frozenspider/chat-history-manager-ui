@@ -50,17 +50,6 @@ class EagerChatHistoryDao(
 
   override def datasetRoot(dsUuid: PbUuid): DatasetRoot = _dataRootFile.getAbsoluteFile.asInstanceOf[DatasetRoot]
 
-  override def datasetFiles(dsUuid: PbUuid): Set[File] = {
-    val dsRoot       = datasetRoot(dsUuid)
-    val cwds         = chats(dsUuid)
-    val chatImgFiles = cwds.map(_.chat.imgPathOption.map(_.toFile(dsRoot))).yieldDefined.toSet
-    val msgFiles = for {
-      cwd <- cwds
-      m   <- firstMessages(cwd.chat, Int.MaxValue)
-    } yield m.files(dsRoot)
-    chatImgFiles ++ msgFiles.toSet.flatten
-  }
-
   override def myself(dsUuid: PbUuid): User = myself1
 
   override def users(dsUuid: PbUuid): Seq[User] = myself1 +: users1.filter(_ != myself1)

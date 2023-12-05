@@ -237,8 +237,8 @@ object MessagesAreaContainer {
 
     val dao = {
       val ds = Dataset(
-        uuid       = randomUuid,
-        alias      = "Dataset",
+        uuid  = randomUuid,
+        alias = "Dataset",
       )
       val users = (1 to 2) map (createUser(ds.uuid, _))
       val msgs = IndexedSeq(
@@ -254,7 +254,7 @@ object MessagesAreaContainer {
             timestamp        = baseDate.plusMinutes(1).unixTimestamp,
             fromId           = users.head.id,
             text             = text,
-            searchableString = makeSearchableString(text, typed),
+            searchableString = "",
             typed            = typed
           )
         },
@@ -281,7 +281,7 @@ object MessagesAreaContainer {
             timestamp        = baseDate.plusMinutes(2).unixTimestamp,
             fromId           = users.last.id,
             text             = text,
-            searchableString = makeSearchableString(text, typed),
+            searchableString = "",
             typed            = typed
           )
         }

@@ -86,7 +86,7 @@ object TestUtils {
       sourceIdOption   = Some(idx.toLong.asInstanceOf[MessageSourceId]),
       timestamp        = baseDate.plusMinutes(idx).unixTimestamp,
       fromId           = userId,
-      searchableString = makeSearchableString(text, typed),
+      searchableString = "",
       text             = text,
       typed            = typed
     )
@@ -116,8 +116,8 @@ object TestUtils {
       chatsWithMsgs.values.flatten.forall(userIds contains _.fromId)
     }, "All messages should have valid user IDs!")
     val ds = Dataset(
-      uuid       = randomUuid,
-      alias      = "Dataset " + nameSuffix,
+      uuid  = randomUuid,
+      alias = "Dataset " + nameSuffix,
     )
     val users1       = users map (_ copy (dsUuid = ds.uuid))
     val dataPathRoot = makeTempDir("eager").asInstanceOf[DatasetRoot]
@@ -151,17 +151,18 @@ object TestUtils {
     (ds, dsRoot, users, cwd, msgs)
   }
 
-  implicit class RichUserSeq(users: Seq[User]) {
-    def byId(id: Long): User =
-      users.find(_.id == id).get
-  }
-
   implicit class RichMsgSeq(msgs: Seq[Message]) {
-    def bySrcId[TM <: Message with TaggedMessage](id: Long): TM =
-      msgs.find(_.sourceIdTypedOption.get == id).get.asInstanceOf[TM]
-
     def internalIdBySrcId[TMId <: MessageInternalId with TaggedMessageId](id: Long): TMId =
       msgs.find(_.sourceIdTypedOption.get == id).get.internalId.asInstanceOf[TMId]
+  }
+
+  object RichText {
+    def makePlain(text: String): RichTextElement =
+      make(RichTextElement.Val.Plain(RtePlain(text)), text)
+
+    private def make(rteVal: RichTextElement.Val, searchableString: String): RichTextElement = {
+      RichTextElement(rteVal, searchableString)
+    }
   }
 
   trait EagerMutableDaoTrait extends MutableChatHistoryDao {

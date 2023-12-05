@@ -124,8 +124,8 @@ object SelectMergeChatsDialog {
 
     def createMultiChatDao(chatsProducer: (Dataset, Seq[User]) => Seq[Chat]): MutableChatHistoryDao = {
       val ds = Dataset(
-        uuid       = randomUuid,
-        alias      = "Dataset",
+        uuid  = randomUuid,
+        alias = "Dataset",
       )
       val users        = (1 to 2) map (createUser(ds.uuid, _))
       val chats        = chatsProducer(ds, users)

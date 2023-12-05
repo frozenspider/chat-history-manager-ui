@@ -410,7 +410,7 @@ class MainFrameApp(grpcPort: Int) //
       selectDsDialog.selection foreach {
         case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
           worldFreezingIFuture("Comparing datasets...") {
-            ChatHistoryDao.ensureDatasetsAreEqual(slaveDao, masterDao, slaveDs.uuid, masterDs.uuid)
+            grpcHolder.remoteLoader.ensureSame(masterDao.key, masterDs.uuid, slaveDao.key, slaveDs.uuid)
             showWarning("Datasets are same!")
           }
       }
@@ -561,7 +561,7 @@ class MainFrameApp(grpcPort: Int) //
 
   def daoListChanged(): Unit = {
     def saveAs(dao: GrpcChatHistoryDao): Unit = {
-      showPickNewDbNameDialog("Save As", dao.name) { newName =>
+      showPickNewDbNameDialog("Save As", dao.storagePath.getName) { newName =>
         val dstDao = dao.saveAsRemote(newName)
         Swing.onEDTWait {
           loadDaoInEDT(dstDao, Some(dao))

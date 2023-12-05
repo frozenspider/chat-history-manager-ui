@@ -41,23 +41,6 @@ object LangUtils extends Logging {
 
     def toFile(datasetRoot: JFile): JFile =
       new JFile(datasetRoot, s.replace('\\', '/')).getAbsoluteFile
-
-    def isRelativePath: Boolean = {
-      s.contains(":/") ||
-        s.contains(":\\") ||
-        s.startsWith("/home/") ||
-        s.startsWith("/Users/") ||
-        s.startsWith("/var/")
-    }
-
-    def makeRelativePath: String = {
-      require(!s.isRelativePath, s"$s is not a relative path!")
-      (if (s.startsWith("/") || s.startsWith("\\")) {
-        s.drop(1)
-      } else {
-        s
-      }).replace('\\', '/')
-    }
   }
 
   implicit class RichJFile(f: JFile) {
@@ -65,16 +48,6 @@ object LangUtils extends Logging {
     final def nearestExistingDir: JFile = {
       if (f.exists && f.isDirectory) f
       else f.getParentFile.nearestExistingDir
-    }
-
-    def bytes: Array[Byte] =
-      Files.readAllBytes(f.toPath)
-
-    def toRelativePath(rootFile: JFile): String = {
-      val dpp = rootFile.getAbsolutePath
-      val fp = f.getAbsolutePath
-      assert(fp startsWith dpp, s"Expected ${fp} to start with ${dpp}")
-      fp.drop(dpp.length + 1)
     }
 
     @tailrec
@@ -91,48 +64,5 @@ object LangUtils extends Logging {
     def unixTimestamp: Long = {
       dt.getMillis / 1000
     }
-  }
-
-  //
-  // PracticallyEquals
-  //
-
-  trait PracticallyEquals[T] {
-    def practicallyEquals(v1: T, v2: T): Boolean
-  }
-
-  implicit class PracticalEqualityWrapper[T: PracticallyEquals](self: T) {
-    def =~=(that: T): Boolean = {
-      implicitly[PracticallyEquals[T]].practicallyEquals(self, that)
-    }
-
-    def !=~=(that: T): Boolean =
-      !(this =~= that)
-  }
-
-  implicit object JFilePracticallyEquals extends PracticallyEquals[JFile] {
-    override def practicallyEquals(f1: JFile, f2: JFile): Boolean = {
-      if (!f1.exists()) {
-        !f2.exists()
-      } else {
-        f2.exists() && (f1.bytes sameElements f2.bytes)
-      }
-    }
-  }
-
-  implicit object JFileOptionPracticallyEquals extends PracticallyEquals[Option[JFile]] {
-    override def practicallyEquals(thisOption: Option[JFile], thatOption: Option[JFile]): Boolean =
-      (thisOption, thatOption) match {
-        case (None, None)                 => true
-        case (Some(a), None) if !a.exists => true
-        case (None, Some(b)) if !b.exists => true
-        case (Some(a), Some(b))           => a =~= b
-        case _                            => false
-      }
-  }
-
-  implicit object JFileSeqPracticallyEquals extends PracticallyEquals[Seq[JFile]] {
-    override def practicallyEquals(seq1: Seq[JFile], seq2: Seq[JFile]): Boolean =
-      seq1.size == seq2.size && (seq1 zip seq2).forall { case (f1, f2) => f1 =~= f2 }
   }
 }

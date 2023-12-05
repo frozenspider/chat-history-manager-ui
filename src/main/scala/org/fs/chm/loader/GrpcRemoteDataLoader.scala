@@ -9,11 +9,12 @@ import org.fs.chm.utility.RpcUtils
 import org.fs.utility.StopWatch
 
 class GrpcRemoteDataLoader(channel: ManagedChannel) extends DataLoader[GrpcChatHistoryDao] {
+  private val loaderRpcStub = HistoryLoaderServiceGrpc.blockingStub(channel)
+
   override protected def loadDataInner(path: JFile, createNew: Boolean): GrpcChatHistoryDao = {
     val key = path.getAbsolutePath
     val request = LoadRequest(key, path.getAbsolutePath)
-    log.info(s"Sending gRPC parse request (remote): ${request}")
-    val loaderRpcStub = HistoryLoaderServiceGrpc.blockingStub(channel)
+    log.info(s"Sending gRPC parse request: ${request}")
     StopWatch.measureAndCall {
       val response: LoadResponse = RpcUtils.sendRequestNoParams {
         loaderRpcStub.load(request)
@@ -21,6 +22,14 @@ class GrpcRemoteDataLoader(channel: ManagedChannel) extends DataLoader[GrpcChatH
       val daoRpcStub = HistoryDaoServiceGrpc.blockingStub(channel)
       new GrpcChatHistoryDao(key, response.name, daoRpcStub, loaderRpcStub)
     }((_, ms) => log.info(s"Remote history loaded in ${ms} ms"))
+  }
+
+  override def ensureSame(masterDaoKey: String, masterDsUuid: PbUuid, slaveDaoKey: String, slaveDsUuid: PbUuid): Unit = {
+    StopWatch.measureAndCall {
+      RpcUtils.sendRequest(EnsureSameRequest(masterDaoKey, masterDsUuid, slaveDaoKey, slaveDsUuid)) { req =>
+        loaderRpcStub.ensureSame(req)
+      }
+    }((_, ms) => log.info(s"Dataset equality checked in ${ms} ms"))
   }
 }
 

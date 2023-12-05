@@ -11,14 +11,10 @@ import org.fs.chm.utility.RpcUtils._
 
 /** Acts as a remote history DAO */
 class GrpcChatHistoryDao(val key: String,
-                         initial_name: String,
+                         override val name: String,
                          daoRpcStub: HistoryDaoServiceBlockingStub,
                          loaderRpcStub: HistoryLoaderServiceBlockingStub)
   extends MutableChatHistoryDao with Logging {
-
-  private var backupsEnabled = true
-
-  override val name: String = initial_name + " (remote)"
 
   override lazy val storagePath: File = {
     new File(sendRequest(StoragePathRequest(key))(daoRpcStub.storagePath).path)
@@ -30,10 +26,6 @@ class GrpcChatHistoryDao(val key: String,
 
   override def datasetRoot(dsUuid: PbUuid): DatasetRoot = {
     new File(sendRequest(DatasetRootRequest(key, dsUuid))(daoRpcStub.datasetRoot).path).asInstanceOf[DatasetRoot]
-  }
-
-  override def datasetFiles(dsUuid: PbUuid): Set[File] = {
-    throw new UnsupportedOperationException("GrpcChatHistoryDao does not support datasetFiles!")
   }
 
   override def myself(dsUuid: PbUuid): User = {
@@ -103,28 +95,28 @@ class GrpcChatHistoryDao(val key: String,
   }
 
   override def renameDataset(dsUuid: PbUuid, newName: String): Dataset = {
-    if (backupsEnabled) this.backup()
+    this.backup()
     sendRequest(UpdateDatasetRequest(key, Dataset(dsUuid, newName)))(daoRpcStub.updateDataset).dataset
   }
 
   override def deleteDataset(dsUuid: PbUuid): Unit = {
-    if (backupsEnabled) this.backup()
+    this.backup()
     sendRequest(DeleteDatasetRequest(key, dsUuid))(daoRpcStub.deleteDataset)
   }
 
   /** Shift time of all timestamps in the dataset to accommodate timezone differences */
   override def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): Unit = {
-    if (backupsEnabled) this.backup()
+    this.backup()
     sendRequest(ShiftDatasetTimeRequest(key, dsUuid, hrs))(daoRpcStub.shiftDatasetTime)
   }
 
   override def updateUser(user: User): Unit = {
-    if (backupsEnabled) this.backup()
+    this.backup()
     sendRequest(UpdateUserRequest(key, user))(daoRpcStub.updateUser)
   }
 
   override def deleteChat(chat: Chat): Unit = {
-    if (backupsEnabled) this.backup()
+    this.backup()
     sendRequest(DeleteChatRequest(key, chat))(daoRpcStub.deleteChat)
   }
 

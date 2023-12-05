@@ -20,7 +20,7 @@ class ChatDetailsPane(
       ("Name:", Some(cwd.chat.nameOrUnnamed)),
       ("Type:", Some(cwd.chat.tpe match {
         case ChatType.Personal     =>
-          val userId = cwd.chat.memberIds.find(_ != dao.myself(cwd.dsUuid).id).map(_.toReadableId).getOrElse(Unknown)
+          val userId = cwd.chat.memberIds.find(_ != dao.myself(cwd.dsUuid).id).map(_.toReadableId).getOrElse("[unknown]")
           s"Personal (User ID #$userId)"
         case ChatType.PrivateGroup =>
           "Private Group"

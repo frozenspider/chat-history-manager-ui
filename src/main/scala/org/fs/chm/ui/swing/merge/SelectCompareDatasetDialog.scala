@@ -17,9 +17,9 @@ import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 
 // This is pretty much a copy-paste of SelectMergeDatasetDialog, which is ok since this one is temporary anyway
-class SelectCompareDatasetDialog(
-    daos: Seq[ChatHistoryDao],
-) extends CustomDialog[((ChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))](takeFullHeight = false) {
+class SelectCompareDatasetDialog[Dao <: ChatHistoryDao](
+    daos: Seq[Dao],
+) extends CustomDialog[((Dao, Dataset), (Dao, Dataset))](takeFullHeight = false) {
 
   // All values are lazy to be accessible from parent's constructor
 
@@ -36,10 +36,10 @@ class SelectCompareDatasetDialog(
     createTable("Right dataset", daosWithDatasets)
   }
 
-  private def createTable(title: String, data: Seq[(ChatHistoryDao, Seq[Dataset])]): Table = {
-    val models = new CompareDatasetModels(title, data)
+  private def createTable(title: String, data: Seq[(Dao, Seq[Dataset])]): Table = {
+    val models = new CompareDatasetModels[Dao](title, data)
     new Table(models.tableModel) {
-      peer.setDefaultRenderer(classOf[Any], new CompareDatasetCellRenderer())
+      peer.setDefaultRenderer(classOf[Any], new CompareDatasetCellRenderer[Dao]())
       peer.setSelectionModel(models.selectionModel)
       val col = peer.getColumnModel.getColumn(0)
       col.setMinWidth(TableWidth)
@@ -70,11 +70,11 @@ class SelectCompareDatasetDialog(
       add(slaveTable, c)
     }
 
-  override def validateChoices(): Option[((ChatHistoryDao, Dataset), (ChatHistoryDao, Dataset))] = {
+  override def validateChoices(): Option[((Dao, Dataset), (Dao, Dataset))] = {
     /** Find the DAO for the given dataset row by abusing the table structure */
     @tailrec
-    def findDao(tm: TableModel, idx: Int): ChatHistoryDao = tm.getValueAt(idx, 0) match {
-      case dao: ChatHistoryDao => dao
+    def findDao(tm: TableModel, idx: Int): Dao = tm.getValueAt(idx, 0) match {
+      case dao: ChatHistoryDao => dao.asInstanceOf[Dao]
       case _                   => findDao(tm, idx - 1)
     }
 
@@ -99,7 +99,7 @@ class SelectCompareDatasetDialog(
   }
 }
 
-private class CompareDatasetModels(title: String, values: Seq[(ChatHistoryDao, Seq[Dataset])]) {
+private class CompareDatasetModels[Dao <: ChatHistoryDao](title: String, values: Seq[(Dao, Seq[Dataset])]) {
   private val elements: IndexedSeq[AnyRef] =
     (for {
       (dao, daoDatasets) <- values
@@ -129,7 +129,7 @@ private class CompareDatasetModels(title: String, values: Seq[(ChatHistoryDao, S
   }
 }
 
-private class CompareDatasetCellRenderer extends DefaultTableCellRenderer {
+private class CompareDatasetCellRenderer[Dao <: ChatHistoryDao] extends DefaultTableCellRenderer {
   override def setValue(v: AnyRef): Unit = v match {
     case dao: ChatHistoryDao =>
       setText(dao.name)
