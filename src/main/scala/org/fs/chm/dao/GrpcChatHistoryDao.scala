@@ -97,8 +97,8 @@ class GrpcChatHistoryDao(val key: String,
     }
   }
 
-  def saveAsRemote(file: File): GrpcChatHistoryDao = {
-    val loaded = sendRequest(SaveAsRequest(key, file.getName))(daoRpcStub.saveAs)
+  def saveAsRemote(newName: String): GrpcChatHistoryDao = {
+    val loaded = sendRequest(SaveAsRequest(key, newName))(daoRpcStub.saveAs)
     new GrpcChatHistoryDao(loaded.key, loaded.name, daoRpcStub, loaderRpcStub)
   }
 

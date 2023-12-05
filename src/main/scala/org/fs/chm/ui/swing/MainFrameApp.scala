@@ -306,22 +306,12 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  def showPickDirDialog(callback: JFile => Unit): Unit = {
-    val chooser = DataLoaders.saveAsChooser
-    for (lastFileString <- config.get(DataLoaders.LastFileKey)) {
-      val lastFile = new JFile(lastFileString)
-      chooser.peer.setCurrentDirectory(lastFile.nearestExistingDir)
-    }
-    chooser.showOpenDialog(null) match {
-      case FileChooser.Result.Cancel => // NOOP
-      case FileChooser.Result.Error => // Mostly means that dialog was dismissed, also NOOP
-      case FileChooser.Result.Approve => {
-        config.update(DataLoaders.LastFileKey, chooser.selectedFile.getAbsolutePath)
-        worldFreezingIFuture("Saving data...") {
-          callback(chooser.selectedFile)
-        }
-      }
-    }
+  def showPickNewDbNameDialog(title: String, ininital: String)(callback: String => Unit): Unit = {
+    Dialog.showInput(
+      title   = title,
+      message = "Choose a name for a new database",
+      initial = ininital
+    ) foreach callback
   }
 
   def showUsersDialog(): Unit = {
@@ -373,11 +363,7 @@ class MainFrameApp(grpcPort: Int) //
       selectDsDialog.selection foreach {
         case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
           val storagePath = masterDao.storagePath
-          Dialog.showInput(
-            title   = "Merge datasets",
-            message = "Choose a name for a new database",
-            initial = storagePath.getName
-          ) foreach { newDbName =>
+          showPickNewDbNameDialog("Merge datasets", storagePath.getName) { newDbName =>
             val newDbPath = new JFile(storagePath.getParentFile, newDbName)
             if (newDbPath.exists && newDbPath.list().nonEmpty) {
               showError(s"Database directory ${newDbPath.getAbsolutePath} exists and is not empty")
@@ -575,8 +561,8 @@ class MainFrameApp(grpcPort: Int) //
 
   def daoListChanged(): Unit = {
     def saveAs(dao: GrpcChatHistoryDao): Unit = {
-      showPickDirDialog { file =>
-        val dstDao = dao.saveAsRemote(file)
+      showPickNewDbNameDialog("Save As", dao.name) { newName =>
+        val dstDao = dao.saveAsRemote(newName)
         Swing.onEDTWait {
           loadDaoInEDT(dstDao, Some(dao))
         }
