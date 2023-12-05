@@ -92,8 +92,10 @@ class GrpcChatHistoryDao(val key: String,
   }
 
   override def close(): Unit = {
-    if (!sendRequest(CloseRequest(key))(loaderRpcStub.close).success) {
-      log.warn(s"Failed to close remote DAO '${name}'!")
+    try {
+      sendRequest(CloseRequest(key))(loaderRpcStub.close)
+    } catch {
+      case th: Throwable => log.warn(s"Failed to close remote DAO '${name}'!", th)
     }
   }
 
