@@ -110,7 +110,10 @@ class GrpcChatHistoryDao(val key: String,
     sendRequest(UpdateDatasetRequest(key, Dataset(dsUuid, newName)))(daoRpcStub.updateDataset).dataset
   }
 
-  override def deleteDataset(dsUuid: PbUuid): Unit = ???
+  override def deleteDataset(dsUuid: PbUuid): Unit = {
+    if (backupsEnabled) this.backup()
+    sendRequest(DeleteDatasetRequest(key, dsUuid))(daoRpcStub.deleteDataset)
+  }
 
   /** Shift time of all timestamps in the dataset to accommodate timezone differences */
   override def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): Unit = ???
@@ -137,7 +140,10 @@ class GrpcChatHistoryDao(val key: String,
    */
   override def insertChat(srcDsRoot: DatasetRoot, chat: Chat): Unit = ???
 
-  override def deleteChat(chat: Chat): Unit = ???
+  override def deleteChat(chat: Chat): Unit = {
+    if (backupsEnabled) this.backup()
+    sendRequest(DeleteChatRequest(key, chat))(daoRpcStub.deleteChat)
+  }
 
   // Not used ouside of merge
   /**

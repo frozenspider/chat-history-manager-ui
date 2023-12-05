@@ -128,11 +128,27 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
     })
   }
 
+  override def deleteDataset(request: DeleteDatasetRequest): Future[Empty] = {
+    withDao(request, request.key)(dao => {
+      require(dao.isMutable, "Dao is immutable!")
+      dao.asInstanceOf[MutableChatHistoryDao].deleteDataset(request.uuid)
+      Empty()
+    })
+  }
+
   override def updateUser(request: UpdateUserRequest): Future[UpdateUserResponse] = {
     withDao(request, request.key)(dao => {
       require(dao.isMutable, "Dao is immutable!")
       dao.asInstanceOf[MutableChatHistoryDao].updateUser(request.user)
       UpdateUserResponse(dao.users(request.user.dsUuid).find(_.id == request.user.id).get)
+    })
+  }
+
+  override def deleteChat(request: DeleteChatRequest): Future[Empty] = {
+    withDao(request, request.key)(dao => {
+      require(dao.isMutable, "Dao is immutable!")
+      dao.asInstanceOf[MutableChatHistoryDao].deleteChat(request.chat)
+      Empty()
     })
   }
 
