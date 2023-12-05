@@ -116,7 +116,10 @@ class GrpcChatHistoryDao(val key: String,
   }
 
   /** Shift time of all timestamps in the dataset to accommodate timezone differences */
-  override def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): Unit = ???
+  override def shiftDatasetTime(dsUuid: PbUuid, hrs: Int): Unit = {
+    if (backupsEnabled) this.backup()
+    sendRequest(ShiftDatasetTimeRequest(key, dsUuid, hrs))(daoRpcStub.shiftDatasetTime)
+  }
 
   // Not used ouside of merge
   /** Insert a new user. It should not yet exist */

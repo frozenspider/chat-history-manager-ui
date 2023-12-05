@@ -704,6 +704,12 @@ class MainFrameApp(grpcPort: Int) //
               val newDao = dao.copyWithShiftedDatasetTime(dsUuid, hrs)
               loadDaoInEDT(newDao, Some(dao))
           }
+          MutationLock.synchronized {
+            // Clear cache
+            if (loadedDaos.contains(dao)) {
+              loadedDaos = loadedDaos + (dao -> Map.empty)
+            }
+          }
           chatList.replaceWith(loadedDaos.keys.toSeq)
         }
         chatsOuterPanel.revalidate()

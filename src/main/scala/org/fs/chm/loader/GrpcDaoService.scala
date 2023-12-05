@@ -136,6 +136,15 @@ class GrpcDaoService(doLoad: File => ChatHistoryDao)
     })
   }
 
+  /** Shift time of all timestamps in the dataset to accommodate timezone differences */
+  override def shiftDatasetTime(request: ShiftDatasetTimeRequest): Future[Empty] = {
+    withDao(request, request.key)(dao => {
+      require(dao.isMutable, "Dao is immutable!")
+      dao.asInstanceOf[MutableChatHistoryDao].shiftDatasetTime(request.uuid, request.hoursShift)
+      Empty()
+    })
+  }
+
   override def updateUser(request: UpdateUserRequest): Future[UpdateUserResponse] = {
     withDao(request, request.key)(dao => {
       require(dao.isMutable, "Dao is immutable!")
