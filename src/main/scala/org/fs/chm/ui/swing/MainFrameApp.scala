@@ -646,22 +646,8 @@ class MainFrameApp(grpcPort: Int) //
     require(_dao.isInstanceOf[GrpcChatHistoryDao])
     val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
     freezeTheWorld("Modifying...")
-    asyncChangeUsers(dao, {
+    asyncChangeChats(dao, {
       dao.updateUser(user)
-      Seq(user.id)
-    })
-  }
-
-  override def usersMerged(baseUser: User, absorbedUser: User, _dao: ChatHistoryDao): Unit = {
-    checkEdt()
-    require(_dao.isInstanceOf[GrpcChatHistoryDao])
-    val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
-    require(baseUser.dsUuid == absorbedUser.dsUuid, "Users are from different datasets!")
-    ??? // TODO: Implement me differently!
-    freezeTheWorld("Modifying...")
-    asyncChangeUsers(dao, {
-      // dao.mergeUsers(baseUser, absorbedUser)
-      Seq(baseUser.id, absorbedUser.id)
     })
   }
 
@@ -712,6 +698,16 @@ class MainFrameApp(grpcPort: Int) //
         unfreezeTheWorld()
       })
     }
+  }
+
+  override def combineChats(_dao: ChatHistoryDao, masterChat: Chat, slaveChat: Chat): Unit = {
+    checkEdt()
+    require(_dao.isInstanceOf[GrpcChatHistoryDao])
+    val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
+    freezeTheWorld("Combining...")
+    asyncChangeChats(dao, {
+      dao.combineChats(masterChat, slaveChat)
+    })
   }
 
   override def navigateToBeginning(): Unit = {
@@ -930,25 +926,20 @@ class MainFrameApp(grpcPort: Int) //
   }
 
   /** Asynchronously apply the given change (under mutation lock) and refresh UI to reflect it */
-  def asyncChangeUsers(dao: GrpcChatHistoryDao, applyChangeAndReturnChangedIds: => Seq[Long]): Unit = {
+  def asyncChangeChats(dao: GrpcChatHistoryDao, applyChange: => Unit): Unit = {
     Future { // To release UI lock
       try {
-        val userIds = MutationLock.synchronized {
-          val userIds = applyChangeAndReturnChangedIds
+        MutationLock.synchronized {
+          applyChange
           Swing.onEDTWait {
             chatList.replaceWith(loadedDaos.keys.toSeq)
           }
-          userIds
         }
         chatsOuterPanel.revalidate()
         chatsOuterPanel.repaint()
         MutationLock.synchronized {
-          // Evict chats containing edited user from cache
-          val chatsToEvict = for {
-            (chat, _) <- loadedDaos(dao)
-            if userIds.toSet.intersect(chat.memberIds.toSet).nonEmpty
-          } yield chat
-          chatsToEvict foreach (c => evictFromCache(dao, c))
+          // Evict all dao chats from cache
+          loadedDaos = loadedDaos + (dao -> Map.empty)
 
           // Reload currently selected chat
           val chatItemToReload = for {

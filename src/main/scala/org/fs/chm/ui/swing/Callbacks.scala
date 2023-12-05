@@ -30,8 +30,6 @@ object Callbacks {
 
   trait UserDetailsMenuCb {
     def userEdited(user: User, dao: ChatHistoryDao): Unit
-
-    def usersMerged(baseUser: User, absorbedUser: User, dao: ChatHistoryDao): Unit
   }
 
   //
@@ -42,6 +40,8 @@ object Callbacks {
     def selectChat(dao: ChatHistoryDao, cwd: ChatWithDetails): Unit
 
     def deleteChat(dao: ChatHistoryDao, chat: Chat): Unit
+
+    def combineChats(dao: ChatHistoryDao, mainChat: Chat, slaveChat: Chat): Unit
   }
 
 

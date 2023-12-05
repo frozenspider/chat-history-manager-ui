@@ -50,7 +50,8 @@ object TestUtils {
       tpe           = ChatType.PrivateGroup,
       imgPathOption = None,
       memberIds     = memberIds.toSeq,
-      msgCount      = messagesSize
+      msgCount      = messagesSize,
+      mainChatId    = None,
     )
   }
 
@@ -64,7 +65,8 @@ object TestUtils {
       tpe           = ChatType.Personal,
       imgPathOption = None,
       memberIds     = memberIds.toSeq,
-      msgCount      = messagesSize
+      msgCount      = messagesSize,
+      mainChatId    = None,
     )
   }
 
@@ -175,6 +177,8 @@ object TestUtils {
     override def updateUser(user: User): Unit = ???
 
     override def deleteChat(chat: Chat): Unit = ???
+
+    override def combineChats(masterChat: Chat, slaveChat: Chat): Unit = ???
 
     override def backup(): Unit = ???
   }

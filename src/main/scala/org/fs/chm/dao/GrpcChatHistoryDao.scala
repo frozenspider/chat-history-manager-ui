@@ -131,6 +131,11 @@ class GrpcChatHistoryDao(val key: String,
     sendRequest(DeleteChatRequest(key, chat))(daoRpcStub.deleteChat)
   }
 
+  override def combineChats(masterChat: Chat, slaveChat: Chat): Unit = {
+    this.backup()
+    sendRequest(CombineChatsRequest(key, masterChat, slaveChat))(daoRpcStub.combineChats)
+  }
+
   /** Create a backup, if enabled, otherwise do nothing */
   override def backup(): Unit = {
     sendRequest(BackupRequest(key))(daoRpcStub.backup)

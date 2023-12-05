@@ -110,6 +110,8 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
 
   def deleteChat(chat: Chat): Unit
 
+  def combineChats(masterChat: Chat, slaveChat: Chat): Unit
+
   /** Create a backup, if enabled, otherwise do nothing */
   def backup(): Unit
 }

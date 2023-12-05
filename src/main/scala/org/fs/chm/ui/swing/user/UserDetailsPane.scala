@@ -67,7 +67,6 @@ class UserDetailsPane(
     menuCallbacksOption foreach { _ => // Adding right-click menu
       val popupMenu = new PopupMenu {
         contents += menuItem("Edit", enabled = dao.isMutable)(edit())
-        contents += menuItem("Merge Into This...", enabled = dao.isMutable)(merge())
       }
 
       // Reactions
@@ -105,16 +104,6 @@ class UserDetailsPane(
     dialog.visible = true
     dialog.selection foreach { user2 =>
       menuCallbacksOption foreach (_.userEdited(user2, dao))
-      this.user = user2
-      reload()
-    }
-  }
-
-  private def merge(): Unit = {
-    val dialog = new SelectAbsorbedUserDialog(dao, user)
-    dialog.visible = true
-    dialog.selection foreach { user2 =>
-      menuCallbacksOption foreach (_.usersMerged(user, user2, dao))
       this.user = user2
       reload()
     }

@@ -35,7 +35,7 @@ class ChatListItem(
 
   private val popupMenu = new PopupMenu {
     contents += menuItem("Details")(showDetailsPopup())
-    contents += new Separator()
+    contents += menuItem("Combine", enabled = callbacksOption.nonEmpty && cwd.chat.tpe == ChatType.Personal)(showCombinePopup())
     contents += menuItem("Delete", enabled = callbacksOption.nonEmpty && dao.isMutable)(showDeletePopup())
   }
 
@@ -160,6 +160,14 @@ class ChatListItem(
       message     = new ChatDetailsPane(dao, cwd, full = true).peer,
       messageType = Dialog.Message.Plain
     )
+  }
+
+  private def showCombinePopup(): Unit = {
+    val dialog = new SelectCombineChatsDialog(dao, chat)
+    dialog.visible = true
+    dialog.selection foreach { slaveChat =>
+      callbacksOption.get.combineChats(dao, chat, slaveChat)
+    }
   }
 
   private def showDeletePopup(): Unit = {
