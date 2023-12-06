@@ -67,7 +67,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
 
   override def render(
       dao: ChatHistoryDao,
-      cwd: ChatWithDetails,
+      cc: CombinedChat,
       msgs: IndexedSeq[Message],
       beginReached: Boolean,
       showTop: Boolean
@@ -78,9 +78,9 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     if (beginReached) {
       sb.append(msgService.nothingNewerHtml)
     }
-    val dsRoot = dao.datasetRoot(cwd.dsUuid)
+    val dsRoot = dao.datasetRoot(cc.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cwd, dsRoot, m))
+      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m))
     }
     md.insert(sb.toString, MessageInsertPosition.Leading)
     document = md
@@ -116,7 +116,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
 
   override def prepend(
       dao: ChatHistoryDao,
-      cwd: ChatWithDetails,
+      cc: CombinedChat,
       msgs: IndexedSeq[Message],
       beginReached: Boolean
   ): MessageDocument = {
@@ -129,9 +129,9 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     if (beginReached) {
       sb.append(msgService.nothingNewerHtml)
     }
-    val dsRoot = dao.datasetRoot(cwd.dsUuid)
+    val dsRoot = dao.datasetRoot(cc.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cwd, dsRoot, m))
+      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m))
     }
     document.removeLoading(true)
     document.insert(sb.toString, MessageInsertPosition.Leading)
@@ -140,7 +140,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
 
   override def append(
       dao: ChatHistoryDao,
-      cwd: ChatWithDetails,
+      cc: CombinedChat,
       msgs: IndexedSeq[Message],
       endReached: Boolean
   ): MessageDocument = {
@@ -149,9 +149,9 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     appended = true
     // TODO: Prevent flickering
     val sb = new StringBuilder
-    val dsRoot = dao.datasetRoot(cwd.dsUuid)
+    val dsRoot = dao.datasetRoot(cc.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cwd, dsRoot, m))
+      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m))
     }
     //    if (endReached) {
     //      sb.append(msgService.nothingNewerHtml)
@@ -305,7 +305,7 @@ object MessagesAreaContainer {
       val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
       val htmlKit = new ExtendedHtmlEditorKit(desktopOption)
       val container = new MessagesAreaContainer(htmlKit)
-      container.render(dao, cwd, msgs.toIndexedSeq, false, false)
+      container.render(dao, CombinedChat(cwd, Seq.empty), msgs.toIndexedSeq, false, false)
       container.component
       Dialog.showMessage(
         title       = classOf[MessagesAreaContainer].getSimpleName,

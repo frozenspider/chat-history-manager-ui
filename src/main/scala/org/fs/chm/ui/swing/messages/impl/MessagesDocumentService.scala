@@ -99,18 +99,18 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
   // Renderers and helpers
   //
 
-  def renderMessageHtml(dao: ChatHistoryDao, cwd: ChatWithDetails, dsRoot: DatasetRoot, m: Message, isQuote: Boolean = false): String = {
+  def renderMessageHtml(dao: ChatHistoryDao, cc: CombinedChat, dsRoot: DatasetRoot, m: Message, isQuote: Boolean = false): String = {
     val (msgHtml: String, editDtOption: Option[DateTime], isDeleted: Boolean) = m.typed match {
       case Message.Typed.Regular(rm) =>
         val textHtmlOption = RichTextHtmlRenderer.render(m.text)
         val contentHtmlOption = rm.contentOption map { ct =>
-          s"""<div class="content">${ContentHtmlRenderer.render(cwd, dsRoot, ct)}</div>"""
+          s"""<div class="content">${ContentHtmlRenderer.render(cc, dsRoot, ct)}</div>"""
         }
-        val fwdFromHtmlOption  = rm.forwardFromNameOption map (n => renderFwdFrom(cwd, n))
+        val fwdFromHtmlOption  = rm.forwardFromNameOption map (n => renderFwdFrom(cc, n))
         val replySrcHtmlOption = if (isQuote) {
           None
         } else {
-          rm.replyToMessageIdTypedOption map (id => renderSourceMessage(dao, cwd, dsRoot, id))
+          rm.replyToMessageIdTypedOption map (id => renderSourceMessage(dao, cc, dsRoot, id))
         }
         val msgDeletedOption = if (rm.isDeleted) {
           Some(s"""<div class="system-message">Message deleted</div>""")
@@ -119,7 +119,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
          rm.editTimeOption,
          rm.isDeleted)
       case Message.Typed.Service(Some(sm)) =>
-        (ServiceMessageHtmlRenderer.render(dao, cwd, dsRoot, m, sm),
+        (ServiceMessageHtmlRenderer.render(dao, cc, dsRoot, m, sm),
          None,
          false)
     }
@@ -127,7 +127,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       case Some(dt) => s""" <span style="color: gray;">(${if (isDeleted) "deleted" else "edited"} ${dt.toString("yyyy-MM-dd HH:mm")})</span>"""
       case None     => ""
     }
-    val titleNameHtml = renderTitleName(cwd, Some(m.fromId), None)
+    val titleNameHtml = renderTitleName(cc, Some(m.fromId), None)
     val titleHtml =
       s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})$editTimeHtml"""
     val sourceIdAttr = m.sourceIdOption map (id => s"""message_source_id="$id"""") getOrElse ""
@@ -140,28 +140,28 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     """.stripMargin // TODO: Remove <p>
   }
 
-  private def renderTitleName(cwd: ChatWithDetails, idOption: Option[Long], nameOption: Option[String]): String = {
+  private def renderTitleName(cc: CombinedChat, idOption: Option[Long], nameOption: Option[String]): String = {
     val idx = {
-      idOption map (id => cwd.members indexWhere (_.id == id)) getOrElse (nameOption.map(cwd.resolveMemberIndex) getOrElse -1)
+      idOption map (id => cc.members indexWhere (_.id == id)) getOrElse (nameOption.map(cc.resolveMemberIndex) getOrElse -1)
     }
     val color = if (idx >= 0) Colors.stringForIdx(idx) else "#000000"
     val resolvedName = nameOption getOrElse {
-      idOption flatMap (id => cwd.members.find(_.id == id)) map (_.prettyName) getOrElse Unnamed
+      idOption flatMap (id => cc.members.find(_.id == id)) map (_.prettyName) getOrElse Unnamed
     }
 
     s"""<span class="title-name" style="color: $color;">${toHtmlPlaintext(resolvedName)}</span>"""
   }
 
-  private def renderFwdFrom(cwd: ChatWithDetails, fromName: String): String = {
-    val titleNameHtml = renderTitleName(cwd, None, Some(fromName))
+  private def renderFwdFrom(cc: CombinedChat, fromName: String): String = {
+    val titleNameHtml = renderTitleName(cc, None, Some(fromName))
     s"""<div class="forwarded-from">Forwarded from $titleNameHtml</div>"""
   }
 
-  private def renderSourceMessage(dao: ChatHistoryDao, cwd: ChatWithDetails, dsRoot: DatasetRoot, srcId: MessageSourceId): String = {
-    val m2Option = dao.messageOption(cwd.chat, srcId)
+  private def renderSourceMessage(dao: ChatHistoryDao, cc: CombinedChat, dsRoot: DatasetRoot, srcId: MessageSourceId): String = {
+    val m2Option = cc.cwds.map(cwd => dao.messageOption(cwd.chat, srcId)).yieldDefined.headOption
     val html = m2Option match {
       case None     => "[Deleted message]"
-      case Some(m2) => renderMessageHtml(dao, cwd, dsRoot, m2, true)
+      case Some(m2) => renderMessageHtml(dao, cc, dsRoot, m2, true)
     }
     s"""<blockquote>$html</blockquote> """
   }
@@ -209,23 +209,23 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
   }
 
   object ServiceMessageHtmlRenderer {
-    def render(dao: ChatHistoryDao, cwd: ChatWithDetails, dsRoot: DatasetRoot, m: Message, sm: MessageService): String = {
+    def render(dao: ChatHistoryDao, cc: CombinedChat, dsRoot: DatasetRoot, m: Message, sm: MessageService): String = {
       val textHtmlOption = RichTextHtmlRenderer.render(m.text)
       val content = sm match {
         case sm: MessageServicePhoneCall           => renderPhoneCall(sm)
         case sm: MessageServiceSuggestProfilePhoto => renderSuggestPhotoMessage(sm, dsRoot)
-        case sm: MessageServicePinMessage          => "Pinned message" + renderSourceMessage(dao, cwd, dsRoot, sm.messageIdTyped)
+        case sm: MessageServicePinMessage          => "Pinned message" + renderSourceMessage(dao, cc, dsRoot, sm.messageIdTyped)
         case sm: MessageServiceClearHistory        => "History cleared"
         case sm: MessageServiceBlockUser           => s"User ${if (sm.isBlocked) "" else "un"}blocked"
-        case sm: MessageServiceGroupCreate         => renderCreateGroupMessage(cwd, sm)
+        case sm: MessageServiceGroupCreate         => renderCreateGroupMessage(cc, sm)
         case sm: MessageServiceGroupEditTitle      => renderEditTitleMessage(sm)
         case sm: MessageServiceGroupEditPhoto      => renderEditPhotoMessage(sm, dsRoot)
         case sm: MessageServiceGroupDeletePhoto    => "Deleted group photo"
-        case sm: MessageServiceGroupInviteMembers  => renderGroupInviteMembersMessage(cwd, sm)
-        case sm: MessageServiceGroupRemoveMembers  => renderGroupRemoveMembersMessage(cwd, sm)
+        case sm: MessageServiceGroupInviteMembers  => renderGroupInviteMembersMessage(cc, sm)
+        case sm: MessageServiceGroupRemoveMembers  => renderGroupRemoveMembersMessage(cc, sm)
         case sm: MessageServiceGroupMigrateFrom    => renderMigratedFrom(sm)
         case sm: MessageServiceGroupMigrateTo      => "Migrated to another group"
-        case sm: MessageServiceGroupCall           => renderGroupCallMessage(cwd, sm)
+        case sm: MessageServiceGroupCall           => renderGroupCallMessage(cc, sm)
       }
       Seq(Some(s"""<div class="system-message">$content</div>"""), textHtmlOption).yieldDefined.mkString
     }
@@ -245,9 +245,9 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       ).yieldDefined.mkString(" ")
     }
 
-    private def renderCreateGroupMessage(cwd: ChatWithDetails, sm: MessageServiceGroupCreate) = {
+    private def renderCreateGroupMessage(cc: CombinedChat, sm: MessageServiceGroupCreate) = {
       val content = s"Created group <b>${sm.title}</b>"
-      val members = renderMembers(cwd, sm.members)
+      val members = renderMembers(cc, sm.members)
       s"$content$members"
     }
 
@@ -275,15 +275,15 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       s"Changed group photo<br>$image"
     }
 
-    private def renderGroupInviteMembersMessage(cwd: ChatWithDetails, sm: MessageServiceGroupInviteMembers) = {
+    private def renderGroupInviteMembersMessage(cc: CombinedChat, sm: MessageServiceGroupInviteMembers) = {
       val content = s"Invited"
-      val members = renderMembers(cwd, sm.members)
+      val members = renderMembers(cc, sm.members)
       s"$content$members"
     }
 
-    private def renderGroupRemoveMembersMessage(cwd: ChatWithDetails, sm: MessageServiceGroupRemoveMembers) = {
+    private def renderGroupRemoveMembersMessage(cc: CombinedChat, sm: MessageServiceGroupRemoveMembers) = {
       val content = s"Removed"
-      val members = renderMembers(cwd, sm.members)
+      val members = renderMembers(cc, sm.members)
       s"$content$members"
     }
 
@@ -291,16 +291,16 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       s"Migrated from ${sm.title}".trim
     }
 
-    private def renderGroupCallMessage(cwd: ChatWithDetails, sm: MessageServiceGroupCall) = {
+    private def renderGroupCallMessage(cc: CombinedChat, sm: MessageServiceGroupCall) = {
       val content = s"Group call"
-      val members = renderMembers(cwd, sm.members)
+      val members = renderMembers(cc, sm.members)
       s"$content$members"
     }
 
-    private def renderMembers(cwd: ChatWithDetails, members: Seq[String]) = {
+    private def renderMembers(cc: CombinedChat, members: Seq[String]) = {
       if (members.isEmpty) ""
       else members
-        .map(name => renderTitleName(cwd, None, Some(name)))
+        .map(name => renderTitleName(cc, None, Some(name)))
         .mkString("<ul><li>", "</li><li>", "</li></ul>")
     }
   }
@@ -349,7 +349,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
   }
 
   object ContentHtmlRenderer {
-    def render(cwd: ChatWithDetails, dsRoot: DatasetRoot, ct: Content): String = {
+    def render(cc: CombinedChat, dsRoot: DatasetRoot, ct: Content): String = {
       require(dsRoot != null, "dsRoot was null!")
       ct match {
         case ct: ContentSticker       => renderSticker(ct, dsRoot)
@@ -361,7 +361,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         case ct: ContentFile          => renderFile(ct, dsRoot)
         case ct: ContentLocation      => renderLocation(ct)
         case ct: ContentPoll          => renderPoll(ct)
-        case ct: ContentSharedContact => renderSharedContact(cwd, ct)
+        case ct: ContentSharedContact => renderSharedContact(cc, ct)
       }
     }
 
@@ -465,8 +465,8 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
       s"""<blockquote><i>Poll:</i> ${ct.question}</blockquote>"""
     }
 
-    def renderSharedContact(cwd: ChatWithDetails, ct: ContentSharedContact): String = {
-      val name  = renderTitleName(cwd, None, Some(ct.prettyName))
+    def renderSharedContact(cc: CombinedChat, ct: ContentSharedContact): String = {
+      val name  = renderTitleName(cc, None, Some(ct.prettyName))
       val phone = ct.phoneNumberOption map (pn => s"(phone: $pn)") getOrElse "(no phone number)"
       s"""<blockquote><i>Shared contact:</i> $name $phone</blockquote>"""
     }

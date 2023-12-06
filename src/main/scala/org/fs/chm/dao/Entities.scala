@@ -28,13 +28,33 @@ object Entities {
     /** Used to resolve plaintext members */
     def resolveMemberIndex(memberName: String): Int =
       members indexWhere (_.prettyName == memberName)
+  }
+
+  case class CombinedChat(mainCwd: ChatWithDetails, slaveCwds: Seq[ChatWithDetails]) {
+    val dsUuid: PbUuid = mainCwd.chat.dsUuid
+
+    val mainChatId: Long = mainCwd.chat.id
+
+    val cwds: Seq[ChatWithDetails] = mainCwd +: slaveCwds
+
+    val members: Seq[User] = cwds.flatMap(_.members).distinct
+
+    require(cwds.map(_.dsUuid).distinct.length == 1)
 
     /** Used to resolve plaintext members */
-    def resolveMember(memberName: String): Option[User] =
-     resolveMemberIndex(memberName) match {
-       case -1 => None
-       case x  => Some(members(x))
-     }
+    def resolveMemberIndex(memberName: String): Int =
+      members indexWhere (_.prettyName == memberName)
+
+    override def equals(that: Any): Boolean = {
+      that match {
+        case that: CombinedChat => this.dsUuid == that.dsUuid && this.mainChatId == that.mainChatId
+        case _ => false
+      }
+    }
+
+    override def hashCode(): Int = {
+      dsUuid.hashCode() * 31 + mainChatId.hashCode() * 7
+    }
   }
 
   val NoInternalId: MessageInternalId = -1L.asInstanceOf[MessageInternalId]

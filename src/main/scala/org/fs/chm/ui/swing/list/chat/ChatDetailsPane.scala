@@ -16,33 +16,40 @@ import org.fs.chm.ui.swing.general.field.TextComponent
 
 class ChatDetailsPane(
     dao: ChatHistoryDao,
-    cwd: ChatWithDetails,
+    cc: CombinedChat,
     full: Boolean,
 ) extends GridBagPanel {
 
   private def tc(s: String) = new TextComponent(s, mutable = false)
 
-  private val nameC = tc(cwd.chat.nameOrUnnamed)
+  private val mainChat = cc.mainCwd.chat
+  private val dsUuid = mainChat.dsUuid
+
+  private val nameC = tc(mainChat.nameOrUnnamed)
 
   {
     val data: Seq[(String, BorderPanel)] = Seq(
-      ("ID:", if (!full) Some(tc(cwd.chat.id.toReadableId)) else None),
+      ("ID:", if (!full) Some(tc(cc.cwds.map(_.chat.id.toReadableId).mkString("\n"))) else None),
       ("Name:", Some(nameC)),
-      ("Type:", if (!full) None else Some(tc(cwd.chat.tpe match {
+      ("Type:", if (!full) None else Some(tc(mainChat.tpe match {
         case ChatType.Personal     =>
-          val userId = cwd.chat.memberIds.find(_ != dao.myself(cwd.dsUuid).id).map(_.toReadableId).getOrElse("[unknown]")
+          val userId = mainChat.memberIds.find(_ != dao.myself(dsUuid).id).map(_.toReadableId).getOrElse("[unknown]")
           s"Personal (User ID #$userId)"
         case ChatType.PrivateGroup =>
           "Private Group"
       }))),
-      ("Members:", if (!full) None else cwd.chat.tpe match {
-        case ChatType.PrivateGroup =>
-          Some(tc(cwd.members.filter(_.prettyName != cwd.chat.nameOption.get).map(_.prettyName).mkString("\n")))
-        case ChatType.Personal     =>
+      ("Members:", if (!full) None else {
+        val isGroup = mainChat.tpe == ChatType.PrivateGroup
+        val showMembers = isGroup || cc.slaveCwds.nonEmpty
+        if (showMembers) {
+          val users = cc.members.filter(u => !isGroup || u.prettyName != mainChat.nameOption.get)
+          Some(tc(users.map(_.prettyName).mkString("\n")))
+        } else {
           None
+        }
       }),
       ("Image:", if (!full) None else Some {
-        resolveImage(cwd.chat.imgPathOption, dao.datasetRoot(cwd.chat.dsUuid)) match {
+        resolveImage(mainChat.imgPathOption, dao.datasetRoot(dsUuid)) match {
           case Some(image) =>
             new BorderPanel {
               // Chat image
@@ -54,17 +61,17 @@ class ChatDetailsPane(
             tc("(None)")
         }
       }),
-      ("Messages:", Some(tc(cwd.chat.msgCount.toString))),
-      ("Source Type:", Some(tc(cwd.chat.sourceType match {
+      ("Messages:", Some(tc(cc.cwds.map(_.chat.msgCount).sum.toString))),
+      ("Source Type:", Some(tc(cc.cwds.map(_.chat.sourceType match {
         case SourceType.TextImport => "Text import"
         case SourceType.Telegram   => "Telegram"
         case SourceType.WhatsappDb => "WhatsApp"
         case SourceType.TinderDb   => "Tinder"
-      }))),
+      }).distinct.mkString(", ")))),
       ("", if (!full) None else Some(tc(""))),
-      ("ID:", if (!full) None else Some(tc(cwd.chat.id.toReadableId))),
-      ("Dataset ID:", if (!full) None else Some(tc(cwd.chat.dsUuid.value))),
-      ("Dataset:", if (!full) None else Some(tc(dao.datasets.find(_.uuid == cwd.chat.dsUuid).get.alias))),
+      ("ID:", if (full) Some(tc(cc.cwds.map(_.chat.id.toReadableId).mkString("\n"))) else None),
+      ("Dataset ID:", if (!full) None else Some(tc(dsUuid.value))),
+      ("Dataset:", if (!full) None else Some(tc(dao.datasets.find(_.uuid == dsUuid).get.alias))),
       ("Database:", if (!full) None else Some(tc(dao.name)))
     ).collect {
       case (x, Some(y)) => (x, y)

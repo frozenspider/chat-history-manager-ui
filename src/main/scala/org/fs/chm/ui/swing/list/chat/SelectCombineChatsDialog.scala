@@ -24,15 +24,17 @@ class SelectCombineChatsDialog(dao: ChatHistoryDao, masterChat: Chat) extends Cu
 
   private lazy val elementsSeq: Seq[(RadioButton, ChatDetailsPane, Chat)] = {
     val group = new ButtonGroup()
-    dao.chats(masterChat.dsUuid)
-      .filter(cwd => cwd.chat.id != masterChat.id && cwd.chat.tpe == ChatType.Personal)
+    val allChats = dao.chats(masterChat.dsUuid)
+    allChats
+      .filter(cwd => cwd.chat.id != masterChat.id && cwd.chat.tpe == ChatType.Personal && cwd.chat.mainChatId.isEmpty)
+      .filter(cwd => allChats.exists(_.chat.mainChatId.contains(cwd.chat.id)))
       .zipWithIndex
       .collect {
         case (cwd, idx) =>
           val radio = new RadioButton()
           group.buttons += radio
 
-          val pane = new ChatDetailsPane(dao, cwd, full = false)
+          val pane = new ChatDetailsPane(dao, CombinedChat(cwd, Seq.empty), full = false)
           pane.stylizeName(Colors.forIdx(idx))
           (radio, pane, cwd.chat)
       }
