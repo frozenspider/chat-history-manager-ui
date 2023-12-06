@@ -16,6 +16,8 @@ class GrpcChatHistoryDao(val key: String,
                          loaderRpcStub: HistoryLoaderServiceBlockingStub)
   extends MutableChatHistoryDao with Logging {
 
+  private val cacheLock = new Object
+
   override lazy val storagePath: File = {
     new File(sendRequest(StoragePathRequest(key))(daoRpcStub.storagePath).path)
   }
@@ -24,8 +26,17 @@ class GrpcChatHistoryDao(val key: String,
     sendRequest(DatasetsRequest(key))(daoRpcStub.datasets).datasets
   }
 
+  // We never expect dataset roots to change within a dao
+  private var dsRootCache: Map[PbUuid, DatasetRoot] = Map.empty
+
   override def datasetRoot(dsUuid: PbUuid): DatasetRoot = {
-    new File(sendRequest(DatasetRootRequest(key, dsUuid))(daoRpcStub.datasetRoot).path).asInstanceOf[DatasetRoot]
+    cacheLock.synchronized {
+      if (!dsRootCache.contains(dsUuid)) {
+        val dsRoot = new File(sendRequest(DatasetRootRequest(key, dsUuid))(daoRpcStub.datasetRoot).path).asInstanceOf[DatasetRoot]
+        dsRootCache += (dsUuid -> dsRoot)
+      }
+      dsRootCache(dsUuid)
+    }
   }
 
   override def myself(dsUuid: PbUuid): User = {
