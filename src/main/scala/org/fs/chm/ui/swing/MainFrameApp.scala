@@ -837,6 +837,9 @@ class MainFrameApp(grpcPort: Int) //
         case None =>
           log.debug("Loading messages: No chat selected")
           None
+        case Some((dao, _)) if !loadedDaos.contains(dao) =>
+          log.debug("Loading messages: DAO not loaded")
+          None
         case Some((dao, cwd)) =>
           val cache      = loadedDaos(dao)(cwd.chat)
           val loadStatus = cache.loadStatusOption.get

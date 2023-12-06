@@ -85,7 +85,7 @@ class GrpcChatHistoryDao(val key: String,
   }
 
   override def messageOptionByInternalId(chat: Chat, internalId: MessageInternalId): Option[Message] = {
-    sendRequest(MessageOptionRequest(key, chat, internalId))(daoRpcStub.messageOption).message
+    sendRequest(MessageOptionByInternalIdRequest(key, chat, internalId))(daoRpcStub.messageOptionByInternalId).message
   }
 
   override def isLoaded(storagePath: File): Boolean = {
