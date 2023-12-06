@@ -4,14 +4,21 @@ import java.awt.Color
 import java.awt.Dimension
 import java.awt.EventQueue
 import java.awt.Font
+import java.awt.image.BufferedImage
 import java.io.File
+import java.nio.file.Files
+
+import javax.imageio.ImageIO
 
 import scala.swing._
 import scala.swing.Font.Style
-
 import javax.swing.JComponent
-import javax.swing.{ Box => JBox }
+import javax.swing.{Box => JBox}
 import javax.swing.filechooser.FileFilter
+
+import com.twelvemonkeys.imageio.stream.ByteArrayImageInputStream
+import org.fs.chm.dao.Entities.DatasetRoot
+import org.fs.chm.utility.LangUtils.RichString
 import org.slf4s.Logging
 
 object SwingUtils extends Logging {
@@ -63,6 +70,15 @@ object SwingUtils extends Logging {
     val e = enabled // To avoid name shadowing
     new MenuItem(new Action(title) { override def apply(): Unit = action }) {
       enabled = e
+    }
+  }
+
+  def resolveImage(pathOption: Option[String], datasetRoot: DatasetRoot): Option[BufferedImage] = {
+    pathOption.map(_.toFile(datasetRoot)) match {
+      case Some(imgFile) if imgFile.exists =>
+        val imageBytes = Files.readAllBytes(imgFile.toPath)
+        Option(ImageIO.read(new ByteArrayImageInputStream(imageBytes)))
+      case _ => None
     }
   }
 

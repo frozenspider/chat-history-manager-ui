@@ -1,5 +1,8 @@
 package org.fs.chm.ui.swing.list.chat
 
+import javax.swing.ImageIcon
+
+import scala.swing.BorderPanel.Position._
 import scala.swing.GridBagPanel.Anchor
 import scala.swing.GridBagPanel.Fill
 import scala.swing._
@@ -13,39 +16,58 @@ import org.fs.chm.ui.swing.general.field.TextComponent
 
 class ChatDetailsPane(
     dao: ChatHistoryDao,
-    cwd: ChatWithDetails
+    cwd: ChatWithDetails,
+    full: Boolean,
 ) extends GridBagPanel {
+
+  private def tc(s: String) = new TextComponent(s, mutable = false)
+
+  private val nameC = tc(cwd.chat.nameOrUnnamed)
+
   {
-    val data: Seq[(String, String)] = Seq(
-      ("Name:", Some(cwd.chat.nameOrUnnamed)),
-      ("Type:", Some(cwd.chat.tpe match {
+    val data: Seq[(String, BorderPanel)] = Seq(
+      ("ID:", if (!full) Some(tc(cwd.chat.id.toReadableId)) else None),
+      ("Name:", Some(nameC)),
+      ("Type:", if (!full) None else Some(tc(cwd.chat.tpe match {
         case ChatType.Personal     =>
           val userId = cwd.chat.memberIds.find(_ != dao.myself(cwd.dsUuid).id).map(_.toReadableId).getOrElse("[unknown]")
           s"Personal (User ID #$userId)"
         case ChatType.PrivateGroup =>
           "Private Group"
-      })),
-      ("Members:", cwd.chat.tpe match {
+      }))),
+      ("Members:", if (!full) None else cwd.chat.tpe match {
         case ChatType.PrivateGroup =>
-          Some(cwd.members.filter(_.prettyName != cwd.chat.nameOption.get).map(_.prettyName).mkString("\n"))
+          Some(tc(cwd.members.filter(_.prettyName != cwd.chat.nameOption.get).map(_.prettyName).mkString("\n")))
         case ChatType.Personal     =>
           None
       }),
-      ("Image:", Some(if (cwd.chat.imgPathOption.isDefined) "(Yes)" else "(None)")),
-      ("Messages:", Some(cwd.chat.msgCount.toString)),
-      ("Source Type:", Some(cwd.chat.sourceType match {
+      ("Image:", if (!full) None else Some {
+        resolveImage(cwd.chat.imgPathOption, dao.datasetRoot(cwd.chat.dsUuid)) match {
+          case Some(image) =>
+            new BorderPanel {
+              // Chat image
+              val label = new Label
+              label.icon = new ImageIcon(image)
+              layout(label) = Center
+            }
+          case None =>
+            tc("(None)")
+        }
+      }),
+      ("Messages:", Some(tc(cwd.chat.msgCount.toString))),
+      ("Source Type:", Some(tc(cwd.chat.sourceType match {
         case SourceType.TextImport => "Text import"
         case SourceType.Telegram   => "Telegram"
         case SourceType.WhatsappDb => "WhatsApp"
         case SourceType.TinderDb   => "Tinder"
-      })),
-      ("", Some("")),
-      ("ID:", Some(cwd.chat.id.toReadableId)),
-      ("Dataset ID:", Some(cwd.chat.dsUuid.value)),
-      ("Dataset:", Some(dao.datasets.find(_.uuid == cwd.chat.dsUuid).get.alias)),
-      ("Database:", Some(dao.name))
+      }))),
+      ("", if (!full) None else Some(tc(""))),
+      ("ID:", if (!full) None else Some(tc(cwd.chat.id.toReadableId))),
+      ("Dataset ID:", if (!full) None else Some(tc(cwd.chat.dsUuid.value))),
+      ("Dataset:", if (!full) None else Some(tc(dao.datasets.find(_.uuid == cwd.chat.dsUuid).get.alias))),
+      ("Database:", if (!full) None else Some(tc(dao.name)))
     ).collect {
-      case ((x, Some(y))) => (x, y)
+      case (x, Some(y)) => (x, y)
     }
 
     val c = new Constraints
@@ -66,9 +88,16 @@ class ChatDetailsPane(
     // Data column
     c.gridx  = 1
     c.anchor = Anchor.NorthWest
-    for (((_, v), idx) <- data.zipWithIndex) {
+    for (((_, tc), idx) <- data.zipWithIndex) {
       c.gridy = idx
-      add(new TextComponent(v, false), c)
+      add(tc, c)
+    }
+  }
+
+  def stylizeName(color: Color): Unit = {
+    for (el <- Seq(nameC)) {
+      el.innerComponent.foreground = color
+      el.innerComponent.fontStyle = Font.Style.Bold
     }
   }
 }

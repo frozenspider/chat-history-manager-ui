@@ -3,6 +3,8 @@ package org.fs.chm.ui.swing.list.chat
 import java.awt.Color
 import java.awt.{Container => AwtContainer}
 
+import javax.swing.ImageIcon
+
 import scala.swing.BorderPanel.Position._
 import scala.swing._
 import scala.swing.event._
@@ -42,6 +44,18 @@ class ChatListItem(
 
   {
     val emptyBorder = new EmptyBorder(labelBorderWidth, labelBorderWidth, labelBorderWidth, labelBorderWidth)
+
+    layout({
+      // Chat image
+      val label = new Label
+      label.preferredHeight = 48
+      label.preferredWidth = 48
+      for (image <- resolveImage(chat.imgPathOption, dao.datasetRoot(chat.dsUuid))) {
+        val scaled = image.getScaledInstance(label.preferredWidth, label.preferredHeight, java.awt.Image.SCALE_SMOOTH)
+        label.icon = new ImageIcon(scaled)
+      }
+      label
+    }) = West
 
     layout(new BorderPanel {
       // Name
@@ -117,7 +131,7 @@ class ChatListItem(
   private def showDetailsPopup(): Unit = {
     Dialog.showMessage(
       title       = "Chat Details",
-      message     = new ChatDetailsPane(dao, cwd).peer,
+      message     = new ChatDetailsPane(dao, cwd, full = true).peer,
       messageType = Dialog.Message.Plain
     )
   }
