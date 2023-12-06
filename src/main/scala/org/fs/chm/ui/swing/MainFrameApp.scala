@@ -304,12 +304,14 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  def showPickNewDbNameDialog(title: String, ininital: String)(callback: String => Unit): Unit = {
+  def showPickNewDbNameDialog(title: String, initial: String, callbackStatus: String)(callback: String => Unit): Unit = {
     Dialog.showInput(
       title   = title,
       message = "Choose a name for a new database",
-      initial = ininital
-    ) foreach callback
+      initial = initial
+    ) foreach (s => worldFreezingIFuture(callbackStatus) {
+      callback(s)
+    })
   }
 
   def showUsersDialog(): Unit = {
@@ -361,11 +363,11 @@ class MainFrameApp(grpcPort: Int) //
       selectDsDialog.selection foreach {
         case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
           val storagePath = masterDao.storagePath
-          showPickNewDbNameDialog("Merge datasets", storagePath.getName) { newDbName =>
+          showPickNewDbNameDialog("Merge datasets", storagePath.getName, "Merging...") { newDbName =>
             val newDbPath = new JFile(storagePath.getParentFile, newDbName)
             if (newDbPath.exists && newDbPath.list().nonEmpty) {
               showError(s"Database directory ${newDbPath.getAbsolutePath} exists and is not empty")
-            } else {
+            } else Swing.onEDTWait {
               val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
               selectChatsDialog.visible = true
               selectChatsDialog.selection foreach { chatsToMerge =>
@@ -555,7 +557,7 @@ class MainFrameApp(grpcPort: Int) //
 
   def daoListChanged(): Unit = {
     def saveAs(dao: GrpcChatHistoryDao): Unit = {
-      showPickNewDbNameDialog("Save As", dao.storagePath.getName) { newName =>
+      showPickNewDbNameDialog("Save As", dao.storagePath.getName, "Saving data...") { newName =>
         val dstDao = dao.saveAsRemote(newName)
         Swing.onEDTWait {
           loadDaoInEDT(dstDao, Some(dao))
