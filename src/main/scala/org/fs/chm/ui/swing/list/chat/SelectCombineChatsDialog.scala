@@ -18,7 +18,7 @@ class SelectCombineChatsDialog(dao: ChatHistoryDao, masterChat: Chat) extends Cu
   }
 
   override protected def headerText: String =
-    "Personal chat will be combined with the previously selected one, it will no longer \n" +
+    "Previously selected chat will be combined with the given one and will no longer \n" +
       "be shown separately in the main list.\n" +
       "For the history merge purposes, chats will remain separate so it will continue to work."
 
@@ -27,7 +27,7 @@ class SelectCombineChatsDialog(dao: ChatHistoryDao, masterChat: Chat) extends Cu
     val allChats = dao.chats(masterChat.dsUuid)
     allChats
       .filter(cwd => cwd.chat.id != masterChat.id && cwd.chat.tpe == ChatType.Personal && cwd.chat.mainChatId.isEmpty)
-      .filter(cwd => allChats.exists(_.chat.mainChatId.contains(cwd.chat.id)))
+      .filter(cwd => !allChats.exists(_.chat.mainChatId.contains(cwd.chat.id)))
       .zipWithIndex
       .collect {
         case (cwd, idx) =>

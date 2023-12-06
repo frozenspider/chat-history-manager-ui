@@ -41,7 +41,7 @@ object Callbacks {
 
     def deleteChat(dao: ChatHistoryDao, cc: CombinedChat): Unit
 
-    def combineChats(dao: ChatHistoryDao, mainCc: CombinedChat, slaveChat: Chat): Unit
+    def combineChats(dao: ChatHistoryDao, masterChat: Chat, slaveChat: Chat): Unit
   }
 
 

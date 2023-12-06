@@ -680,7 +680,7 @@ class MainFrameApp(grpcPort: Int) //
       currentChatOption = None
       msgRenderer.renderPleaseWait()
       if (!loadedDaos(dao).contains(cc)) {
-        updateCache(dao, cc, ChatCache(None, None))
+        updateCache(dao, cc, ChatCache(None, Map.empty))
       }
       freezeTheWorld("Loading chat...")
     }
@@ -702,13 +702,13 @@ class MainFrameApp(grpcPort: Int) //
     }
   }
 
-  override def combineChats(_dao: ChatHistoryDao, mainCc: CombinedChat, slaveChat: Chat): Unit = {
+  override def combineChats(_dao: ChatHistoryDao, masterChat: Chat, slaveChat: Chat): Unit = {
     checkEdt()
     require(_dao.isInstanceOf[GrpcChatHistoryDao])
     val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
     freezeTheWorld("Combining...")
     asyncChangeChats(dao, {
-      dao.combineChats(mainCc.mainCwd.chat, slaveChat)
+      dao.combineChats(masterChat, slaveChat)
     })
   }
 
@@ -718,17 +718,11 @@ class MainFrameApp(grpcPort: Int) //
     futureHandlingExceptions {
       currentChatOption match {
         case Some((dao, cc)) =>
-          val cache = loadedDaos(dao)(cc)
-          cache.loadStatusOption match {
-            case Some(ls) if ls.beginReached =>
-              // Just scroll
-              Swing.onEDTWait(msgRenderer.render(cache.msgDocOption.get, true))
-            case _ =>
-              MutationLock.synchronized {
-                loadMessagesInProgress = true
-              }
-              loadFirstMessagesAndUpdateCache(dao, cc)
+          // Ignore cache for this purpose
+          MutationLock.synchronized {
+            loadMessagesInProgress = true
           }
+          loadFirstMessagesAndUpdateCache(dao, cc)
         case None =>
           () // NOOP
       }
@@ -748,16 +742,11 @@ class MainFrameApp(grpcPort: Int) //
       currentChatOption match {
         case Some((dao, cc)) =>
           val cache = loadedDaos(dao)(cc)
-          cache.loadStatusOption match {
-            case Some(ls) if ls.endReached =>
-              // Just scroll
-              Swing.onEDTWait(msgRenderer.render(cache.msgDocOption.get, false))
-            case _ =>
-              MutationLock.synchronized {
-                loadMessagesInProgress = true
-              }
-              loadLastMessagesAndUpdateCache(dao, cc)
+          // Ignore cache for this purpose
+          MutationLock.synchronized {
+            loadMessagesInProgress = true
           }
+          loadLastMessagesAndUpdateCache(dao, cc)
         case None =>
           () // NOOP
       }
@@ -795,19 +784,64 @@ class MainFrameApp(grpcPort: Int) //
     //    }
   }
 
+  private def loadCombinedChatMessages(cc: CombinedChat,
+                                       loadStatuses: LoadStatuses,
+                                       isBackward: Boolean,
+                                       fetch: (Chat, Option[LoadStatus]) => Seq[Message]): (Seq[Message], LoadStatuses) = {
+    val allMsgsUnlimited = cc.cwds
+      .flatMap { cwd =>
+        println(s"=== Processing chat ${cwd.chat.id}")
+        val loadStatusOption = loadStatuses.get(cwd.chat.id)
+        println(s"loadStatusOption = $loadStatusOption")
+        (if ((isBackward && loadStatusOption.exists(_.beginReached)) || (!isBackward && loadStatusOption.exists(_.endReached))) {
+          Seq.empty
+        } else {
+          val res = fetch(cwd.chat, loadStatusOption)
+          println(s"Fetched ${res.headOption.map(_.internalId)} to ${res.lastOption.map(_.internalId)}")
+          res
+        }).map(m => (m, cwd.chat))
+      }
+      .sortBy(p => (p._1.timestamp, p._1.internalId))
+    val allMsgs = if (!isBackward) allMsgsUnlimited.take(MsgBatchLoadSize) else allMsgsUnlimited.takeRight(MsgBatchLoadSize)
+
+    // If all messages combines is still less than batch load size, there will be nothing left to fetch
+    val noMoreMessages = allMsgs.size < MsgBatchLoadSize
+
+    val loadStatuses2 = cc.cwds.map(cwd => {
+      println(s"=== Updating cache for chat ${cwd.chat.id}")
+      val loadStatusOption = loadStatuses.get(cwd.chat.id)
+      val newFirstOption = allMsgs.find    (_._2.id == cwd.chat.id).map(_._1)
+      val newLastOption  = allMsgs.findLast(_._2.id == cwd.chat.id).map(_._1)
+      println(s"Setting cache to ${newFirstOption.map(_.internalId)} to ${newLastOption.map(_.internalId)}")
+      val newLoadStatus = loadStatusOption.map(loadStatus => LoadStatus(
+        firstOption  = newFirstOption.orElse(loadStatus.firstOption),
+        lastOption   = newLastOption.orElse(loadStatus.lastOption),
+        beginReached = loadStatus.beginReached ||  (isBackward && noMoreMessages),
+        endReached   = loadStatus.endReached   || (!isBackward && noMoreMessages)
+      )).getOrElse(LoadStatus(
+        firstOption  = newFirstOption,
+        lastOption   = newLastOption,
+        beginReached =  isBackward && noMoreMessages,
+        endReached   = !isBackward && noMoreMessages
+      ))
+      cwd.chat.id -> newLoadStatus
+    }).toMap
+
+    (allMsgs.map(_._1), loadStatuses2)
+  }
+
   def tryLoadPreviousMessages(): Unit = {
     log.debug("Trying to load previous messages")
     tryLoadMessages(
-      ls => !ls.beginReached,
+      ls => ls.exists(!_._2.beginReached),
       (dao, cc, ls) => {
-        // FIXME
-        ???
-        val newMsgs = dao.messagesBefore(cc.mainCwd.chat, ls.firstOption.get.internalIdTyped, MsgBatchLoadSize + 1)
-        val ls2     = ls.copy(firstOption = newMsgs.headOption, beginReached = newMsgs.size < MsgBatchLoadSize)
-        (newMsgs, ls2)
+        loadCombinedChatMessages(cc, ls, isBackward = true, (chat, loadStatusOption) => {
+          val loadStatus = loadStatusOption.getOrElse(throw new IllegalStateException(s"Chat ${chat} is not in cache!"))
+          dao.messagesBefore(chat, loadStatus.firstOption.get.internalIdTyped, MsgBatchLoadSize)
+        })
       },
       (dao, cc, msgs, ls) => {
-        msgRenderer.prepend(dao, cc, msgs, ls.beginReached)
+        msgRenderer.prepend(dao, cc, msgs, ls.values.forall(_.beginReached))
       }
     )
   }
@@ -815,24 +849,23 @@ class MainFrameApp(grpcPort: Int) //
   def tryLoadNextMessages(): Unit = {
     log.debug("Trying to load next messages")
     tryLoadMessages(
-      ls => !ls.endReached,
+      ls => ls.exists(!_._2.endReached),
       (dao, cc, ls) => {
-        // FIXME
-        ???
-        val newMsgs = dao.messagesAfter(cc.mainCwd.chat, ls.lastOption.get.internalIdTyped, MsgBatchLoadSize + 1)
-        val ls2     = ls.copy(lastOption = newMsgs.lastOption, endReached = newMsgs.size < MsgBatchLoadSize)
-        (newMsgs, ls2)
+        loadCombinedChatMessages(cc, ls, isBackward = false, (chat, loadStatusOption) => {
+          val loadStatus = loadStatusOption.getOrElse(throw new IllegalStateException(s"Chat ${chat} is not in cache!"))
+          dao.messagesAfter(chat, loadStatus.lastOption.get.internalIdTyped, MsgBatchLoadSize)
+        })
       },
       (dao, cc, msgs, ls) => {
-        msgRenderer.append(dao, cc, msgs, ls.endReached)
+        msgRenderer.append(dao, cc, msgs, ls.values.forall(_.endReached))
       }
     )
   }
 
   def tryLoadMessages(
-      shouldLoad: LoadStatus => Boolean,
-      load: (GrpcChatHistoryDao, CombinedChat, LoadStatus) => (IndexedSeq[Message], LoadStatus),
-      addToRender: (GrpcChatHistoryDao, CombinedChat, IndexedSeq[Message], LoadStatus) => MD
+      shouldLoad: LoadStatuses => Boolean,
+      load: (GrpcChatHistoryDao, CombinedChat, LoadStatuses) => (Seq[Message], LoadStatuses),
+      addToRender: (GrpcChatHistoryDao, CombinedChat, Seq[Message], LoadStatuses) => MD
   ): Unit = {
     val chatInfoOption = MutationLock.synchronized {
       currentChatOption match {
@@ -846,31 +879,29 @@ class MainFrameApp(grpcPort: Int) //
           log.debug("Loading messages: DAO not loaded")
           None
         case Some((dao, cc)) =>
-          val cache      = loadedDaos(dao)(cc)
-          val loadStatus = cache.loadStatusOption.get
-          log.debug(s"Loading messages: loadStatus = ${loadStatus}")
-          if (!shouldLoad(loadStatus)) {
+          val cache        = loadedDaos(dao)(cc)
+          val loadStatuses = cache.loadStatuses
+          log.debug(s"Loading messages: loadStatuses = ${loadStatuses}")
+          if (!shouldLoad(loadStatuses)) {
             None
           } else {
-            assert(loadStatus.firstOption.isDefined)
-            assert(loadStatus.lastOption.isDefined)
             loadMessagesInProgress = true
             freezeTheWorld("Loading messages...")
-            Some((loadStatus, dao, cc))
+            Some((loadStatuses, dao, cc))
           }
       }
     }
     chatInfoOption match {
-      case Some((loadStatus, dao, cc)) =>
+      case Some((loadStatuses, dao, cc)) =>
         msgRenderer.updateStarted()
         val f = futureHandlingExceptions {
           Swing.onEDTWait(msgRenderer.prependLoading())
-          val (addedMessages, loadStatus2) = load(dao, cc, loadStatus)
+          val (addedMessages, loadStatuses2) = load(dao, cc, loadStatuses)
           log.debug(s"Loading messages: Loaded ${addedMessages.size} messages")
           Swing.onEDTWait(MutationLock.synchronized {
-            val md = addToRender(dao, cc, addedMessages, loadStatus2)
+            val md = addToRender(dao, cc, addedMessages, loadStatuses2)
             log.debug("Loading messages: Reloaded message container")
-            updateCache(dao, cc, ChatCache(Some(md), Some(loadStatus2)))
+            updateCache(dao, cc, ChatCache(Some(md), loadStatuses2))
 
             msgRenderer.updateFinished()
             loadMessagesInProgress = false
@@ -882,32 +913,24 @@ class MainFrameApp(grpcPort: Int) //
   }
 
   def loadFirstMessagesAndUpdateCache(dao: GrpcChatHistoryDao, cc: CombinedChat): Unit = {
-    // FIXME
-    val msgs = dao.firstMessages(???, MsgBatchLoadSize)
+    val (msgs, loadStatuses) = loadCombinedChatMessages(cc, Map.empty, isBackward = false, (chat, _) => {
+      dao.firstMessages(chat, MsgBatchLoadSize)
+    })
+
     Swing.onEDTWait {
-      val md = msgRenderer.render(dao, cc, msgs, true, true)
-      val loadStatus = LoadStatus(
-        firstOption  = msgs.headOption,
-        lastOption   = msgs.lastOption,
-        beginReached = true,
-        endReached   = msgs.size < MsgBatchLoadSize
-      )
-      updateCache(dao, cc, ChatCache(Some(md), Some(loadStatus)))
+      val md = msgRenderer.render(dao, cc, msgs, beginReached = true, showTop = true)
+      updateCache(dao, cc, ChatCache(Some(md), loadStatuses))
     }
   }
 
   def loadLastMessagesAndUpdateCache(dao: GrpcChatHistoryDao, cc: CombinedChat): Unit = {
-    // FIXME
-    val msgs = dao.lastMessages(???, MsgBatchLoadSize)
+    val (msgs, loadStatuses) = loadCombinedChatMessages(cc, Map.empty, isBackward = true, (chat, _) => {
+      dao.lastMessages(chat, MsgBatchLoadSize)
+    })
+
     Swing.onEDTWait {
-      val md = msgRenderer.render(dao, cc, msgs, msgs.size < MsgBatchLoadSize, false)
-      val loadStatus = LoadStatus(
-        firstOption  = msgs.headOption,
-        lastOption   = msgs.lastOption,
-        beginReached = msgs.size < MsgBatchLoadSize,
-        endReached   = true
-      )
-      updateCache(dao, cc, ChatCache(Some(md), Some(loadStatus)))
+      val md = msgRenderer.render(dao, cc, msgs, loadStatuses.values.forall(_.beginReached), showTop = false)
+      updateCache(dao, cc, ChatCache(Some(md), loadStatuses))
     }
   }
 
@@ -1051,17 +1074,21 @@ class MainFrameApp(grpcPort: Int) //
         shiftDatasetTimeCallbackOption = Some(shiftDatasetTime)
       )
 
-  // FIXME: Use slave chats!
+  /** Map from individual chat ID to load status */
+  private type LoadStatuses = Map[Long, LoadStatus]
+
   private case class ChatCache(
-      msgDocOption: Option[MD],
-      loadStatusOption: Option[LoadStatus]
+    msgDocOption: Option[MD],
+
+    /** Map from individual chat ID to load status */
+    loadStatuses: LoadStatuses,
   )
 
   private case class LoadStatus(
-      firstOption: Option[Message],
-      lastOption: Option[Message],
-      beginReached: Boolean,
-      endReached: Boolean
+    firstOption: Option[Message],
+    lastOption: Option[Message],
+    beginReached: Boolean,
+    endReached: Boolean
   )
 
   private object DataLoaders {

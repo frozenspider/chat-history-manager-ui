@@ -68,7 +68,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   override def render(
       dao: ChatHistoryDao,
       cc: CombinedChat,
-      msgs: IndexedSeq[Message],
+      msgs: Seq[Message],
       beginReached: Boolean,
       showTop: Boolean
   ): MessageDocument = {
@@ -117,7 +117,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   override def prepend(
       dao: ChatHistoryDao,
       cc: CombinedChat,
-      msgs: IndexedSeq[Message],
+      msgs: Seq[Message],
       beginReached: Boolean
   ): MessageDocument = {
     checkEdt()
@@ -141,7 +141,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
   override def append(
       dao: ChatHistoryDao,
       cc: CombinedChat,
-      msgs: IndexedSeq[Message],
+      msgs: Seq[Message],
       endReached: Boolean
   ): MessageDocument = {
     checkEdt()
