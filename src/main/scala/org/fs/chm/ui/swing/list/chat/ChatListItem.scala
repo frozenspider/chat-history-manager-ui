@@ -58,14 +58,29 @@ class ChatListItem(
     }) = West
 
     layout(new BorderPanel {
-      // Name
-      val nameString = cwd.chat.nameOrUnnamed
-      val nameLabel = new Label(
-        s"""<html><p style="text-align: left; width: ${labelPreferredWidth}px;">"""
-          + StringEscapeUtils.escapeHtml4(nameString)
-          + "</p></html>")
-      nameLabel.border = emptyBorder
-      layout(nameLabel) = North
+      layout(new BorderPanel {
+        // Name
+        val nameString = cwd.chat.nameOrUnnamed
+        val nameLabel = new Label(
+          s"""<html><p style="text-align: left; width: ${labelPreferredWidth - 40}px;">"""
+            + StringEscapeUtils.escapeHtml4(nameString)
+            + "</p></html>")
+        nameLabel.border = emptyBorder
+        layout(nameLabel) = West
+
+
+        // Source
+        val sourceString = cwd.chat.sourceType match {
+          case SourceType.TextImport => "Text"
+          case SourceType.Telegram => "Telegram"
+          case SourceType.WhatsappDb => "WhatsApp"
+          case SourceType.TinderDb => "Tinder"
+        }
+        val sourceLabel = new Label(sourceString)
+        sourceLabel.background = new Color(200, 200, 0, 100)
+        sourceLabel.foreground = new Color(0, 0, 0, 100)
+        layout(sourceLabel) = East
+      }) = North
 
       // Last message
       val lastMsgString = cwd.lastMsgOption match {
@@ -118,14 +133,25 @@ class ChatListItem(
     callbacksOption foreach (_.selectChat(dao, cwd))
   }
 
+  private def setBgColorRecursively(c: Component, color: Color): Unit = {
+    c.background = color
+    c match {
+      case c: Container =>
+        for (c <- c.contents) {
+          setBgColorRecursively(c, color)
+        }
+      case _ => // NOOP
+    }
+  }
+
   def markSelected(): Unit = {
-    border     = new LineBorder(Color.BLACK, 1)
-    background = _activeColor
+    border = new LineBorder(Color.BLACK, 1)
+    setBgColorRecursively(this, _activeColor)
   }
 
   def markDeselected(): Unit = {
-    border     = new LineBorder(Color.GRAY, 1)
-    background = _inactiveColor
+    border = new LineBorder(Color.GRAY, 1)
+    setBgColorRecursively(this, _inactiveColor)
   }
 
   private def showDetailsPopup(): Unit = {
