@@ -19,6 +19,7 @@ import org.fs.utility.Imports._
  * Show dialog for merging chats.
  * Rules:
  * - There will be a merge option in the output for every chat in master DS
+ * - Chats main chat ID will be ignored, each primitive chat is merged separately
  * - `Combine` options would NOT have mismatches defined
  * - Master chats will precede slave-only chats
  * - Checkbox option will be present for all chats in slave DS - i.e. whether to add/combine them or not
@@ -79,7 +80,7 @@ class SelectMergeChatsDialog(
     override val cellsAreInteractive = false
 
     override val renderer = (renderable: ListItemRenderable[(ChatHistoryDao, ChatWithDetails)]) => {
-      val r = new ChatListItem(renderable.v._1, renderable.v._2, None, None)
+      val r = new ChatListItem(renderable.v._1, CombinedChat(renderable.v._2, Seq.empty), None, None)
       if (renderable.isCombine) {
         r.inactiveColor = Colors.CombineBg
       } else if (renderable.isAdd) {

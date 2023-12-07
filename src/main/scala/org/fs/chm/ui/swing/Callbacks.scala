@@ -2,7 +2,7 @@ package org.fs.chm.ui.swing
 
 import com.github.nscala_time.time.Imports.DateTime
 import org.fs.chm.dao.ChatHistoryDao
-import org.fs.chm.dao.Entities.ChatWithDetails
+import org.fs.chm.dao.Entities.CombinedChat
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.PbUuid
 import org.fs.chm.protobuf.User
@@ -30,8 +30,6 @@ object Callbacks {
 
   trait UserDetailsMenuCb {
     def userEdited(user: User, dao: ChatHistoryDao): Unit
-
-    def usersMerged(baseUser: User, absorbedUser: User, dao: ChatHistoryDao): Unit
   }
 
   //
@@ -39,9 +37,11 @@ object Callbacks {
   //
 
   trait ChatCb {
-    def selectChat(dao: ChatHistoryDao, cwd: ChatWithDetails): Unit
+    def selectChat(dao: ChatHistoryDao, cc: CombinedChat): Unit
 
-    def deleteChat(dao: ChatHistoryDao, chat: Chat): Unit
+    def deleteChat(dao: ChatHistoryDao, cc: CombinedChat): Unit
+
+    def combineChats(dao: ChatHistoryDao, masterChat: Chat, slaveChat: Chat): Unit
   }
 
 

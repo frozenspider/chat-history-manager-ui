@@ -124,7 +124,7 @@ object SelectMergeMessagesDialog {
       }
       val allRendered = for (either <- renderable.v.messageOptions) yield {
         val rendered = either match {
-          case Right(msg) => msgService.renderMessageHtml(renderable.v.dao, renderable.v.cwd, renderable.v.dsRoot, msg)
+          case Right(msg) => msgService.renderMessageHtml(renderable.v.dao, CombinedChat(renderable.v.cwd, Seq.empty), renderable.v.dsRoot, msg)
           case Left(num)  => s"<hr>${num} messages<hr><p>"
         }
         rendered

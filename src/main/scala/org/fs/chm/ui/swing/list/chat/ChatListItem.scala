@@ -20,22 +20,23 @@ import org.fs.chm.ui.swing.Callbacks
 import org.fs.chm.ui.swing.list.DaoItem
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.utility.LangUtils._
+import org.fs.utility.Imports._
 
 class ChatListItem(
     dao: ChatHistoryDao,
-    cwd: ChatWithDetails,
+    cc: CombinedChat,
     selectionGroupOption: Option[ChatListItemSelectionGroup],
     callbacksOption: Option[Callbacks.ChatCb]
 ) extends BorderPanel { self =>
   private val labelPreferredWidth = DaoItem.PanelWidth - 100 // TODO: Remove
 
-  val chat = cwd.chat
+  val mainChat = cc.mainCwd.chat
 
   private val labelBorderWidth = 3
 
   private val popupMenu = new PopupMenu {
     contents += menuItem("Details")(showDetailsPopup())
-    contents += new Separator()
+    contents += menuItem("Combine Into", enabled = callbacksOption.nonEmpty && mainChat.tpe == ChatType.Personal)(showCombinePopup())
     contents += menuItem("Delete", enabled = callbacksOption.nonEmpty && dao.isMutable)(showDeletePopup())
   }
 
@@ -50,7 +51,7 @@ class ChatListItem(
       val label = new Label
       label.preferredHeight = 48
       label.preferredWidth = 48
-      for (image <- resolveImage(chat.imgPathOption, dao.datasetRoot(chat.dsUuid))) {
+      for (image <- resolveImage(mainChat.imgPathOption, dao.datasetRoot(mainChat.dsUuid))) {
         val scaled = image.getScaledInstance(label.preferredWidth, label.preferredHeight, java.awt.Image.SCALE_SMOOTH)
         label.icon = new ImageIcon(scaled)
       }
@@ -60,7 +61,7 @@ class ChatListItem(
     layout(new BorderPanel {
       layout(new BorderPanel {
         // Name
-        val nameString = cwd.chat.nameOrUnnamed
+        val nameString = mainChat.nameOrUnnamed
         val nameLabel = new Label(
           s"""<html><p style="text-align: left; width: ${labelPreferredWidth - 40}px;">"""
             + StringEscapeUtils.escapeHtml4(nameString)
@@ -70,7 +71,7 @@ class ChatListItem(
 
 
         // Source
-        val sourceString = cwd.chat.sourceType match {
+        val sourceString = mainChat.sourceType match {
           case SourceType.TextImport => "Text"
           case SourceType.Telegram => "Telegram"
           case SourceType.WhatsappDb => "WhatsApp"
@@ -83,7 +84,8 @@ class ChatListItem(
       }) = North
 
       // Last message
-      val lastMsgString = cwd.lastMsgOption match {
+      val lastMsgOption = cc.cwds.map(_.lastMsgOption).yieldDefined.maxByOption(m => (m.timestamp, m.internalId))
+      val lastMsgString = lastMsgOption match {
         case None      => "<No messages>"
         case Some(msg) => simpleRenderMsg(msg)
       }
@@ -98,10 +100,10 @@ class ChatListItem(
     }) = Center
 
     // Type
-    val tpeString = cwd.chat.tpe match {
+    val tpeString = mainChat.tpe match {
       case ChatType.Personal     => ""
-      case ChatType.PrivateGroup => "(" + cwd.members.size + ")"
-      case _                     => unexpectedCase(cwd.chat.tpe)
+      case ChatType.PrivateGroup => "(" + cc.members.size + ")"
+      case _                     => unexpectedCase(mainChat.tpe)
     }
     val tpeLabel = new Label(tpeString)
     tpeLabel.preferredWidth    = 30
@@ -130,7 +132,7 @@ class ChatListItem(
   def select(): Unit = {
     markSelected()
     selectionGroupOption foreach (_.deselectOthers(this))
-    callbacksOption foreach (_.selectChat(dao, cwd))
+    callbacksOption foreach (_.selectChat(dao, cc))
   }
 
   private def setBgColorRecursively(c: Component, color: Color): Unit = {
@@ -157,17 +159,25 @@ class ChatListItem(
   private def showDetailsPopup(): Unit = {
     Dialog.showMessage(
       title       = "Chat Details",
-      message     = new ChatDetailsPane(dao, cwd, full = true).peer,
+      message     = new ChatDetailsPane(dao, cc, full = true).peer,
       messageType = Dialog.Message.Plain
     )
+  }
+
+  private def showCombinePopup(): Unit = {
+    val dialog = new SelectCombineChatsDialog(dao, cc.mainCwd.chat)
+    dialog.visible = true
+    dialog.selection foreach { masterChat =>
+      callbacksOption.get.combineChats(dao, masterChat, cc.mainCwd.chat)
+    }
   }
 
   private def showDeletePopup(): Unit = {
     Dialog.showConfirmation(
       title   = "Deleting Chat",
-      message = s"Are you sure you want to delete a chat '${cwd.chat.nameOrUnnamed}'?"
+      message = s"Are you sure you want to delete a chat '${mainChat.nameOrUnnamed}'?"
     ) match {
-      case Dialog.Result.Yes => callbacksOption.get.deleteChat(dao, cwd.chat)
+      case Dialog.Result.Yes => callbacksOption.get.deleteChat(dao, cc)
       case _                 => // NOOP
     }
   }
@@ -186,12 +196,12 @@ class ChatListItem(
 
   private def simpleRenderMsg(msg: Message): String = {
     val prefix =
-      if (cwd.members.size == 2 && msg.fromId == cwd.members(1).id) ""
+      if (mainChat.tpe == ChatType.Personal && msg.fromId != cc.members.head.id) ""
       else {
         // Avoid querying DB if possible
         val fromNameOption =
-          (cwd.members find (_.id == msg.fromId))
-            .orElse(dao.userOption(cwd.dsUuid, msg.fromId))
+          (cc.members find (_.id == msg.fromId))
+            .orElse(dao.userOption(mainChat.dsUuid, msg.fromId))
             .flatMap(_.prettyNameOption)
         (fromNameOption.getOrElse(Unnamed) + ": ")
       }
