@@ -37,6 +37,7 @@ class ChatListItem(
   private val popupMenu = new PopupMenu {
     contents += menuItem("Details")(showDetailsPopup())
     contents += menuItem("Combine Into", enabled = callbacksOption.nonEmpty && mainChat.tpe == ChatType.Personal)(showCombinePopup())
+    contents += menuItem("Compare With", enabled = callbacksOption.nonEmpty)(showComparePopup())
     contents += menuItem("Delete", enabled = callbacksOption.nonEmpty && dao.isMutable)(showDeletePopup())
   }
 
@@ -166,10 +167,33 @@ class ChatListItem(
 
   private def showCombinePopup(): Unit = {
     val slaveChat = cc.mainCwd.chat
-    val dialog = new SelectCombineChatsDialog(dao, slaveChat)
+    val dialog = new SelectChatDialog(
+      dao,
+      slaveChat,
+      s"Select chat to be combined with ${slaveChat.qualifiedName}",
+      "Previously selected chat will be combined with the given one and will no longer \n" +
+        "be shown separately in the main list.\n" +
+        "For the history merge purposes, chats will remain separate so it will continue to work.",
+      cwd => cwd.chat.tpe == ChatType.Personal
+    )
     dialog.visible = true
     dialog.selection foreach { masterChat =>
       callbacksOption.get.combineChats(dao, masterChat, slaveChat)
+    }
+  }
+
+  private def showComparePopup(): Unit = {
+    val baseChat = cc.mainCwd.chat
+    val dialog = new SelectChatDialog(
+      dao,
+      baseChat,
+      s"Select chat to be compared with ${baseChat.qualifiedName}",
+      "",
+      _ => true
+    )
+    dialog.visible = true
+    dialog.selection foreach { secondaryChat =>
+      callbacksOption.get.compareChats(dao, baseChat, secondaryChat)
     }
   }
 

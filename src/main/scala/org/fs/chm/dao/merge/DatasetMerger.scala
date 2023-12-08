@@ -15,7 +15,7 @@ trait DatasetMerger extends Logging {
    * Other `ChatMergeOption`s are returned unchanged.
    * Note that we can only detect conflicts if data source supports source IDs.
    */
-  def analyze(masterCwd: ChatWithDetails, slaveCwd: ChatWithDetails, title: String): IndexedSeq[MessagesMergeDiff]
+  def analyze(masterChat: Chat, slaveChat: Chat, title: String): IndexedSeq[MessagesMergeDiff]
 
   def merge(usersToMerge: Seq[UserMergeOption],
             chatsToMerge: Seq[ResolvedChatMergeOption],

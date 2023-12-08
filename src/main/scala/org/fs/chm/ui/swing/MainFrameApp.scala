@@ -429,7 +429,8 @@ class MainFrameApp(grpcPort: Int) //
         cmo match {
           case cmo: ChatMergeOption.SelectedCombine =>
             setStatus(s"Analyzing ${cmo.title}...")
-            val diffs = merger.analyze(cmo.masterCwd, cmo.slaveCwd, cmo.title)
+            require(cmo.masterCwd.chat.id == cmo.slaveCwd.chat.id)
+            val diffs = merger.analyze(cmo.masterCwd.chat, cmo.slaveCwd.chat, cmo.title)
             // Sanity check
             if (diffs.size >= 10000) {
               throw new IllegalStateException(s"Found ${diffs.size} mismatches for ${cmo.title}!")
@@ -710,6 +711,29 @@ class MainFrameApp(grpcPort: Int) //
     asyncChangeChats(dao, {
       dao.combineChats(masterChat, slaveChat)
     })
+  }
+
+  override def compareChats(_dao: ChatHistoryDao, baseChat: Chat, secondaryChat: Chat): Unit = {
+    checkEdt()
+    require(_dao.isInstanceOf[GrpcChatHistoryDao])
+    val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
+    val ds = dao.datasets.find(_.uuid == baseChat.dsUuid).get
+    freezeTheWorld("Comparing...")
+    futureHandlingExceptions {
+      val merger = new DatasetMergerRemote(grpcHolder.channel, dao, ds, dao, ds)
+      val analysis = merger.analyze(baseChat, secondaryChat, "Comparison")
+      val mCwd = dao.chatOption(baseChat.dsUuid, baseChat.id).get
+      val sCwd = dao.chatOption(secondaryChat.dsUuid, secondaryChat.id).get
+      val dialog = onEdtReturning {
+        type MergeModel = SelectMergeMessagesDialog.SelectMergeMessagesModel
+        new SelectMergeMessagesDialog(new MergeModel(dao, mCwd, dao, sCwd, analysis, htmlKit))
+      }
+      dialog.visible = true
+
+      Swing.onEDTWait {
+        unfreezeTheWorld()
+      }
+    }
   }
 
   override def navigateToBeginning(): Unit = {

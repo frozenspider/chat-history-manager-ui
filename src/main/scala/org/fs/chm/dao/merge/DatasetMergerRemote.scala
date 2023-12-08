@@ -21,15 +21,21 @@ class DatasetMergerRemote(channel: ManagedChannel,
 
   private val rpcStub = MergeServiceGrpc.blockingStub(channel)
 
-  override def analyze(masterCwd: ChatWithDetails, slaveCwd: ChatWithDetails, title: String): IndexedSeq[MessagesMergeDiff] = {
+  override def analyze(masterChat: Chat, slaveChat: Chat, title: String): IndexedSeq[MessagesMergeDiff] = {
     implicit def toInternal[I <: TaggedMessageId](l: Long): I = l.asInstanceOf[I]
 
-    require(masterCwd.chat.id == slaveCwd.chat.id)
+    val chatIdPair = ChatIdPair(masterChat.id, slaveChat.id)
     StopWatch.measureAndCall {
-      sendRequest(AnalyzeRequest(masterDao.key, masterDs.uuid, slaveDao.key, slaveDs.uuid, chatIds = Seq(masterCwd.chat.id)))(req => {
+      sendRequest(AnalyzeRequest(
+        masterDao.key,
+        masterDs.uuid,
+        slaveDao.key,
+        slaveDs.uuid,
+        chatIdPairs = Seq(chatIdPair)
+      ))(req => {
         val analysis = rpcStub.analyze(req).analysis
         require(analysis.length == 1)
-        require(analysis.head.chatId == masterCwd.chat.id)
+        require(analysis.head.chatIds == chatIdPair)
         analysis.head.sections.map(v => {
           v.tpe match {
             case AnalysisSectionType.Match =>

@@ -7,26 +7,25 @@ import scala.swing._
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.Chat
-import org.fs.chm.protobuf.ChatType
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 
-class SelectCombineChatsDialog(dao: ChatHistoryDao, slaveChat: Chat) extends CustomDialog[Chat](takeFullHeight = true) {
+class SelectChatDialog(dao: ChatHistoryDao,
+                       baseChat: Chat,
+                       titleText: String,
+                       override val headerText: String,
+                       filterCwd: ChatWithDetails => Boolean) extends CustomDialog[Chat](takeFullHeight = true) {
   {
-    require(slaveChat.tpe == ChatType.Personal, "Non-personal chat cannot be combined")
-    title = s"Select chat to be combined with ${slaveChat.qualifiedName}"
+    title = titleText
   }
-
-  override protected def headerText: String =
-    "Previously selected chat will be combined with the given one and will no longer \n" +
-      "be shown separately in the main list.\n" +
-      "For the history merge purposes, chats will remain separate so it will continue to work."
 
   private lazy val elementsSeq: Seq[(RadioButton, ChatDetailsPane, Chat)] = {
     val group = new ButtonGroup()
-    val allChats = dao.chats(slaveChat.dsUuid)
+    val allChats = dao.chats(baseChat.dsUuid)
+    // Filter out slave chats
     allChats
-      .filter(cwd => cwd.chat.id != slaveChat.id && cwd.chat.tpe == ChatType.Personal && cwd.chat.mainChatId.isEmpty)
+      .filter(cwd => cwd.chat.id != baseChat.id && cwd.chat.mainChatId.isEmpty)
+      .filter(filterCwd)
       .zipWithIndex
       .collect {
         case (cwd, idx) =>
