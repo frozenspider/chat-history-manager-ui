@@ -788,46 +788,68 @@ class MainFrameApp(grpcPort: Int) //
                                        loadStatuses: LoadStatuses,
                                        isBackward: Boolean,
                                        fetch: (Chat, Option[LoadStatus]) => Seq[Message]): (Seq[Message], LoadStatuses) = {
-    val allMsgsUnlimited = cc.cwds
-      .flatMap { cwd =>
-        println(s"=== Processing chat ${cwd.chat.id}")
-        val loadStatusOption = loadStatuses.get(cwd.chat.id)
-        println(s"loadStatusOption = $loadStatusOption")
-        (if ((isBackward && loadStatusOption.exists(_.beginReached)) || (!isBackward && loadStatusOption.exists(_.endReached))) {
-          Seq.empty
-        } else {
-          val res = fetch(cwd.chat, loadStatusOption)
-          println(s"Fetched ${res.headOption.map(_.internalId)} to ${res.lastOption.map(_.internalId)}")
-          res
-        }).map(m => (m, cwd.chat))
+    val allMsgs = {
+      val allMsgsUnlimited = cc.cwds
+        .flatMap { cwd =>
+          println(s"=== Processing chat ${cwd.chat.id}")
+          val loadStatusOption = loadStatuses.get(cwd.chat.id)
+          println(s"loadStatusOption = $loadStatusOption")
+          (if ((isBackward && loadStatusOption.exists(_.beginReached)) || (!isBackward && loadStatusOption.exists(_.endReached))) {
+            Seq.empty
+          } else {
+            val res = fetch(cwd.chat, loadStatusOption)
+            println(s"Fetched ${res.headOption.map(_.internalId)} to ${res.lastOption.map(_.internalId)}")
+            res
+          }).map(m => (m, cwd.chat))
+        }
+        .sortBy(p => (p._1.timestamp, p._1.internalId))
+
+      if (isBackward) {
+        val msgs = allMsgsUnlimited.takeRight(MsgBatchLoadSize)
+        loadStatuses.map(_._2.firstOption).yieldDefined.minByOption(_.timestamp) match {
+          case Some(lastCached) => msgs.dropRightWhile(p =>
+            p._1.timestamp > lastCached.timestamp || (p._1.timestamp == lastCached.timestamp && p._1.internalId > lastCached.timestamp))
+          case None => msgs
+        }
+      } else {
+        val msgs = allMsgsUnlimited.take(MsgBatchLoadSize)
+        loadStatuses.map(_._2.lastOption).yieldDefined.maxByOption(_.timestamp) match {
+          case Some(lastCached) => msgs.dropWhile(p =>
+            p._1.timestamp < lastCached.timestamp || (p._1.timestamp == lastCached.timestamp && p._1.internalId < lastCached.timestamp))
+          case None => msgs
+        }
       }
-      .sortBy(p => (p._1.timestamp, p._1.internalId))
-    val allMsgs = if (!isBackward) allMsgsUnlimited.take(MsgBatchLoadSize) else allMsgsUnlimited.takeRight(MsgBatchLoadSize)
+    }
 
     // If all messages combines is still less than batch load size, there will be nothing left to fetch
     val noMoreMessages = allMsgs.size < MsgBatchLoadSize
 
-    val loadStatuses2 = cc.cwds.map(cwd => {
+    val newLoadStatuses = cc.cwds.map(cwd => {
       println(s"=== Updating cache for chat ${cwd.chat.id}")
       val loadStatusOption = loadStatuses.get(cwd.chat.id)
       val newFirstOption = allMsgs.find    (_._2.id == cwd.chat.id).map(_._1)
       val newLastOption  = allMsgs.findLast(_._2.id == cwd.chat.id).map(_._1)
-      println(s"Setting cache to ${newFirstOption.map(_.internalId)} to ${newLastOption.map(_.internalId)}")
-      val newLoadStatus = loadStatusOption.map(loadStatus => LoadStatus(
-        firstOption  = newFirstOption.orElse(loadStatus.firstOption),
-        lastOption   = newLastOption.orElse(loadStatus.lastOption),
-        beginReached = loadStatus.beginReached ||  (isBackward && noMoreMessages),
-        endReached   = loadStatus.endReached   || (!isBackward && noMoreMessages)
-      )).getOrElse(LoadStatus(
-        firstOption  = newFirstOption,
-        lastOption   = newLastOption,
-        beginReached =  isBackward && noMoreMessages,
-        endReached   = !isBackward && noMoreMessages
-      ))
+      val newLoadStatus = loadStatusOption match {
+        case Some(loadStatus) =>
+          loadStatus.copy(
+            firstOption  = newFirstOption.orElse(loadStatus.firstOption),
+            lastOption   = newLastOption.orElse(loadStatus.lastOption),
+            beginReached = loadStatus.beginReached ||  (isBackward && noMoreMessages),
+            endReached   = loadStatus.endReached   || (!isBackward && noMoreMessages)
+          )
+        case None =>
+          LoadStatus(
+            firstOption  = newFirstOption,
+            lastOption   = newLastOption,
+            beginReached =  isBackward && noMoreMessages,
+            endReached   = !isBackward && noMoreMessages,
+          )
+      }
+      println(s"Setting cache to ${newLoadStatus.firstOption.map(_.internalId)} to ${newLoadStatus.lastOption.map(_.internalId)}")
       cwd.chat.id -> newLoadStatus
     }).toMap
 
-    (allMsgs.map(_._1), loadStatuses2)
+    (allMsgs.map(_._1), newLoadStatuses)
   }
 
   def tryLoadPreviousMessages(): Unit = {
@@ -837,7 +859,10 @@ class MainFrameApp(grpcPort: Int) //
       (dao, cc, ls) => {
         loadCombinedChatMessages(cc, ls, isBackward = true, (chat, loadStatusOption) => {
           val loadStatus = loadStatusOption.getOrElse(throw new IllegalStateException(s"Chat ${chat} is not in cache!"))
-          dao.messagesBefore(chat, loadStatus.firstOption.get.internalIdTyped, MsgBatchLoadSize)
+          loadStatus.firstOption match {
+            case Some(first) => dao.messagesBefore(chat, first.internalIdTyped, MsgBatchLoadSize)
+            case None        => dao.lastMessages(chat, MsgBatchLoadSize)
+          }
         })
       },
       (dao, cc, msgs, ls) => {
@@ -853,7 +878,10 @@ class MainFrameApp(grpcPort: Int) //
       (dao, cc, ls) => {
         loadCombinedChatMessages(cc, ls, isBackward = false, (chat, loadStatusOption) => {
           val loadStatus = loadStatusOption.getOrElse(throw new IllegalStateException(s"Chat ${chat} is not in cache!"))
-          dao.messagesAfter(chat, loadStatus.lastOption.get.internalIdTyped, MsgBatchLoadSize)
+          loadStatus.lastOption match {
+            case Some(last) => dao.messagesAfter(chat, last.internalIdTyped, MsgBatchLoadSize)
+            case None       => dao.firstMessages(chat, MsgBatchLoadSize)
+          }
         })
       },
       (dao, cc, msgs, ls) => {

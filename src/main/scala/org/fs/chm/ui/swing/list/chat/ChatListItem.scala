@@ -165,10 +165,11 @@ class ChatListItem(
   }
 
   private def showCombinePopup(): Unit = {
-    val dialog = new SelectCombineChatsDialog(dao, cc.mainCwd.chat)
+    val slaveChat = cc.mainCwd.chat
+    val dialog = new SelectCombineChatsDialog(dao, slaveChat)
     dialog.visible = true
     dialog.selection foreach { masterChat =>
-      callbacksOption.get.combineChats(dao, masterChat, cc.mainCwd.chat)
+      callbacksOption.get.combineChats(dao, masterChat, slaveChat)
     }
   }
 

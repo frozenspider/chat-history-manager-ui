@@ -11,10 +11,10 @@ import org.fs.chm.protobuf.ChatType
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 
-class SelectCombineChatsDialog(dao: ChatHistoryDao, masterChat: Chat) extends CustomDialog[Chat](takeFullHeight = true) {
+class SelectCombineChatsDialog(dao: ChatHistoryDao, slaveChat: Chat) extends CustomDialog[Chat](takeFullHeight = true) {
   {
-    require(masterChat.tpe == ChatType.Personal, "Non-personal chat cannot be combined")
-    title = s"Select chat to be combined with ${masterChat.qualifiedName}"
+    require(slaveChat.tpe == ChatType.Personal, "Non-personal chat cannot be combined")
+    title = s"Select chat to be combined with ${slaveChat.qualifiedName}"
   }
 
   override protected def headerText: String =
@@ -24,10 +24,9 @@ class SelectCombineChatsDialog(dao: ChatHistoryDao, masterChat: Chat) extends Cu
 
   private lazy val elementsSeq: Seq[(RadioButton, ChatDetailsPane, Chat)] = {
     val group = new ButtonGroup()
-    val allChats = dao.chats(masterChat.dsUuid)
+    val allChats = dao.chats(slaveChat.dsUuid)
     allChats
-      .filter(cwd => cwd.chat.id != masterChat.id && cwd.chat.tpe == ChatType.Personal && cwd.chat.mainChatId.isEmpty)
-      .filter(cwd => !allChats.exists(_.chat.mainChatId.contains(cwd.chat.id)))
+      .filter(cwd => cwd.chat.id != slaveChat.id && cwd.chat.tpe == ChatType.Personal && cwd.chat.mainChatId.isEmpty)
       .zipWithIndex
       .collect {
         case (cwd, idx) =>
