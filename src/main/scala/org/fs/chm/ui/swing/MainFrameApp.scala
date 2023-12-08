@@ -787,18 +787,29 @@ class MainFrameApp(grpcPort: Int) //
   private def loadCombinedChatMessages(cc: CombinedChat,
                                        loadStatuses: LoadStatuses,
                                        isBackward: Boolean,
-                                       fetch: (Chat, Option[LoadStatus]) => Seq[Message]): (Seq[Message], LoadStatuses) = {
+                                       fetch: (Chat, LoadStatus) => Seq[Message]): (Seq[Message], LoadStatuses) = {
+    val loadStatuses2 = cc.cwds.foldLeft(loadStatuses) { (acc, cwd) =>
+      if (acc.contains(cwd.chat.id)) {
+        acc
+      } else {
+        acc + (cwd.chat.id -> LoadStatus(
+          firstOption  = None,
+          lastOption   = None,
+          beginReached = false,
+          endReached   = false,
+        ))
+      }
+    }
     val allMsgs = {
       val allMsgsUnlimited = cc.cwds
         .flatMap { cwd =>
-          println(s"=== Processing chat ${cwd.chat.id}")
-          val loadStatusOption = loadStatuses.get(cwd.chat.id)
-          println(s"loadStatusOption = $loadStatusOption")
-          (if ((isBackward && loadStatusOption.exists(_.beginReached)) || (!isBackward && loadStatusOption.exists(_.endReached))) {
+          val loadStatus = loadStatuses2(cwd.chat.id)
+          log.debug(s"Loading messages for chat ${cwd.chat.id}, cache status = $loadStatus")
+          (if ((isBackward && loadStatus.beginReached) || (!isBackward && loadStatus.endReached)) {
             Seq.empty
           } else {
-            val res = fetch(cwd.chat, loadStatusOption)
-            println(s"Fetched ${res.headOption.map(_.internalId)} to ${res.lastOption.map(_.internalId)}")
+            val res = fetch(cwd.chat, loadStatus)
+            log.debug(s"Fetched internal IDs range ${res.headOption.map(_.internalId)} to ${res.lastOption.map(_.internalId)}")
             res
           }).map(m => (m, cwd.chat))
         }
@@ -806,14 +817,14 @@ class MainFrameApp(grpcPort: Int) //
 
       if (isBackward) {
         val msgs = allMsgsUnlimited.takeRight(MsgBatchLoadSize)
-        loadStatuses.map(_._2.firstOption).yieldDefined.minByOption(_.timestamp) match {
+        loadStatuses2.map(_._2.firstOption).yieldDefined.minByOption(_.timestamp) match {
           case Some(lastCached) => msgs.dropRightWhile(p =>
             p._1.timestamp > lastCached.timestamp || (p._1.timestamp == lastCached.timestamp && p._1.internalId > lastCached.timestamp))
           case None => msgs
         }
       } else {
         val msgs = allMsgsUnlimited.take(MsgBatchLoadSize)
-        loadStatuses.map(_._2.lastOption).yieldDefined.maxByOption(_.timestamp) match {
+        loadStatuses2.map(_._2.lastOption).yieldDefined.maxByOption(_.timestamp) match {
           case Some(lastCached) => msgs.dropWhile(p =>
             p._1.timestamp < lastCached.timestamp || (p._1.timestamp == lastCached.timestamp && p._1.internalId < lastCached.timestamp))
           case None => msgs
@@ -825,27 +836,17 @@ class MainFrameApp(grpcPort: Int) //
     val noMoreMessages = allMsgs.size < MsgBatchLoadSize
 
     val newLoadStatuses = cc.cwds.map(cwd => {
-      println(s"=== Updating cache for chat ${cwd.chat.id}")
-      val loadStatusOption = loadStatuses.get(cwd.chat.id)
       val newFirstOption = allMsgs.find    (_._2.id == cwd.chat.id).map(_._1)
       val newLastOption  = allMsgs.findLast(_._2.id == cwd.chat.id).map(_._1)
-      val newLoadStatus = loadStatusOption match {
-        case Some(loadStatus) =>
-          loadStatus.copy(
-            firstOption  = newFirstOption.orElse(loadStatus.firstOption),
-            lastOption   = newLastOption.orElse(loadStatus.lastOption),
-            beginReached = loadStatus.beginReached ||  (isBackward && noMoreMessages),
-            endReached   = loadStatus.endReached   || (!isBackward && noMoreMessages)
-          )
-        case None =>
-          LoadStatus(
-            firstOption  = newFirstOption,
-            lastOption   = newLastOption,
-            beginReached =  isBackward && noMoreMessages,
-            endReached   = !isBackward && noMoreMessages,
-          )
-      }
-      println(s"Setting cache to ${newLoadStatus.firstOption.map(_.internalId)} to ${newLoadStatus.lastOption.map(_.internalId)}")
+
+      val loadStatus    = loadStatuses2(cwd.chat.id)
+      val newLoadStatus = loadStatus.copy(
+        firstOption  = newFirstOption.orElse(loadStatus.firstOption),
+        lastOption   = newLastOption.orElse(loadStatus.lastOption),
+        beginReached = loadStatus.beginReached ||  (isBackward && noMoreMessages),
+        endReached   = loadStatus.endReached   || (!isBackward && noMoreMessages)
+      )
+      log.debug(s"Updating cache for chat ${cwd.chat.id} to $newLoadStatus")
       cwd.chat.id -> newLoadStatus
     }).toMap
 
@@ -857,8 +858,7 @@ class MainFrameApp(grpcPort: Int) //
     tryLoadMessages(
       ls => ls.exists(!_._2.beginReached),
       (dao, cc, ls) => {
-        loadCombinedChatMessages(cc, ls, isBackward = true, (chat, loadStatusOption) => {
-          val loadStatus = loadStatusOption.getOrElse(throw new IllegalStateException(s"Chat ${chat} is not in cache!"))
+        loadCombinedChatMessages(cc, ls, isBackward = true, (chat, loadStatus) => {
           loadStatus.firstOption match {
             case Some(first) => dao.messagesBefore(chat, first.internalIdTyped, MsgBatchLoadSize)
             case None        => dao.lastMessages(chat, MsgBatchLoadSize)
@@ -876,8 +876,7 @@ class MainFrameApp(grpcPort: Int) //
     tryLoadMessages(
       ls => ls.exists(!_._2.endReached),
       (dao, cc, ls) => {
-        loadCombinedChatMessages(cc, ls, isBackward = false, (chat, loadStatusOption) => {
-          val loadStatus = loadStatusOption.getOrElse(throw new IllegalStateException(s"Chat ${chat} is not in cache!"))
+        loadCombinedChatMessages(cc, ls, isBackward = false, (chat, loadStatus) => {
           loadStatus.lastOption match {
             case Some(last) => dao.messagesAfter(chat, last.internalIdTyped, MsgBatchLoadSize)
             case None       => dao.firstMessages(chat, MsgBatchLoadSize)
@@ -1117,7 +1116,16 @@ class MainFrameApp(grpcPort: Int) //
     lastOption: Option[Message],
     beginReached: Boolean,
     endReached: Boolean
-  )
+  ) {
+    override def toString: String = {
+      val components = Seq(
+        Some(s"${firstOption.map(_.internalId.toString).getOrElse("None")} -> ${lastOption.map(_.internalId.toString).getOrElse("None")}"),
+        if (beginReached) Some("beginReached") else None,
+        if (endReached) Some("endReached") else None,
+      ).yieldDefined
+      s"LoadStatus(${components.mkString(", ")})"
+    }
+  }
 
   private object DataLoaders {
     val LastFileKey = "last_database_file"
