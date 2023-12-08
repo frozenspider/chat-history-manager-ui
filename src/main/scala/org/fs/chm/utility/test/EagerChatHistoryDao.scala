@@ -101,6 +101,14 @@ class EagerChatHistoryDao(
     messagesSliceImpl(chat, msgId1, msgId2).length
   }
 
+  override protected def messagesAbbreviatedSliceImpl(chat: Chat,
+                                                      msgId1: MessageInternalId,
+                                                      msgId2: MessageInternalId,
+                                                      combinedLimit: Int,
+                                                      abbreviatedLimit: Int): (Seq[Message], Int, Seq[Message]) = {
+    throw new UnsupportedOperationException("messagesAbbreviatedSliceImpl is not implemented for EagerChatHistoryDao")
+  }
+
 //  def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
 //    val dateTs    = date.unixTimestamp
 //    val messages  = chatsWithMessages(chat)
@@ -125,9 +133,6 @@ class EagerChatHistoryDao(
 
   override def messageOption(chat: Chat, id: MessageSourceId): Option[Message] =
     chatsWithMessages.get(chat) flatMap (_ find (_.sourceIdOption contains id))
-
-  override def messageOptionByInternalId(chat: Chat, id: MessageInternalId): Option[Message] =
-    chatsWithMessages.get(chat) flatMap (_ find (_.internalId == id))
 
   /** Get a copy of this DAO with shifted time of all timestamps in the dataset to accommodate timezone differences */
   def copyWithShiftedDatasetTime(dsUuid: PbUuid, hrs: Int): EagerChatHistoryDao = {

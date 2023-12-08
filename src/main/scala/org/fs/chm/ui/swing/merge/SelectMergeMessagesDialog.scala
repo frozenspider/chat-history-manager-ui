@@ -1,10 +1,10 @@
 package org.fs.chm.ui.swing.merge
 
+import javax.swing.text.html.HTMLEditorKit
+
 import scala.swing._
 
 import com.github.nscala_time.time.Imports._
-import javax.swing.text.html.HTMLEditorKit
-
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.dao.merge.DatasetMerger.MessagesMergeDecision
@@ -13,12 +13,11 @@ import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Message
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
+import org.fs.chm.ui.swing.merge.SelectMergeMessagesDialog._
 import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
 import org.fs.chm.ui.swing.messages.impl.MessagesDocumentService
-import org.fs.chm.utility.EntityUtils._
+import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
-
-import SelectMergeMessagesDialog._
 
 /**
  * Show dialog for merging chat messages.
@@ -201,43 +200,25 @@ object SelectMergeMessagesDialog {
         firstOption: Option[FirstMsgId],
         lastOption: Option[LastMsgId]
     ): CxtFetchResult = {
-      if (firstOption.isEmpty && lastOption.isEmpty) {
-        CxtFetchResult.Continuous(Seq.empty)
-      } else {
-        val fetch1 = firstOption match {
-          case None        => dao.firstMessages(chat, MaxContinuousMsgsLength)
-          case Some(first) => dao.messageOptionByInternalId(chat, first).get +: dao.messagesAfter(chat, first, MaxContinuousMsgsLength)
-        }
-
-        if (fetch1.isEmpty) {
+      (firstOption, lastOption) match {
+        case (None, None) =>
           CxtFetchResult.Continuous(Seq.empty)
-        } else if (lastOption.isDefined && (fetch1.map(_.internalId) contains lastOption.get)) {
-          // Continuous sequence
-          CxtFetchResult.Continuous(fetch1 dropRightWhile (_.internalId != lastOption.get))
-        } else {
-          val subfetch1    = fetch1.take(MaxCutoffMsgsPartLength)
-          val subfetch1Set = subfetch1.toSet
-          val fetch2 = (lastOption match {
-            case None       => dao.lastMessages(chat, MaxContinuousMsgsLength)
-            case Some(last) => dao.messagesBefore(chat, last, MaxContinuousMsgsLength) :+ dao.messageOptionByInternalId(chat, last).get
-          }).dropWhile { m =>
-            (subfetch1Set contains m) || m.time < subfetch1.last.time
-          }
-
-          if (fetch2.isEmpty) {
-            assert(lastOption.isEmpty)
-            CxtFetchResult.Continuous(fetch1)
+        case (Some(first), Some(last)) =>
+          val (left, inBetween, right) = dao.messagesAbbreviatedSlice(chat, first, last, MaxContinuousMsgsLength, MaxCutoffMsgsPartLength)
+          if (inBetween == 0 && right.isEmpty) {
+            CxtFetchResult.Continuous(left)
           } else {
-            val nBetween = dao.messagesSliceLength(chat, subfetch1.last.internalIdTyped, fetch2.head.internalIdTyped) - 2
-            CxtFetchResult.Discrete(subfetch1, nBetween, fetch2)
+            CxtFetchResult.Discrete(left, inBetween, right)
           }
-        }
+        case _ =>
+          unexpectedCase((firstOption, lastOption))
       }
     }
   }
 
   def main(args: Array[String]): Unit = {
     import java.awt.Desktop
+
     import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
     import org.fs.chm.utility.test.TestUtils._
 

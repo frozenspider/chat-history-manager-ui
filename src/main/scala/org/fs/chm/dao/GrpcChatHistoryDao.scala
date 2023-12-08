@@ -76,12 +76,20 @@ class GrpcChatHistoryDao(val key: String,
     sendRequest(MessagesSliceRequest(key, chat, msgId1, msgId2))(daoRpcStub.messagesSliceLen).messagesCount
   }
 
-  override def messageOption(chat: Chat, id: MessageSourceId): Option[Message] = {
-    sendRequest(MessageOptionRequest(key, chat, id))(daoRpcStub.messageOption).message
+  override protected def messagesAbbreviatedSliceImpl(chat: Chat,
+                                                      msgId1: MessageInternalId,
+                                                      msgId2: MessageInternalId,
+                                                      combinedLimit: Int,
+                                                      abbreviatedLimit: Int): (Seq[Message], Int, Seq[Message]) = {
+    val res = sendRequest(
+      MessagesAbbreviatedSliceRequest(key, chat, msgId1, msgId2, combinedLimit, abbreviatedLimit)
+    )(daoRpcStub.messagesAbbreviatedSlice)
+
+    (res.leftMessages, res.inBetween, res.rightMessages)
   }
 
-  override def messageOptionByInternalId(chat: Chat, internalId: MessageInternalId): Option[Message] = {
-    sendRequest(MessageOptionByInternalIdRequest(key, chat, internalId))(daoRpcStub.messageOptionByInternalId).message
+  override def messageOption(chat: Chat, id: MessageSourceId): Option[Message] = {
+    sendRequest(MessageOptionRequest(key, chat, id))(daoRpcStub.messageOption).message
   }
 
   override def isLoaded(storagePath: File): Boolean = {

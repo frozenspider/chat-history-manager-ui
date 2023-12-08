@@ -82,12 +82,25 @@ trait ChatHistoryDao extends AutoCloseable {
    */
   def messagesSliceLength(chat: Chat, msgId1: MessageInternalId, msgId2: MessageInternalId): Int
 
+  def messagesAbbreviatedSlice(chat: Chat,
+                               msgId1: MessageInternalId,
+                               msgId2: MessageInternalId,
+                               combinedLimit: Int,
+                               abbreviatedLimit: Int): (Seq[Message], Int, Seq[Message]) = {
+    messagesAbbreviatedSliceImpl(chat, msgId1, msgId2, combinedLimit, abbreviatedLimit).ensuring(tup =>
+      tup._1.nonEmpty && tup._1.head.internalId == msgId1)
+  }
+
+  protected def messagesAbbreviatedSliceImpl(chat: Chat,
+                                             msgId1: MessageInternalId,
+                                             msgId2: MessageInternalId,
+                                             combinedLimit: Int,
+                                             abbreviatedLimit: Int): (Seq[Message], Int, Seq[Message])
+
   // /** Returns N messages before and N at-or-after the given date */
   // def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message])
 
   def messageOption(chat: Chat, sourceId: MessageSourceId): Option[Message]
-
-  def messageOptionByInternalId(chat: Chat, internalId: MessageInternalId): Option[Message]
 
   def isMutable: Boolean = this.isInstanceOf[MutableChatHistoryDao]
 
