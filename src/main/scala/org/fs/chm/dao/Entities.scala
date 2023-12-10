@@ -193,6 +193,16 @@ object Entities {
     def qualifiedName: String = s"'$nameOrUnnamed' (#${c.id})"
   }
 
+  implicit class ExtendedSourceType(st: SourceType) {
+    def prettyString: String = st match {
+      case SourceType.TextImport => "Text import"
+      case SourceType.Telegram   => "Telegram"
+      case SourceType.WhatsappDb => "WhatsApp"
+      case SourceType.TinderDb   => "Tinder"
+      case SourceType.BadooDb    => "Badoo"
+    }
+  }
+
   //
   // Message
   //

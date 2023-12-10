@@ -1154,32 +1154,35 @@ class MainFrameApp(grpcPort: Int) //
   private object DataLoaders {
     val LastFileKey = "last_database_file"
 
-    private val sqliteFf = easyFileFilter(
-      s"${BuildInfo.name} database (sqlite)"
-    ) { f => f.getName == "data.sqlite" }
+    private val fileFilters = Seq(
+      easyFileFilter(
+        s"${BuildInfo.name} database (sqlite)"
+      ) { f => f.getName == "data.sqlite" },
 
-    private val tgFf = easyFileFilter(
-      "Telegram export JSON database (result.json)"
-    )(_.getName == "result.json")
+      easyFileFilter(
+        "Telegram export JSON database (result.json)"
+      )(_.getName == "result.json"),
 
-    private val androidFf = easyFileFilter(
-      s"Supported app's Android database"
-    ) { _.getName.endsWith(".db") }
+      easyFileFilter(
+        s"Supported app's Android database"
+      ) { _.getName.endsWith(".db") },
 
-    private val waTextFf = easyFileFilter(
-      s"WhatsApp text export"
-    ) { f => f.getName.startsWith("WhatsApp Chat with ") && f.getName.endsWith(".txt") }
+      easyFileFilter(
+        s"WhatsApp text export"
+      ) { f => f.getName.startsWith("WhatsApp Chat with ") && f.getName.endsWith(".txt") },
+
+      easyFileFilter(
+        s"Badoo Android database"
+      ) { _.getName == "ChatComDatabase" },
+    )
 
     def openChooser(): FileChooser = new FileChooser(null) {
       title = "Select a database to open"
-      peer.addChoosableFileFilter(sqliteFf)
-      peer.addChoosableFileFilter(tgFf)
-      peer.addChoosableFileFilter(androidFf)
-      peer.addChoosableFileFilter(waTextFf)
+      fileFilters.foreach(peer.addChoosableFileFilter)
     }
 
     def load(file: JFile): GrpcChatHistoryDao = {
-      if (sqliteFf.accept(file) || tgFf.accept(file) || androidFf.accept(file) || waTextFf.accept(file)) {
+      if (fileFilters.exists(_.accept(file))) {
         grpcHolder.remoteLoader.loadData(file)
       } else {
         throw new IllegalStateException("Unknown file type!")

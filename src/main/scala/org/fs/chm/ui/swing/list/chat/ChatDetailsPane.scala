@@ -62,12 +62,7 @@ class ChatDetailsPane(
         }
       }),
       ("Messages:", Some(tc(cc.cwds.map(_.chat.msgCount).sum.toString))),
-      ("Source Type:", Some(tc(cc.cwds.map(_.chat.sourceType match {
-        case SourceType.TextImport => "Text import"
-        case SourceType.Telegram   => "Telegram"
-        case SourceType.WhatsappDb => "WhatsApp"
-        case SourceType.TinderDb   => "Tinder"
-      }).distinct.mkString(", ")))),
+      ("Source Type:", Some(tc(cc.cwds.map(_.chat.sourceType.prettyString).distinct.mkString(", ")))),
       ("", if (!full) None else Some(tc(""))),
       ("ID:", if (full) Some(tc(cc.cwds.map(_.chat.id.toReadableId).mkString("\n"))) else None),
       ("Dataset ID:", if (!full) None else Some(tc(dsUuid.value))),

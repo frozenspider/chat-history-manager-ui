@@ -72,13 +72,7 @@ class ChatListItem(
 
 
         // Source
-        val sourceString = mainChat.sourceType match {
-          case SourceType.TextImport => "Text"
-          case SourceType.Telegram => "Telegram"
-          case SourceType.WhatsappDb => "WhatsApp"
-          case SourceType.TinderDb => "Tinder"
-        }
-        val sourceLabel = new Label(sourceString)
+        val sourceLabel = new Label(mainChat.sourceType.prettyString)
         sourceLabel.background = new Color(200, 200, 0, 100)
         sourceLabel.foreground = new Color(0, 0, 0, 100)
         layout(sourceLabel) = East
