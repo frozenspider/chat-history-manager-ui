@@ -106,7 +106,13 @@ class EagerChatHistoryDao(
                                                       msgId2: MessageInternalId,
                                                       combinedLimit: Int,
                                                       abbreviatedLimit: Int): (Seq[Message], Int, Seq[Message]) = {
-    throw new UnsupportedOperationException("messagesAbbreviatedSliceImpl is not implemented for EagerChatHistoryDao")
+    // Efficiency doesn't matter
+    val slice = messagesSliceImpl(chat, msgId1, msgId2)
+    if (slice.length <= combinedLimit) {
+      (slice, 0, Seq.empty)
+    } else {
+      (slice.take(abbreviatedLimit), slice.length - (2 * abbreviatedLimit), slice.takeRight(abbreviatedLimit))
+    }
   }
 
 //  def messagesAroundDate(chat: Chat, date: DateTime, limit: Int): (IndexedSeq[Message], IndexedSeq[Message]) = {
