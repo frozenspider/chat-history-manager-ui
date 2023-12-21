@@ -174,12 +174,13 @@ object Entities {
   implicit class ExtendedUser(u: User) {
     // Same as ExtendedContentSharedContact
     lazy val prettyNameOption: Option[String] = {
-      (u.firstNameOption, u.lastNameOption, u.phoneNumberOption) match {
-        case (Some(fn), Some(ln), _)   => Some(s"$fn $ln")
-        case (Some(fn), None, _)       => Some(fn)
-        case (None, Some(ln), _)       => Some(ln)
-        case (None, None, Some(phone)) => Some(phone)
-        case _                         => None
+      (u.firstNameOption, u.lastNameOption, u.phoneNumberOption, u.usernameOption) match {
+        case (Some(fn), Some(ln), _, _)   => Some(s"$fn $ln")
+        case (Some(fn), None, _, _)       => Some(fn)
+        case (None, Some(ln), _, _)       => Some(ln)
+        case (None, None, Some(phone), _) => Some(phone)
+        case (None, None, None, Some(un)) => Some(un)
+        case _                            => None
       }
     }
 
@@ -200,6 +201,7 @@ object Entities {
       case SourceType.WhatsappDb => "WhatsApp"
       case SourceType.TinderDb   => "Tinder"
       case SourceType.BadooDb    => "Badoo"
+      case SourceType.Mra        => "Mail.Ru Agent"
     }
   }
 
