@@ -210,13 +210,19 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
   object ServiceMessageHtmlRenderer {
     def render(dao: ChatHistoryDao, cc: CombinedChat, dsRoot: DatasetRoot, m: Message, sm: MessageService): String = {
-      val textHtmlOption = RichTextHtmlRenderer.render(m.text)
+      val textHtmlOption = sm match {
+        case _: MessageServiceStatusTextChanged => None // Will be rendered inline
+        case _: MessageServiceNotice            => None // Will be rendered inline
+        case _                                  => RichTextHtmlRenderer.render(m.text)
+      }
       val content = sm match {
         case sm: MessageServicePhoneCall           => renderPhoneCall(sm)
         case sm: MessageServiceSuggestProfilePhoto => renderSuggestPhotoMessage(sm, dsRoot)
         case sm: MessageServicePinMessage          => "Pinned message" + renderSourceMessage(dao, cc, dsRoot, sm.messageIdTyped)
         case sm: MessageServiceClearHistory        => "History cleared"
         case sm: MessageServiceBlockUser           => s"User ${if (sm.isBlocked) "" else "un"}blocked"
+        case sm: MessageServiceStatusTextChanged   => renderStatusTextChanged(m.text)
+        case sm: MessageServiceNotice              => renderNotice(m.text)
         case sm: MessageServiceGroupCreate         => renderCreateGroupMessage(cc, sm)
         case sm: MessageServiceGroupEditTitle      => renderEditTitleMessage(sm)
         case sm: MessageServiceGroupEditPhoto      => renderEditPhotoMessage(sm, dsRoot)
@@ -243,6 +249,14 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
         },
         sm.discardReasonOption filter (_ != "hangup") map (r => s"($r)")
       ).yieldDefined.mkString(" ")
+    }
+
+    private def renderStatusTextChanged(text: Seq[RichTextElement]) = {
+      "<i>" + toHtmlPlaintext("<Status>") + "</i>" + RichTextHtmlRenderer.render(text).map(s => "<br>" + s).getOrElse("")
+    }
+
+    private def renderNotice(text: Seq[RichTextElement]) = {
+      "<i>" + toHtmlPlaintext("<Notice>") + "</i>" + RichTextHtmlRenderer.render(text).map(s => "<br>" + s).getOrElse("")
     }
 
     private def renderCreateGroupMessage(cc: CombinedChat, sm: MessageServiceGroupCreate) = {

@@ -247,6 +247,8 @@ class ChatListItem(
           case _: MessageServicePinMessage          => "(message pinned)"
           case _: MessageServiceClearHistory        => "(history cleared)"
           case s: MessageServiceBlockUser           => s"(user ${if (s.isBlocked) "" else "un"}blocked)"
+          case _: MessageServiceStatusTextChanged   => "(status) " +  msg.searchableString
+          case _: MessageServiceNotice              => "(notice) " +  msg.searchableString
           case _: MessageServiceGroupCreate         => "(group created)"
           case _: MessageServiceGroupEditTitle      => "(title changed)"
           case _: MessageServiceGroupEditPhoto      => "(photo changed)"

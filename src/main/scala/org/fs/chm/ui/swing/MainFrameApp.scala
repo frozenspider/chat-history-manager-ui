@@ -1177,6 +1177,10 @@ class MainFrameApp(grpcPort: Int) //
       easyFileFilter(
         s"Badoo Android database"
       ) { _.getName == "ChatComDatabase" },
+
+      easyFileFilter(
+        s"Mail.Ru Agent legacy database"
+      ) { _.getName == "mra.dbs" },
     )
 
     def openChooser(): FileChooser = new FileChooser(null) {
