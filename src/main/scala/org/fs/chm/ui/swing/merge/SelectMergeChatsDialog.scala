@@ -101,7 +101,7 @@ class SelectMergeChatsDialog(
           if (isSelected) {
             ChatMergeOption.SelectedCombine(mcwd, scwd)
           } else {
-            ChatMergeOption.Keep(mcwd)
+            ChatMergeOption.DontCombine(mcwd, scwd)
           }
         case RowData.InSlaveOnly((_, scwd), _) =>
           if (isSelected) {

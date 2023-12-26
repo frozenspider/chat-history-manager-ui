@@ -439,6 +439,7 @@ class MainFrameApp(grpcPort: Int) //
           case cmo: ChatMergeOption.Add => cmo
           case cmo: ChatMergeOption.DontAdd => cmo
           case cmo: ChatMergeOption.Keep => cmo
+          case cmo: ChatMergeOption.DontCombine => cmo
         }
       }
     }
@@ -480,6 +481,8 @@ class MainFrameApp(grpcPort: Int) //
           case ((resolved, cmosWithLazyModels), cmo: ChatMergeOption.DontAdd) =>
             (resolved :+ cmo, cmosWithLazyModels)
           case ((resolved, cmosWithLazyModels), cmo: ChatMergeOption.Keep) =>
+            (resolved :+ cmo, cmosWithLazyModels)
+          case ((resolved, cmosWithLazyModels), cmo: ChatMergeOption.DontCombine) =>
             (resolved :+ cmo, cmosWithLazyModels)
       }
 

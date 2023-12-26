@@ -68,6 +68,7 @@ class DatasetMergerRemote(channel: ManagedChannel,
         case ChatMergeOption.Keep(masterCwd) => ChatMerge(ChatMergeType.Retain, masterCwd.chat.id, Seq.empty)
         case ChatMergeOption.Add(slaveCwd) => ChatMerge(ChatMergeType.Add, slaveCwd.chat.id, Seq.empty)
         case ChatMergeOption.DontAdd(slaveCwd) => ChatMerge(ChatMergeType.DontAdd, slaveCwd.chat.id, Seq.empty)
+        case ChatMergeOption.DontCombine(masterCwd, _) => ChatMerge(ChatMergeType.DontMerge, masterCwd.chat.id, Seq.empty)
         case ChatMergeOption.ResolvedCombine(masterCwd, _, resoluion) =>
           val messageMerges = resoluion.map {
             case MessagesMergeDiff.Retain(firstMasterMsgId, lastMasterMsgId) =>

@@ -72,6 +72,12 @@ object DatasetMerger {
     case class DontAdd(slaveCwd: ChatWithDetails) extends AbstractChatMergeOption(None, Some(slaveCwd))
       with SelectedChatMergeOption with AnalyzedChatMergeOption with ResolvedChatMergeOption
 
+    case class DontCombine(
+      masterCwd: ChatWithDetails,
+      slaveCwd: ChatWithDetails
+    ) extends AbstractChatMergeOption(Some(masterCwd), Some(slaveCwd))
+      with SelectedChatMergeOption with AnalyzedChatMergeOption with ResolvedChatMergeOption
+
     case class SelectedCombine(
       masterCwd: ChatWithDetails,
       slaveCwd: ChatWithDetails,
