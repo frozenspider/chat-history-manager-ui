@@ -406,8 +406,14 @@ class MainFrameApp(grpcPort: Int) //
       selectDsDialog.selection foreach {
         case ((masterDao, masterDs), (slaveDao, slaveDs)) =>
           worldFreezingIFuture("Comparing datasets...") {
-            grpcHolder.remoteLoader.ensureSame(masterDao.key, masterDs.uuid, slaveDao.key, slaveDs.uuid)
-            showWarning("Datasets are same!")
+            val diffs = grpcHolder.remoteLoader.ensureSame(masterDao.key, masterDs.uuid, slaveDao.key, slaveDs.uuid)
+            if (diffs.isEmpty) {
+              showWarning("Datasets are same!")
+            } else {
+              showError(diffs.map(d =>
+                d.message + d.values.map(v => s"\nWas:    ${v.old}\nBecame: ${v.`new`}").getOrElse("")
+              ).mkString("\n\n"))
+            }
           }
       }
     }

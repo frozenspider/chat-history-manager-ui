@@ -24,11 +24,11 @@ class GrpcRemoteDataLoader(channel: ManagedChannel) extends DataLoader[GrpcChatH
     }((_, ms) => log.info(s"Remote history loaded in ${ms} ms"))
   }
 
-  override def ensureSame(masterDaoKey: String, masterDsUuid: PbUuid, slaveDaoKey: String, slaveDsUuid: PbUuid): Unit = {
+  override def ensureSame(masterDaoKey: String, masterDsUuid: PbUuid, slaveDaoKey: String, slaveDsUuid: PbUuid): Seq[Difference] = {
     StopWatch.measureAndCall {
       RpcUtils.sendRequest(EnsureSameRequest(masterDaoKey, masterDsUuid, slaveDaoKey, slaveDsUuid)) { req =>
         loaderRpcStub.ensureSame(req)
-      }
+      }.diffs
     }((_, ms) => log.info(s"Dataset equality checked in ${ms} ms"))
   }
 }
