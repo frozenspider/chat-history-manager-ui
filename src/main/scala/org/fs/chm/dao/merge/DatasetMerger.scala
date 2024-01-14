@@ -13,9 +13,11 @@ trait DatasetMerger extends Logging {
   /**
    * Analyze dataset mergeability, amending `ChatMergeOption.Combine` with mismatches in order.
    * Other `ChatMergeOption`s are returned unchanged.
+   * If `forceConflicts` is set, everything starting at first mismatch and ending just before trailing match (if any) will be merged into
+   * a single conflict if possible.
    * Note that we can only detect conflicts if data source supports source IDs.
    */
-  def analyze(masterChat: Chat, slaveChat: Chat, title: String): IndexedSeq[MessagesMergeDiff]
+  def analyze(masterChat: Chat, slaveChat: Chat, title: String, forceConflicts: Boolean): IndexedSeq[MessagesMergeDiff]
 
   def merge(usersToMerge: Seq[UserMergeOption],
             chatsToMerge: Seq[ResolvedChatMergeOption],

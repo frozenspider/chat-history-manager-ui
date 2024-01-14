@@ -21,7 +21,7 @@ class DatasetMergerRemote(channel: ManagedChannel,
 
   private val rpcStub = MergeServiceGrpc.blockingStub(channel)
 
-  override def analyze(masterChat: Chat, slaveChat: Chat, title: String): IndexedSeq[MessagesMergeDiff] = {
+  override def analyze(masterChat: Chat, slaveChat: Chat, title: String, forceConflicts: Boolean): IndexedSeq[MessagesMergeDiff] = {
     implicit def toInternal[I <: TaggedMessageId](l: Long): I = l.asInstanceOf[I]
 
     val chatIdPair = ChatIdPair(masterChat.id, slaveChat.id)
@@ -31,6 +31,7 @@ class DatasetMergerRemote(channel: ManagedChannel,
         masterDs.uuid,
         slaveDao.key,
         slaveDs.uuid,
+        forceConflicts,
         chatIdPairs = Seq(chatIdPair)
       ))(req => {
         val analysis = rpcStub.analyze(req).analysis

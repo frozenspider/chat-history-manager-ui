@@ -1,5 +1,6 @@
 package org.fs.chm.ui.swing.merge
 
+import scala.swing
 import scala.swing._
 
 import org.fs.chm.dao.ChatHistoryDao
@@ -29,7 +30,7 @@ class SelectMergeChatsDialog(
     masterDs: Dataset,
     slaveDao: ChatHistoryDao,
     slaveDs: Dataset,
-) extends CustomDialog[Seq[SelectedChatMergeOption]](takeFullHeight = true) {
+) extends CustomDialog[(Seq[SelectedChatMergeOption], Boolean)](takeFullHeight = true) {
   private lazy val originalTitle = "Select chats to merge"
 
   {
@@ -38,17 +39,23 @@ class SelectMergeChatsDialog(
 
   private lazy val models = new Models(masterDao.chats(masterDs.uuid), slaveDao.chats(slaveDs.uuid))
 
+  private lazy val forceConflictsCb = new CheckBox("Force treat mismatching message sequences as a single conflict")
+
   private lazy val table = {
     checkEdt()
     new SelectMergesTable[(ChatHistoryDao, ChatWithDetails), SelectedChatMergeOption](models)
   }
 
   override protected lazy val dialogComponent: Component = {
-    table.wrapInScrollpaneAndAdjustWidth()
+    import scala.swing.BorderPanel.Position._
+    new BorderPanel {
+      layout(forceConflictsCb) = North
+      layout(table.wrapInScrollpaneAndAdjustWidth()) = Center
+    }
   }
 
-  override protected def validateChoices(): Option[Seq[SelectedChatMergeOption]] = {
-    Some(table.selected)
+  override protected def validateChoices(): Option[(Seq[SelectedChatMergeOption], Boolean)] = {
+    Some((table.selected, forceConflictsCb.selected))
   }
 
   import org.fs.chm.ui.swing.merge.SelectMergesTable._
@@ -151,7 +158,10 @@ object SelectMergeChatsDialog {
     Swing.onEDTWait {
       val dialog = new SelectMergeChatsDialog(mDao, mDs, sDao, sDs)
       dialog.visible = true
-      println(dialog.selection map (_.mkString("\n  ", "\n  ", "\n")))
+      dialog.selection.foreach { sel =>
+        println(sel._1.mkString("\n  ", "\n  ", "\n"))
+        println("Force Conflicts = " + sel._2)
+      }
     }
   }
 }

@@ -370,9 +370,9 @@ class MainFrameApp(grpcPort: Int) //
             } else Swing.onEDTWait {
               val selectChatsDialog = new SelectMergeChatsDialog(masterDao, masterDs, slaveDao, slaveDs)
               selectChatsDialog.visible = true
-              selectChatsDialog.selection foreach { chatsToMerge =>
+              selectChatsDialog.selection foreach { case (chatsToMerge, forceConflicts) =>
                 val merger = new DatasetMergerRemote(grpcHolder.channel, masterDao, masterDs, slaveDao, slaveDs)
-                val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge)
+                val analyzeChatsF = analyzeChatsFuture(merger, chatsToMerge, forceConflicts)
                 val activeUserIds = chatsToMerge
                   .filter(!_.isInstanceOf[ChatMergeOption.DontAdd])
                   .flatMap(ctm => Seq(ctm.masterCwdOption, ctm.slaveCwdOption))
@@ -425,7 +425,8 @@ class MainFrameApp(grpcPort: Int) //
 
   def analyzeChatsFuture(
       merger: DatasetMerger,
-      chatsToMerge: Seq[SelectedChatMergeOption]
+      chatsToMerge: Seq[SelectedChatMergeOption],
+      forceConflicts: Boolean
   ): InterruptableFuture[Seq[AnalyzedChatMergeOption]] =
     worldFreezingIFuture("Analyzing chat messages...") {
       chatsToMerge.map { cmo =>
@@ -436,12 +437,14 @@ class MainFrameApp(grpcPort: Int) //
           case cmo: ChatMergeOption.SelectedCombine =>
             setStatus(s"Analyzing ${cmo.title}...")
             require(cmo.masterCwd.chat.id == cmo.slaveCwd.chat.id)
-            val diffs = merger.analyze(cmo.masterCwd.chat, cmo.slaveCwd.chat, cmo.title)
+            val diffs = merger.analyze(cmo.masterCwd.chat, cmo.slaveCwd.chat, cmo.title, forceConflicts)
             // Sanity check
-            if (diffs.size >= 10000) {
-              throw new IllegalStateException(s"Found ${diffs.size} mismatches for ${cmo.title}!")
+            if (diffs.size >= 1000) {
+              ChatMergeOption.DontCombine(cmo.masterCwd, cmo.slaveCwd)
+//              throw new IllegalStateException(s"Found ${diffs.size} mismatches for ${cmo.title}!")
+            } else {
+              cmo.analyzed(diffs)
             }
-            cmo.analyzed(diffs)
           case cmo: ChatMergeOption.Add => cmo
           case cmo: ChatMergeOption.DontAdd => cmo
           case cmo: ChatMergeOption.Keep => cmo
@@ -730,7 +733,7 @@ class MainFrameApp(grpcPort: Int) //
     freezeTheWorld("Comparing...")
     futureHandlingExceptions {
       val merger = new DatasetMergerRemote(grpcHolder.channel, dao, ds, dao, ds)
-      val analysis = merger.analyze(baseChat, secondaryChat, "Comparison")
+      val analysis = merger.analyze(baseChat, secondaryChat, "Comparison", forceConflicts = false)
       val mCwd = dao.chatOption(baseChat.dsUuid, baseChat.id).get
       val sCwd = dao.chatOption(secondaryChat.dsUuid, secondaryChat.id).get
       val dialog = onEdtReturning {
