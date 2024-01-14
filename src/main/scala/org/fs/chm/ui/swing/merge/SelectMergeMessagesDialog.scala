@@ -112,7 +112,7 @@ object SelectMergeMessagesDialog {
     override lazy val renderer: ListItemRenderer[RenderableDiff, _] = (renderable: ListItemRenderable[RenderableDiff]) => {
       // FIXME: Figure out what to do with a shitty layout!
       checkEdt()
-      val msgAreaContainer = new MessagesAreaContainer(htmlKit)
+      val msgAreaContainer = new MessagesAreaContainer(htmlKit, showSeconds = true)
 //      msgAreaContainer.textPane.peer.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.box(true))
       val msgService = msgAreaContainer.msgService
       val md = msgService.createStubDoc
@@ -123,7 +123,8 @@ object SelectMergeMessagesDialog {
       }
       val allRendered = for (either <- renderable.v.messageOptions) yield {
         val rendered = either match {
-          case Right(msg) => msgService.renderMessageHtml(renderable.v.dao, CombinedChat(renderable.v.cwd, Seq.empty), renderable.v.dsRoot, msg)
+          case Right(msg) => msgService.renderMessageHtml(
+            renderable.v.dao, CombinedChat(renderable.v.cwd, Seq.empty), renderable.v.dsRoot, msg, showSeconds = true)
           case Left(num)  => s"<hr>${num} messages<hr><p>"
         }
         rendered

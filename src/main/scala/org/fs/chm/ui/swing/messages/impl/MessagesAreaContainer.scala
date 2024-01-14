@@ -18,7 +18,7 @@ import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesDocumentService._
 import org.fs.chm.utility.LangUtils._
 
-class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingComponent[MessageDocument] {
+class MessagesAreaContainer(htmlKit: HTMLEditorKit, showSeconds: Boolean) extends MessagesRenderingComponent[MessageDocument] {
   // TODO: This should really be private, but we're hacking into it for SelectMergeMessagesDialog
   val msgService = new MessagesDocumentService(htmlKit)
 
@@ -80,7 +80,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     }
     val dsRoot = dao.datasetRoot(cc.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m))
+      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m, showSeconds))
     }
     md.insert(sb.toString, MessageInsertPosition.Leading)
     document = md
@@ -131,7 +131,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     }
     val dsRoot = dao.datasetRoot(cc.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m))
+      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m, showSeconds))
     }
     document.removeLoading(true)
     document.insert(sb.toString, MessageInsertPosition.Leading)
@@ -151,7 +151,7 @@ class MessagesAreaContainer(htmlKit: HTMLEditorKit) extends MessagesRenderingCom
     val sb = new StringBuilder
     val dsRoot = dao.datasetRoot(cc.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m))
+      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m, showSeconds))
     }
     //    if (endReached) {
     //      sb.append(msgService.nothingNewerHtml)
@@ -304,7 +304,7 @@ object MessagesAreaContainer {
     Swing.onEDTWait {
       val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
       val htmlKit = new ExtendedHtmlEditorKit(desktopOption)
-      val container = new MessagesAreaContainer(htmlKit)
+      val container = new MessagesAreaContainer(htmlKit, showSeconds = false)
       container.render(dao, CombinedChat(cwd, Seq.empty), msgs.toIndexedSeq, false, false)
       container.component
       Dialog.showMessage(

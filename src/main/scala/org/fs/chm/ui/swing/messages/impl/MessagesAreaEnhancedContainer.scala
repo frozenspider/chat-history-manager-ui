@@ -21,8 +21,9 @@ import org.jdatepicker.impl._
 
 class MessagesAreaEnhancedContainer(
     htmlKit: HTMLEditorKit,
+    showSeconds: Boolean,
     callbacks: Callbacks.MessageHistoryCb
-) extends MessagesAreaContainer(htmlKit) {
+) extends MessagesAreaContainer(htmlKit, showSeconds) {
   private lazy val goToBeginBtn = new Button("Beginning")
   private lazy val goToDateBtn  = new Button("Date (NYI)")
   private lazy val goToEndBtn   = new Button("End")

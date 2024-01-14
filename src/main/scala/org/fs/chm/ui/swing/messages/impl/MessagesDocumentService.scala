@@ -99,7 +99,12 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
   // Renderers and helpers
   //
 
-  def renderMessageHtml(dao: ChatHistoryDao, cc: CombinedChat, dsRoot: DatasetRoot, m: Message, isQuote: Boolean = false): String = {
+  def renderMessageHtml(dao: ChatHistoryDao,
+                        cc: CombinedChat,
+                        dsRoot: DatasetRoot,
+                        m: Message,
+                        showSeconds: Boolean,
+                        isQuote: Boolean = false): String = {
     val (msgHtml: String, editDtOption: Option[DateTime], isDeleted: Boolean) = m.typed match {
       case Message.Typed.Regular(rm) =>
         val textHtmlOption = RichTextHtmlRenderer.render(m.text)
@@ -123,13 +128,14 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
          None,
          false)
     }
+    val dtFormat = if (showSeconds) "yyyy-MM-dd HH:mm:ss" else "yyyy-MM-dd HH:mm"
     val editTimeHtml = editDtOption match {
-      case Some(dt) => s""" <span style="color: gray;">(${if (isDeleted) "deleted" else "edited"} ${dt.toString("yyyy-MM-dd HH:mm")})</span>"""
+      case Some(dt) => s""" <span style="color: gray;">(${if (isDeleted) "deleted" else "edited"} ${dt.toString(dtFormat)})</span>"""
       case None     => ""
     }
     val titleNameHtml = renderTitleName(cc, Some(m.fromId), None)
     val titleHtml =
-      s"""$titleNameHtml (${m.time.toString("yyyy-MM-dd HH:mm")})$editTimeHtml"""
+      s"""$titleNameHtml (${m.time.toString(dtFormat)})$editTimeHtml"""
     val sourceIdAttr = m.sourceIdOption map (id => s"""message_source_id="$id"""") getOrElse ""
     // "date" attribute is used by overlay to show topmost message date
     s"""|<div class="message" ${sourceIdAttr} date="${m.time.toString("yyyy-MM-dd")}">
