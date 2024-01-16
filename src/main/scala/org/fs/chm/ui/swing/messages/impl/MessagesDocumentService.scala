@@ -5,19 +5,19 @@ import java.io.StringReader
 
 import javax.swing.text.Element
 import javax.swing.text.html.HTML
-import javax.swing.text.html.HTMLDocument
-import javax.swing.text.html.HTMLEditorKit
 
 import com.github.nscala_time.time.Imports._
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf._
+import org.fs.chm.ui.swing.general.CustomHtmlDocument
+import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.utility.EntityUtils
 import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
 
-class MessagesDocumentService(htmlKit: HTMLEditorKit) {
+class MessagesDocumentService(htmlKit: ExtendedHtmlEditorKit) {
   import MessagesDocumentService._
 
 
@@ -32,7 +32,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
     //           src: url(/full/path/to/font);
     //         }
     //       doesn't seem to work
-    val doc     = htmlKit.createDefaultDocument().asInstanceOf[HTMLDocument]
+    val doc     = htmlKit.createDefaultDocument
     val content = """<div id="messages"></div>"""
     htmlKit.read(new StringReader(content), doc, 0)
     val css = """|body {
@@ -495,7 +495,7 @@ class MessagesDocumentService(htmlKit: HTMLEditorKit) {
 
 object MessagesDocumentService {
   case class MessageDocument(
-      doc: HTMLDocument,
+      doc: CustomHtmlDocument,
       contentParent: Element
   ) {
 

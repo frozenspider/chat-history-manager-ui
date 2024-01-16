@@ -1,77 +1,45 @@
 package org.fs.chm.ui.swing.general
 
 import java.awt.Desktop
+import java.io.BufferedInputStream
+import java.io.DataInputStream
+import java.io.InputStream
 import java.io.Reader
 
-import javax.swing.text.Document
 import javax.swing.text.Element
 import javax.swing.text.StyleConstants
 import javax.swing.text.View
 import javax.swing.text.ViewFactory
 import javax.swing.text.html.HTML
-import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
 import javax.swing.text.html.StyleSheet
 import javax.swing.text.html.parser.AttributeList
 import javax.swing.text.html.parser.ContentModel
 import javax.swing.text.html.parser.DTD
 import javax.swing.text.html.parser.DTDConstants
-import javax.swing.text.html.parser.ParserDelegator
+import javax.swing.text.html.parser.DocumentParser
+
 import org.fs.chm.ui.swing.audio.AudioView
 
 class ExtendedHtmlEditorKit(desktopOption: Option[Desktop]) extends HTMLEditorKit {
 
   /** Overriding HTMLEditorKit parser by our own which allows tag overrides */
-  override protected lazy val getParser: HTMLEditorKit.Parser = {
-    val getDefaultDtdMethod = {
-      val m = classOf[ParserDelegator].getDeclaredMethod("getDefaultDTD")
-      m.setAccessible(true)
-      m
-    }
-    // TODO: Doesn't work well with JDK9+!
-    // Have to specify --add-opens=java.desktop/javax.swing.text.html.parser=ALL-UNNAMED
-    val dtd = getDefaultDtdMethod.invoke(null).asInstanceOf[DTD]
-    defineCustomTags(dtd)
-    new ExtendedParserDelegator
-  }
-
-  protected def defineCustomTags(dtd: DTD): Unit = {
-    // I haven't actually read SGML/DTD specs to know exact meaning of each constants.
-    // Instead, tags are modelled using values in existing elements resembling target ones.
-
-    // <source> tag
-    val sourceAttrs: AttributeList =
-      new AttributeList(
-        "src",
-        DTDConstants.CDATA,
-        DTDConstants.REQUIRED,
-        null,
-        null, {
-          new AttributeList("type", DTDConstants.CDATA, 0, "", null, null)
-        }
-      )
-    val sourceTag = dtd.defineElement("source", DTDConstants.EMPTY, false, true, null, null, null, sourceAttrs)
-
-    // <audio> tag
-    val audioAttrs:        AttributeList =
-      new AttributeList(
-        "duration",
-        DTDConstants.NUMBER,
-        0,
-        "-1",
-        null, {
-          new AttributeList("controls", DTDConstants.EMPTY, 0, null, null, null)
-        }
-      )
-    val audioContentModel: ContentModel = {
-      // Modelled after <div>
-      new ContentModel('*', new ContentModel(sourceTag), null)
-    }
-    dtd.defineElement("audio", DTDConstants.MODEL, false, false, audioContentModel, null, null, audioAttrs)
-  }
+  override protected lazy val getParser: HTMLEditorKit.Parser =
+    new ExtendedParser
 
   override lazy val getViewFactory: ViewFactory =
     new ExtendedViewFactory(desktopOption)
+
+  /** Pretty much the same as [[javax.swing.text.html.HTMLEditorKit.createDefaultDocument]] with our document */
+  override def createDefaultDocument: CustomHtmlDocument = {
+    val ss = new StyleSheet
+    ss.addStyleSheet(getStyleSheet)
+    val doc = new ExtendedHtmlDocument(ss)
+    doc.setParser(getParser)
+    doc.setAsynchronousLoadPriority(4)
+    doc.setTokenThreshold(100)
+    doc
+  }
 }
 
 class ExtendedViewFactory(desktopOption: Option[Desktop]) extends HTMLEditorKit.HTMLFactory {
@@ -132,34 +100,81 @@ class ExtendedViewFactory(desktopOption: Option[Desktop]) extends HTMLEditorKit.
   }
 }
 
-/**
- * ParserDelegator extended to support custom tags.
- * <p>
- * We cannot use a custom HTMLReader instead because it's created with `new` in HTMLDocument, good job Oracle/Sun.
- * <p>
- * We use A LOT of reflection here, but oh well.
- */
-class ExtendedParserDelegator extends ParserDelegator {
-
-  private val registerTagMethod = {
-    // TODO: Doesn't work well with JDK9+!
-    // Have to specify --add-opens=java.desktop/javax.swing.text.html=ALL-UNNAMED
-    val m = classOf[HTMLDocument#HTMLReader].getDeclaredMethod(
-      "registerTag",
-      classOf[HTML.Tag],
-      classOf[HTMLDocument#HTMLReader#TagAction]
-    )
-    m.setAccessible(true)
-    m
-  }
-
+/** Modelled after [[javax.swing.text.html.parser.ParserDelegator]] */
+class ExtendedParser extends HTMLEditorKit.Parser {
   override def parse(r: Reader, cb: HTMLEditorKit.ParserCallback, ignoreCharSet: Boolean): Unit = {
-    cb match {
-      case cb: HTMLDocument#HTMLReader =>
-        registerTagMethod.invoke(cb, new HTML.UnknownTag("audio"), new cb.BlockAction)
-        registerTagMethod.invoke(cb, new HTML.UnknownTag("source"), new cb.BlockAction)
-      case _ => // NOOP
-    }
-    super.parse(r, cb, ignoreCharSet)
+    new DocumentParser(ExtendedParser.Dtd).parse(r, cb, ignoreCharSet)
   }
 }
+
+object ExtendedParser {
+  private val Dtd = {
+    // Pretty much copy-pasted from ParserDelegator
+    val name = "html32"
+    val dtd = DTD.getDTD(name)
+    val in = java.security.AccessController.doPrivileged(
+      new java.security.PrivilegedAction[InputStream]() {
+        override def run(): InputStream =
+          classOf[javax.swing.text.html.parser.ParserDelegator].getResourceAsStream(name + ".bdtd")
+      }
+    )
+    if (in != null) {
+      dtd.read(new DataInputStream(new BufferedInputStream(in)))
+      DTD.putDTDHash(name, dtd)
+    }
+
+    defineCustomTags(dtd)
+    dtd
+  }
+
+  private def defineCustomTags(dtd: DTD): Unit = {
+    // I haven't actually read SGML/DTD specs to know exact meaning of each constants.
+    // Instead, tags are modelled using values in existing elements resembling target ones.
+
+    // <source> tag
+    val sourceAttrs: AttributeList =
+      new AttributeList(
+        "src",
+        DTDConstants.CDATA,
+        DTDConstants.REQUIRED,
+        null,
+        null, {
+          new AttributeList("type", DTDConstants.CDATA, 0, "", null, null)
+        }
+      )
+    val sourceTag = dtd.defineElement("source", DTDConstants.EMPTY, false, true, null, null, null, sourceAttrs)
+
+    // <audio> tag
+    val audioAttrs: AttributeList =
+      new AttributeList(
+        "duration",
+        DTDConstants.NUMBER,
+        0,
+        "-1",
+        null, {
+          new AttributeList("controls", DTDConstants.EMPTY, 0, null, null, null)
+        }
+      )
+    val audioContentModel: ContentModel = {
+      // Modelled after <div>
+      new ContentModel('*', new ContentModel(sourceTag), null)
+    }
+    dtd.defineElement("audio", DTDConstants.MODEL, false, false, audioContentModel, null, null, audioAttrs)
+  }
+}
+
+class ExtendedHtmlDocument(ss: StyleSheet) extends CustomHtmlDocument(ss) {
+  override protected def createHtmlReader(offset: Int,
+                                          popDepth: Int,
+                                          pushDepth: Int,
+                                          insertTag: HTML.Tag,
+                                          insertInsertTag: Boolean,
+                                          insertAfterImplied: Boolean,
+                                          wantsTrailingNewline: Boolean): this.HTMLReader = {
+    val reader = new HTMLReader(offset, popDepth, pushDepth, insertTag, insertInsertTag, insertAfterImplied, wantsTrailingNewline)
+    reader.registerTag(new HTML.UnknownTag("audio"), new reader.BlockAction)
+    reader.registerTag(new HTML.UnknownTag("source"), new reader.BlockAction)
+    reader
+  }
+}
+

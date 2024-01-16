@@ -2,7 +2,6 @@ package org.fs.chm.ui.swing.messages.impl
 
 import scala.swing._
 import javax.swing.text.DefaultCaret
-import javax.swing.text.html.HTMLEditorKit
 
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
@@ -13,12 +12,13 @@ import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
 import org.fs.chm.protobuf.MessageService
 import org.fs.chm.protobuf.MessageServiceGroupCall
+import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesDocumentService._
 import org.fs.chm.utility.LangUtils._
 
-class MessagesAreaContainer(htmlKit: HTMLEditorKit, showSeconds: Boolean) extends MessagesRenderingComponent[MessageDocument] {
+class MessagesAreaContainer(htmlKit: ExtendedHtmlEditorKit, showSeconds: Boolean) extends MessagesRenderingComponent[MessageDocument] {
   // TODO: This should really be private, but we're hacking into it for SelectMergeMessagesDialog
   val msgService = new MessagesDocumentService(htmlKit)
 

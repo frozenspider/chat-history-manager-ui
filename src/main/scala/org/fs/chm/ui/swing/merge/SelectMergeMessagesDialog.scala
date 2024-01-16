@@ -1,7 +1,5 @@
 package org.fs.chm.ui.swing.merge
 
-import javax.swing.text.html.HTMLEditorKit
-
 import scala.swing._
 
 import com.github.nscala_time.time.Imports._
@@ -12,6 +10,7 @@ import org.fs.chm.dao.merge.DatasetMerger.MessagesMergeDiff
 import org.fs.chm.protobuf.Chat
 import org.fs.chm.protobuf.Message
 import org.fs.chm.ui.swing.general.CustomDialog
+import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.merge.SelectMergeMessagesDialog._
 import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
@@ -64,7 +63,7 @@ object SelectMergeMessagesDialog {
     slaveDao: ChatHistoryDao,
     slaveCwd: ChatWithDetails,
     _diffs: IndexedSeq[MessagesMergeDecision], // Type is a hack!
-    htmlKit: HTMLEditorKit
+    htmlKit: ExtendedHtmlEditorKit
   ) extends MergeModels[RenderableDiff, MessagesMergeDecision] {
     // Values here are lazy because they are used from the parent init code.
 
