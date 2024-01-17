@@ -12,6 +12,8 @@ Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
 Compile / sourceManaged  := baseDirectory.value / "src_managed" / "main" / "scala"
 Test    / sourceManaged  := baseDirectory.value / "src_managed" / "test" / "scala"
 
+Compile / run / mainClass := Some("org.fs.chm.Main")
+
 // ScalaPB config
 val protobufDir = settingKey[File]("Path to the protobuf files")
 protobufDir := {

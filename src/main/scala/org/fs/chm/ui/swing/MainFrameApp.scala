@@ -114,6 +114,13 @@ class MainFrameApp(grpcPort: Int) //
     }
 
     initialFileOption map (f => futureHandlingExceptions { Swing.onEDT { openDb(f) } })
+
+    override def closeOperation(): Unit = {
+      MainFrameApp.this.synchronized {
+        MainFrameApp.this.notifyAll()
+      }
+      super.closeOperation()
+    }
   }
 
   lazy val ui = new BorderPanel {
