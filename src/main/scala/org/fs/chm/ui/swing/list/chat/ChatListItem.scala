@@ -2,6 +2,7 @@ package org.fs.chm.ui.swing.list.chat
 
 import java.awt.Color
 import java.awt.{Container => AwtContainer}
+import java.io.{File => JFile}
 
 import javax.swing.ImageIcon
 
@@ -38,6 +39,7 @@ class ChatListItem(
     contents += menuItem("Details")(showDetailsPopup())
     contents += menuItem("Combine Into", enabled = callbacksOption.nonEmpty && mainChat.tpe == ChatType.Personal)(showCombinePopup())
     contents += menuItem("Compare With", enabled = callbacksOption.nonEmpty)(showComparePopup())
+    contents += menuItem("Export as HTML", enabled = callbacksOption.nonEmpty)(showExprotAsHtmlPopup())
     contents += menuItem("Delete", enabled = callbacksOption.nonEmpty && dao.isMutable)(showDeletePopup())
   }
 
@@ -188,6 +190,18 @@ class ChatListItem(
     dialog.visible = true
     dialog.selection foreach { secondaryChat =>
       callbacksOption.get.compareChats(dao, baseChat, secondaryChat)
+    }
+  }
+
+  private def showExprotAsHtmlPopup(): Unit = {
+    val baseChat = cc.mainCwd.chat
+    val fc = new FileChooser(dao.storagePath) {
+      title        = "Export chat as HTML"
+      selectedFile = new JFile(dao.storagePath, s"${baseChat.nameOrUnnamed}.html")
+    }
+    fc.showSaveDialog(null) match {
+      case FileChooser.Result.Approve => callbacksOption.get.exportChatAsHtml(dao, cc, fc.selectedFile)
+      case _                          => // NOOP
     }
   }
 

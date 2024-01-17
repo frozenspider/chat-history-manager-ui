@@ -63,7 +63,7 @@ object SelectMergeMessagesDialog {
     slaveDao: ChatHistoryDao,
     slaveCwd: ChatWithDetails,
     _diffs: IndexedSeq[MessagesMergeDecision], // Type is a hack!
-    htmlKit: ExtendedHtmlEditorKit
+    msgDocService: MessagesDocumentService
   ) extends MergeModels[RenderableDiff, MessagesMergeDecision] {
     // Values here are lazy because they are used from the parent init code.
 
@@ -111,10 +111,9 @@ object SelectMergeMessagesDialog {
     override lazy val renderer: ListItemRenderer[RenderableDiff, _] = (renderable: ListItemRenderable[RenderableDiff]) => {
       // FIXME: Figure out what to do with a shitty layout!
       checkEdt()
-      val msgAreaContainer = new MessagesAreaContainer(htmlKit, showSeconds = true)
+      val msgAreaContainer = new MessagesAreaContainer(msgDocService, showSeconds = true)
 //      msgAreaContainer.textPane.peer.putClientProperty(javax.swing.JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.box(true))
-      val msgService = msgAreaContainer.msgService
-      val md = msgService.createStubDoc
+      val md = msgDocService.createStubDoc
 //      msgDoc.doc.getStyleSheet.addRule("#messages { background-color: #FFE0E0; }")
       if (renderable.isSelectable) {
         val color = if (renderable.isAdd) Colors.AdditionBg else Colors.CombineBg
@@ -122,7 +121,7 @@ object SelectMergeMessagesDialog {
       }
       val allRendered = for (either <- renderable.v.messageOptions) yield {
         val rendered = either match {
-          case Right(msg) => msgService.renderMessageHtml(
+          case Right(msg) => msgDocService.renderMessageHtml(
             renderable.v.dao, CombinedChat(renderable.v.cwd, Seq.empty), renderable.v.dsRoot, msg, showSeconds = true)
           case Left(num)  => s"<hr>${num} messages<hr><p>"
         }
@@ -224,7 +223,7 @@ object SelectMergeMessagesDialog {
 
     val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
     val htmlKit = new ExtendedHtmlEditorKit(desktopOption)
-    val msgService = new MessagesDocumentService(htmlKit)
+    val msgDocService = new MessagesDocumentService(htmlKit)
 
     val numUsers = 3
     val msgs = (0 to 1000) map (id => {
@@ -308,7 +307,7 @@ object SelectMergeMessagesDialog {
       )
     )
 
-    val model = new SelectMergeMessagesModel(mDao, mCwd, sDao, sCwd, mismatches, htmlKit)
+    val model = new SelectMergeMessagesModel(mDao, mCwd, sDao, sCwd, mismatches, msgDocService)
     Swing.onEDTWait {
       val dialog = new SelectMergeMessagesDialog(model)
       dialog.visible = true

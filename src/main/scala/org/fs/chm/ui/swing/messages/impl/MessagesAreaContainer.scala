@@ -18,17 +18,17 @@ import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesDocumentService._
 import org.fs.chm.utility.LangUtils._
 
-class MessagesAreaContainer(htmlKit: ExtendedHtmlEditorKit, showSeconds: Boolean) extends MessagesRenderingComponent[MessageDocument] {
-  // TODO: This should really be private, but we're hacking into it for SelectMergeMessagesDialog
-  val msgService = new MessagesDocumentService(htmlKit)
-
+class MessagesAreaContainer(
+    msgDocService: MessagesDocumentService,
+    showSeconds: Boolean
+) extends MessagesRenderingComponent[MessageDocument] {
   //
   // Fields
   //
 
   val textPane: TextPane = {
     val ta = new TextPane()
-    ta.peer.setEditorKit(htmlKit)
+    ta.peer.setEditorKit(msgDocService.htmlKit)
     ta.peer.setEditable(false)
     ta.peer.setSize(new Dimension(10, 10))
     ta
@@ -62,7 +62,7 @@ class MessagesAreaContainer(htmlKit: ExtendedHtmlEditorKit, showSeconds: Boolean
 
   override def renderPleaseWait(): Unit = {
     checkEdt()
-    document = msgService.pleaseWaitDoc
+    document = msgDocService.pleaseWaitDoc
   }
 
   override def render(
@@ -73,14 +73,14 @@ class MessagesAreaContainer(htmlKit: ExtendedHtmlEditorKit, showSeconds: Boolean
       showTop: Boolean
   ): MessageDocument = {
     checkEdt()
-    val md = msgService.createStubDoc
+    val md = msgDocService.createStubDoc
     val sb = new StringBuilder
     if (beginReached) {
-      sb.append(msgService.nothingNewerHtml)
+      sb.append(msgDocService.nothingNewerHtml)
     }
     val dsRoot = dao.datasetRoot(cc.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m, showSeconds))
+      sb.append(msgDocService.renderMessageHtml(dao, cc, dsRoot, m, showSeconds))
     }
     md.insert(sb.toString, MessageInsertPosition.Leading)
     document = md
@@ -104,13 +104,13 @@ class MessagesAreaContainer(htmlKit: ExtendedHtmlEditorKit, showSeconds: Boolean
 
   override def prependLoading(): MessageDocument = {
     checkEdt()
-    document.insert(msgService.loadingHtml, MessageInsertPosition.Leading)
+    document.insert(msgDocService.loadingHtml, MessageInsertPosition.Leading)
     document
   }
 
   override def appendLoading(): MessageDocument = {
     checkEdt()
-    document.insert(msgService.loadingHtml, MessageInsertPosition.Trailing)
+    document.insert(msgDocService.loadingHtml, MessageInsertPosition.Trailing)
     document
   }
 
@@ -127,11 +127,11 @@ class MessagesAreaContainer(htmlKit: ExtendedHtmlEditorKit, showSeconds: Boolean
     // TODO: Preserve selection
     val sb = new StringBuilder
     if (beginReached) {
-      sb.append(msgService.nothingNewerHtml)
+      sb.append(msgDocService.nothingNewerHtml)
     }
     val dsRoot = dao.datasetRoot(cc.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m, showSeconds))
+      sb.append(msgDocService.renderMessageHtml(dao, cc, dsRoot, m, showSeconds))
     }
     document.removeLoading(true)
     document.insert(sb.toString, MessageInsertPosition.Leading)
@@ -151,10 +151,10 @@ class MessagesAreaContainer(htmlKit: ExtendedHtmlEditorKit, showSeconds: Boolean
     val sb = new StringBuilder
     val dsRoot = dao.datasetRoot(cc.dsUuid)
     for (m <- msgs) {
-      sb.append(msgService.renderMessageHtml(dao, cc, dsRoot, m, showSeconds))
+      sb.append(msgDocService.renderMessageHtml(dao, cc, dsRoot, m, showSeconds))
     }
     //    if (endReached) {
-    //      sb.append(msgService.nothingNewerHtml)
+    //      sb.append(msgDocService.nothingNewerHtml)
     //    }
     document.removeLoading(false)
     document.insert(sb.toString, MessageInsertPosition.Trailing)
@@ -304,7 +304,8 @@ object MessagesAreaContainer {
     Swing.onEDTWait {
       val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
       val htmlKit = new ExtendedHtmlEditorKit(desktopOption)
-      val container = new MessagesAreaContainer(htmlKit, showSeconds = false)
+      val msgDocService = new MessagesDocumentService(htmlKit)
+      val container = new MessagesAreaContainer(msgDocService, showSeconds = false)
       container.render(dao, CombinedChat(cwd, Seq.empty), msgs.toIndexedSeq, false, false)
       container.component
       Dialog.showMessage(

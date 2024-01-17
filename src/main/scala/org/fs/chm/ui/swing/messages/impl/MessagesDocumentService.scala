@@ -17,9 +17,46 @@ import org.fs.chm.utility.EntityUtils
 import org.fs.chm.utility.LangUtils._
 import org.fs.utility.Imports._
 
-class MessagesDocumentService(htmlKit: ExtendedHtmlEditorKit) {
+class MessagesDocumentService(val htmlKit: ExtendedHtmlEditorKit) {
   import MessagesDocumentService._
 
+  val stubCss =
+    """|body {
+       |  font-family: arial,sans-serif;
+       |}
+       |.title {
+       |  padding-left: 5px;
+       |  padding-bottom: 5px;
+       |  font-size: 105%;
+       |}
+       |.forwarded-from {
+       |  padding-left: 5px;
+       |  padding-bottom: 5px;
+       |  font-size: 105%;
+       |  color: #909090;
+       |}
+       |.title-name {
+       |  font-weight: bold;
+       |}
+       |blockquote {
+       |  border-left: 1px solid #ccc;
+       |  margin: 5px 10px;
+       |  padding: 5px 10px;
+       |}
+       |.system-message {
+       |  border: 1px solid #A0A0A0;
+       |  margin: 5px 10px;
+       |  padding: 5px 10px;
+       |}
+       |#no-newer {
+       |  color: #909090;
+       |  font-size: 120%;
+       |  text-align: center;
+       |  border-bottom: 3px solid #909090;
+       |  margin: 5px 10px;
+       |  padding: 5px 10px;
+       |}
+       |""".stripMargin
 
   def createStubDoc: MessageDocument = {
     // TODO: How to limit width and do word wraps?
@@ -35,43 +72,7 @@ class MessagesDocumentService(htmlKit: ExtendedHtmlEditorKit) {
     val doc     = htmlKit.createDefaultDocument
     val content = """<div id="messages"></div>"""
     htmlKit.read(new StringReader(content), doc, 0)
-    val css = """|body {
-                 |  font-family: arial,sans-serif;
-                 |}
-                 |.title {
-                 |  padding-left: 5px;
-                 |  padding-bottom: 5px;
-                 |  font-size: 105%;
-                 |}
-                 |.forwarded-from {
-                 |  padding-left: 5px;
-                 |  padding-bottom: 5px;
-                 |  font-size: 105%;
-                 |  color: #909090;
-                 |}
-                 |.title-name {
-                 |  font-weight: bold;
-                 |}
-                 |blockquote {
-                 |  border-left: 1px solid #ccc;
-                 |  margin: 5px 10px;
-                 |  padding: 5px 10px;
-                 |}
-                 |.system-message {
-                 |  border: 1px solid #A0A0A0;
-                 |  margin: 5px 10px;
-                 |  padding: 5px 10px;
-                 |}
-                 |#no-newer {
-                 |  color: #909090;
-                 |  font-size: 120%;
-                 |  text-align: center;
-                 |  border-bottom: 3px solid #909090;
-                 |  margin: 5px 10px;
-                 |  padding: 5px 10px;
-                 |}
-                 |""".stripMargin
-    doc.getStyleSheet.addRule(css)
+    doc.getStyleSheet.addRule(stubCss)
     doc.getStyleSheet.addRule("W3C_LENGTH_UNITS_ENABLE")
     val msgEl = doc.getElement("messages")
     MessageDocument(doc, msgEl)

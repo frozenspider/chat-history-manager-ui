@@ -1,5 +1,6 @@
 package org.fs.chm.ui.swing
 
+import java.io.{File => JFile}
 import com.github.nscala_time.time.Imports.DateTime
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities.CombinedChat
@@ -44,6 +45,8 @@ object Callbacks {
     def combineChats(dao: ChatHistoryDao, masterChat: Chat, slaveChat: Chat): Unit
 
     def compareChats(dao: ChatHistoryDao, baseChat: Chat, secondaryChat: Chat): Unit
+
+    def exportChatAsHtml(dao: ChatHistoryDao, cc: CombinedChat, file: JFile): Unit
   }
 
 

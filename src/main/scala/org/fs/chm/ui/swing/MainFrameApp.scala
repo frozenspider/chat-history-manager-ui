@@ -3,6 +3,8 @@ package org.fs.chm.ui.swing
 import java.awt.Desktop
 import java.awt.Toolkit
 import java.awt.event.AdjustmentEvent
+import java.io.BufferedWriter
+import java.io.FileWriter
 import java.io.{File => JFile}
 
 import scala.annotation.tailrec
@@ -38,6 +40,7 @@ import org.fs.chm.ui.swing.list.chat._
 import org.fs.chm.ui.swing.merge._
 import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
 import org.fs.chm.ui.swing.messages.impl.MessagesAreaContainer
+import org.fs.chm.ui.swing.messages.impl.MessagesDocumentService
 import org.fs.chm.ui.swing.user.UserDetailsPane
 import org.fs.chm.utility.CliUtils
 import org.fs.chm.utility.InterruptableFuture._
@@ -71,6 +74,7 @@ class MainFrameApp(grpcPort: Int) //
 
   private val desktopOption = if (Desktop.isDesktopSupported) Some(Desktop.getDesktop) else None
   private val htmlKit       = new ExtendedHtmlEditorKit(desktopOption)
+  private val msgDocService = new MessagesDocumentService(htmlKit)
   private val chatSelGroup  = new ChatListItemSelectionGroup
 
   private lazy val grpcHolder = {
@@ -176,7 +180,7 @@ class MainFrameApp(grpcPort: Int) //
   lazy val msgRenderer: MessagesRenderingComponent[MD] = {
     import org.fs.chm.ui.swing.messages.impl.MessagesAreaEnhancedContainer
 
-    val m = new MessagesAreaEnhancedContainer(htmlKit, showSeconds = false, this)
+    val m = new MessagesAreaEnhancedContainer(msgDocService, showSeconds = false, this)
 
     // Load older messages when sroll is near the top
     val sb = m.scrollPane.verticalScrollBar.peer
@@ -480,7 +484,7 @@ class MainFrameApp(grpcPort: Int) //
                 if (Thread.interrupted()) throw new InterruptedException("Cancelled")
                 StopWatch.measureAndCall {
                   // I *HOPE* that creating model alone outside of EDT doesn't cause issues
-                  new MergeModel(masterDao, mcwd, slaveDao, scwd, diffs, htmlKit)
+                  new MergeModel(masterDao, mcwd, slaveDao, scwd, diffs, msgDocService)
                 }((_, t) => log.info(s"Model for chats merge ${cmo.title} created in $t ms"))
               })
               (resolved, cmosWithLazyModels :+ next)
@@ -738,11 +742,57 @@ class MainFrameApp(grpcPort: Int) //
       val sCwd = dao.chatOption(secondaryChat.dsUuid, secondaryChat.id).get
       val dialog = onEdtReturning {
         type MergeModel = SelectMergeMessagesDialog.SelectMergeMessagesModel
-        new SelectMergeMessagesDialog(new MergeModel(dao, mCwd, dao, sCwd, analysis, htmlKit))
+        new SelectMergeMessagesDialog(new MergeModel(dao, mCwd, dao, sCwd, analysis, msgDocService))
       }
       dialog.visible = true
 
       Swing.onEDTWait {
+        unfreezeTheWorld()
+      }
+    }
+  }
+
+  override def exportChatAsHtml(dao: ChatHistoryDao, cc: CombinedChat, file: JFile): Unit = {
+    checkEdt()
+    freezeTheWorld("Export...")
+    futureHandlingExceptions {
+      require(!file.exists(), "File already exists!")
+      tryWith(new BufferedWriter(new FileWriter(file))) { writer =>
+        writer.write("<html>\n")
+        writer.write("<head><style>\n")
+        writer.write(msgDocService.stubCss)
+        writer.write("</style></head>\n")
+        writer.write("<body>\n")
+        writer.write("""<div id="messages">""" + "\n")
+        var hasMoreMessages = true
+        var loadStatuses: LoadStatuses = Map.empty
+        val dsRoot = dao.datasetRoot(cc.dsUuid)
+        while (hasMoreMessages) {
+          val (msgs, loadStatuses2) = loadCombinedChatMessages(cc, loadStatuses, isBackward = false, (chat, loadStatus) => {
+            loadStatus.lastOption match {
+              case Some(last) => dao.messagesAfter(chat, last.internalIdTyped, MsgBatchLoadSize)
+              case None       => dao.firstMessages(chat, MsgBatchLoadSize)
+            }
+          })
+
+          for (msg <- msgs) {
+            val msgHtml = msgDocService.renderMessageHtml(dao, cc, dsRoot, msg, showSeconds = false)
+            writer.write(msgHtml)
+            writer.write("\n")
+          }
+
+          if (loadStatuses2.forall(_._2.endReached)) {
+            hasMoreMessages = false
+          } else {
+            loadStatuses = loadStatuses2
+          }
+        }
+        writer.write("</div>\n")
+        writer.write("</body>\n")
+        writer.write("</html>")
+        writer.flush()
+      }
+      Swing.onEDT {
         unfreezeTheWorld()
       }
     }
