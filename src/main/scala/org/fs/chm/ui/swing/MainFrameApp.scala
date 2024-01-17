@@ -855,14 +855,14 @@ class MainFrameApp(grpcPort: Int) //
         val msgs = allMsgsUnlimited.takeRight(MsgBatchLoadSize)
         loadStatuses2.map(_._2.firstOption).yieldDefined.minByOption(_.timestamp) match {
           case Some(lastCached) => msgs.dropRightWhile(p =>
-            p._1.timestamp > lastCached.timestamp || (p._1.timestamp == lastCached.timestamp && p._1.internalId > lastCached.timestamp))
+            p._1.timestamp > lastCached.timestamp || (p._1.timestamp == lastCached.timestamp && p._1.internalId > lastCached.internalId))
           case None => msgs
         }
       } else {
         val msgs = allMsgsUnlimited.take(MsgBatchLoadSize)
         loadStatuses2.map(_._2.lastOption).yieldDefined.maxByOption(_.timestamp) match {
           case Some(lastCached) => msgs.dropWhile(p =>
-            p._1.timestamp < lastCached.timestamp || (p._1.timestamp == lastCached.timestamp && p._1.internalId < lastCached.timestamp))
+            p._1.timestamp < lastCached.timestamp || (p._1.timestamp == lastCached.timestamp && p._1.internalId < lastCached.internalId))
           case None => msgs
         }
       }
