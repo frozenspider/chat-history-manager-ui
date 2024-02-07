@@ -121,6 +121,8 @@ trait MutableChatHistoryDao extends ChatHistoryDao {
   /** Sets the data (names and phone only) for a user with the given `id` and `dsUuid` to the given state */
   def updateUser(user: User): Unit
 
+  def updateChatId(dsUuid: PbUuid, oldId: Long, newId: Long): Chat
+
   def deleteChat(chat: Chat): Unit
 
   def combineChats(masterChat: Chat, slaveChat: Chat): Unit

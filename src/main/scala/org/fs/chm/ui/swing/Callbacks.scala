@@ -40,6 +40,8 @@ object Callbacks {
   trait ChatCb {
     def selectChat(dao: ChatHistoryDao, cc: CombinedChat): Unit
 
+    def updateChatIds(dao: ChatHistoryDao, updates: Seq[(Chat, Long)]): Unit
+
     def deleteChat(dao: ChatHistoryDao, cc: CombinedChat): Unit
 
     def combineChats(dao: ChatHistoryDao, masterChat: Chat, slaveChat: Chat): Unit

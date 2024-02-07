@@ -176,6 +176,8 @@ object TestUtils {
 
     override def updateUser(user: User): Unit = ???
 
+    override def updateChatId(dsUuid: PbUuid, oldId: Long, newId: Long): Chat = ???
+
     override def deleteChat(chat: Chat): Unit = ???
 
     override def combineChats(masterChat: Chat, slaveChat: Chat): Unit = ???

@@ -17,6 +17,7 @@ class GrpcChatHistoryDao(val key: String,
   extends MutableChatHistoryDao with Logging {
 
   private val cacheLock = new Object
+  private var backupsEnabled = true
 
   override lazy val storagePath: File = {
     new File(sendRequest(StoragePathRequest(key))(daoRpcStub.storagePath).path)
@@ -130,6 +131,11 @@ class GrpcChatHistoryDao(val key: String,
     sendRequest(UpdateUserRequest(key, user))(daoRpcStub.updateUser)
   }
 
+  override def updateChatId(dsUuid: PbUuid, oldId: Long, newId: Long): Chat = {
+    this.backup()
+    sendRequest(UpdateChatRequest(key, dsUuid, oldId, newId))(daoRpcStub.updateChat).chat
+  }
+
   override def deleteChat(chat: Chat): Unit = {
     this.backup()
     sendRequest(DeleteChatRequest(key, chat))(daoRpcStub.deleteChat)
@@ -142,6 +148,14 @@ class GrpcChatHistoryDao(val key: String,
 
   /** Create a backup, if enabled, otherwise do nothing */
   override def backup(): Unit = {
-    sendRequest(BackupRequest(key))(daoRpcStub.backup)
+    if (backupsEnabled) sendRequest(BackupRequest(key))(daoRpcStub.backup)
+  }
+
+  def disableBackups(): Unit = {
+    this.backupsEnabled = false
+  }
+
+  def enableBackups(): Unit = {
+    this.backupsEnabled = true
   }
 }

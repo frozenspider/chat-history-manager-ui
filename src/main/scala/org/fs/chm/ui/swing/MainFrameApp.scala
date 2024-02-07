@@ -675,6 +675,38 @@ class MainFrameApp(grpcPort: Int) //
     })
   }
 
+  override def updateChatIds(_dao: ChatHistoryDao, _updates: Seq[(Chat, Long)]): Unit = {
+    require(_dao.isInstanceOf[GrpcChatHistoryDao])
+    val dao = _dao.asInstanceOf[GrpcChatHistoryDao]
+    val updates = _updates.filter(p => p._1.id != p._2)
+    freezeTheWorld("Updating...")
+    Swing.onEDT {
+      try {
+        MutationLock.synchronized {
+          try {
+            for ((chat, newId) <- updates) {
+              dao.updateChatId(chat.dsUuid, chat.id, newId)
+              dao.disableBackups()
+            }
+          } finally {
+            dao.enableBackups()
+          }
+          val updatedIds = updates.map(p => p._1.id)
+          if (loadedDaos.contains(dao)) {
+            val daoOldCache = loadedDaos(dao)
+            val daoEvictedCache = daoOldCache.filter(e => e._1.cwds.map(_.chat).forall(chat => !updatedIds.contains(chat.id)))
+            loadedDaos = loadedDaos + (dao -> daoEvictedCache)
+          }
+          chatList.replaceWith(loadedDaos.keys.toSeq)
+        }
+        chatsOuterPanel.revalidate()
+        chatsOuterPanel.repaint()
+      } finally {
+        unfreezeTheWorld()
+      }
+    }
+  }
+
   override def deleteChat(_dao: ChatHistoryDao, cc: CombinedChat): Unit = {
     require(_dao.isInstanceOf[GrpcChatHistoryDao])
     val dao = _dao.asInstanceOf[GrpcChatHistoryDao]

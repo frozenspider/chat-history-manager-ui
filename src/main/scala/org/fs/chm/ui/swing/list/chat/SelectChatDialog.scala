@@ -32,7 +32,7 @@ class SelectChatDialog(dao: ChatHistoryDao,
           val radio = new RadioButton()
           group.buttons += radio
 
-          val pane = new ChatDetailsPane(dao, CombinedChat(cwd, Seq.empty), full = false)
+          val pane = new ChatDetailsPane(dao, CombinedChat(cwd, Seq.empty), full = false, None)
           pane.stylizeName(Colors.forIdx(idx))
           (radio, pane, cwd.chat)
       }

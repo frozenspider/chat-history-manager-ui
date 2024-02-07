@@ -156,7 +156,7 @@ class ChatListItem(
   private def showDetailsPopup(): Unit = {
     Dialog.showMessage(
       title       = "Chat Details",
-      message     = new ChatDetailsPane(dao, cc, full = true).peer,
+      message     = new ChatDetailsPane(dao, cc, full = true, callbacksOption).peer,
       messageType = Dialog.Message.Plain
     )
   }
