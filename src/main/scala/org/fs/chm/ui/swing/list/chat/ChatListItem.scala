@@ -256,7 +256,7 @@ class ChatListItem(
         }
       case Message.Typed.Service(Some(service)) =>
         service match {
-          case _: MessageServicePhoneCall           => "(phone call)"
+          case _: MessageServicePhoneCall           => "(call)"
           case _: MessageServiceSuggestProfilePhoto => "(suggested photo)"
           case _: MessageServicePinMessage          => "(message pinned)"
           case _: MessageServiceClearHistory        => "(history cleared)"
@@ -271,7 +271,6 @@ class ChatListItem(
           case _: MessageServiceGroupRemoveMembers  => "(removed members)"
           case _: MessageServiceGroupMigrateFrom    => "(migrated from group)"
           case _: MessageServiceGroupMigrateTo      => "(migrated to group)"
-          case _: MessageServiceGroupCall           => "(group call)"
         }
       case Message.Typed.Empty | Message.Typed.Service(None) =>
         unexpectedCase(msg)

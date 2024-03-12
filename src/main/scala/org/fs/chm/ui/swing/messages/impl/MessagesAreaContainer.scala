@@ -11,7 +11,7 @@ import org.fs.chm.protobuf.Dataset
 import org.fs.chm.protobuf.Message
 import org.fs.chm.protobuf.MessageRegular
 import org.fs.chm.protobuf.MessageService
-import org.fs.chm.protobuf.MessageServiceGroupCall
+import org.fs.chm.protobuf.MessageServicePhoneCall
 import org.fs.chm.ui.swing.general.ExtendedHtmlEditorKit
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.messages.MessagesRenderingComponent
@@ -245,7 +245,9 @@ object MessagesAreaContainer {
         {
           val text = Seq(RichText.makePlain(s"Join the call! < Emoji: >👍❤️😄<"));
           // val text = Seq(RichText.makePlain( "An &#128512;awesome &#128515;string with a few &#128521;emojis!"));
-          val typed = Message.Typed.Service(Some(MessageServiceGroupCall(
+          val typed = Message.Typed.Service(Some(MessageServicePhoneCall(
+            durationSecOption = Some(12345),
+            discardReasonOption = Some("Because yeah"),
             members = users map (_.prettyName)
           )))
           Message(

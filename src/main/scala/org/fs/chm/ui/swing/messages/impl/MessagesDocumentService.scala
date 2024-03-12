@@ -223,7 +223,7 @@ class MessagesDocumentService(val htmlKit: ExtendedHtmlEditorKit) {
         case _                                  => RichTextHtmlRenderer.render(m.text)
       }
       val content = sm match {
-        case sm: MessageServicePhoneCall           => renderPhoneCall(sm)
+        case sm: MessageServicePhoneCall           => renderCallMessage(cc, sm)
         case sm: MessageServiceSuggestProfilePhoto => renderSuggestPhotoMessage(sm, dsRoot)
         case sm: MessageServicePinMessage          => "Pinned message" + renderSourceMessage(dao, cc, dsRoot, sm.messageIdTyped)
         case sm: MessageServiceClearHistory        => "History cleared"
@@ -238,14 +238,13 @@ class MessagesDocumentService(val htmlKit: ExtendedHtmlEditorKit) {
         case sm: MessageServiceGroupRemoveMembers  => renderGroupRemoveMembersMessage(cc, sm)
         case sm: MessageServiceGroupMigrateFrom    => renderMigratedFrom(sm)
         case sm: MessageServiceGroupMigrateTo      => "Migrated to another group"
-        case sm: MessageServiceGroupCall           => renderGroupCallMessage(cc, sm)
       }
       Seq(Some(s"""<div class="system-message">$content</div>"""), textHtmlOption).yieldDefined.mkString
     }
 
-    private def renderPhoneCall(sm: MessageServicePhoneCall) = {
+    private def renderCallMessage(cc: CombinedChat, sm: MessageServicePhoneCall) = {
       Seq(
-        Some("Phone call"),
+        Some("Call"),
         sm.durationSecOption map {
           case d if d < 60 =>
             s"($d sec)"
@@ -254,6 +253,7 @@ class MessagesDocumentService(val htmlKit: ExtendedHtmlEditorKit) {
           case d =>
             s"(${(d * 1000).hhMmSsString})"
         },
+        renderMembers(cc, sm.members).toOption,
         sm.discardReasonOption filter (_ != "hangup") map (r => s"($r)")
       ).yieldDefined.mkString(" ")
     }
@@ -310,12 +310,6 @@ class MessagesDocumentService(val htmlKit: ExtendedHtmlEditorKit) {
 
     private def renderMigratedFrom(sm: MessageServiceGroupMigrateFrom) = {
       s"Migrated from ${sm.title}".trim
-    }
-
-    private def renderGroupCallMessage(cc: CombinedChat, sm: MessageServiceGroupCall) = {
-      val content = s"Group call"
-      val members = renderMembers(cc, sm.members)
-      s"$content$members"
     }
 
     private def renderMembers(cc: CombinedChat, members: Seq[String]) = {
