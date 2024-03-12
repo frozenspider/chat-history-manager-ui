@@ -74,22 +74,22 @@ class DatasetMergerRemote(channel: ManagedChannel,
           val messageMerges = resoluion.map {
             case MessagesMergeDiff.Retain(firstMasterMsgId, lastMasterMsgId) =>
               MessageMerge(MessageMergeType.Retain,
-                Some(MessageMergeSectionRange(firstMasterMsgId, lastMasterMsgId, -1, -1)))
+                MessageMergeSectionRange(firstMasterMsgId, lastMasterMsgId, -1, -1))
             case MessagesMergeDiff.Add(firstSlaveMsgId, lastSlaveMsgId) =>
               MessageMerge(MessageMergeType.Add,
-                Some(MessageMergeSectionRange(-1, -1, firstSlaveMsgId, lastSlaveMsgId)))
+                MessageMergeSectionRange(-1, -1, firstSlaveMsgId, lastSlaveMsgId))
             case MessagesMergeDiff.DontAdd(firstSlaveMsgId, lastSlaveMsgId) =>
               MessageMerge(MessageMergeType.DontAdd,
-                Some(MessageMergeSectionRange(-1, -1, firstSlaveMsgId, lastSlaveMsgId)))
+                MessageMergeSectionRange(-1, -1, firstSlaveMsgId, lastSlaveMsgId))
             case MessagesMergeDiff.Replace(firstMasterMsgId, lastMasterMsgId, firstSlaveMsgId, lastSlaveMsgId) =>
               MessageMerge(MessageMergeType.Replace,
-                Some(MessageMergeSectionRange(firstMasterMsgId, lastMasterMsgId, firstSlaveMsgId, lastSlaveMsgId)))
+                MessageMergeSectionRange(firstMasterMsgId, lastMasterMsgId, firstSlaveMsgId, lastSlaveMsgId))
             case MessagesMergeDiff.DontReplace(firstMasterMsgId, lastMasterMsgId, firstSlaveMsgId, lastSlaveMsgId) =>
               MessageMerge(MessageMergeType.DontReplace,
-                Some(MessageMergeSectionRange(firstMasterMsgId, lastMasterMsgId, firstSlaveMsgId, lastSlaveMsgId)))
+                MessageMergeSectionRange(firstMasterMsgId, lastMasterMsgId, firstSlaveMsgId, lastSlaveMsgId))
             case MessagesMergeDiff.Match(firstMasterMsgId, lastMasterMsgId, firstSlaveMsgId, lastSlaveMsgId) =>
               MessageMerge(MessageMergeType.Match,
-                Some(MessageMergeSectionRange(firstMasterMsgId, lastMasterMsgId, firstSlaveMsgId, lastSlaveMsgId)))
+                MessageMergeSectionRange(firstMasterMsgId, lastMasterMsgId, firstSlaveMsgId, lastSlaveMsgId))
           }
           ChatMerge(ChatMergeType.Merge, masterCwd.chat.id, messageMerges)
       }
