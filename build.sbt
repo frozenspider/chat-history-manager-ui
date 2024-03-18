@@ -1,6 +1,6 @@
-name           := "chat-history-manager"
+name           := "chat-history-manager-ui"
 version        := "0.3-SNAPSHOT"
-homepage       := Some(url("https://github.com/frozenspider/chat-history-manager"))
+homepage       := Some(url("https://github.com/frozenspider/chat-history-manager-ui"))
 scalaVersion   := "2.13.10"
 
 // Show tests duration and full stacktrace on test errors
