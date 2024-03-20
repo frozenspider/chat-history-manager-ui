@@ -25,8 +25,8 @@ project/target/
 # Application
 /log
 application.conf
-# Path to protobug
-protobuf-path.txt
+# Path to a Rust project (https://github.com/frozenspider/chat-history-manager)
+rust-project-path.txt
 
 *.class
 *.log

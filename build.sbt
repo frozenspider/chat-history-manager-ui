@@ -14,27 +14,36 @@ Test    / sourceManaged  := baseDirectory.value / "src_managed" / "test" / "scal
 
 Compile / run / mainClass := Some("org.fs.chm.Main")
 
+// Reload sbt project when build.sbt changed
+Global / onChangedBuildSource := ReloadOnSourceChanges
+
 // ScalaPB config
-val protobufDir = settingKey[File]("Path to the protobuf files")
-protobufDir := {
+val protobufDirs = settingKey[(File, Seq[File])]("Path to the protobuf files")
+protobufDirs := {
   def fail(msg: String) = throw new sbt.MessageOnlyException(s"Can't compile protobufs: $msg")
-  val pbFileName = "protobuf-path.txt"
-  val pbConfigFile = baseDirectory.value / pbFileName
+  val rustProjectFileName = "rust-project-path.txt"
+  val pbConfigFile = baseDirectory.value / rustProjectFileName
   if (!pbConfigFile.exists) {
-    fail(s"./${pbFileName} does not exist! Create one :)")
+    fail(s"./${rustProjectFileName} does not exist! Create one :)")
   }
-  val pbPath = IO.readLines(pbConfigFile).headOption.getOrElse(fail(s"./${pbFileName} is empty!"))
-  val pbPathFile = new File(pbPath)
-  if (!pbPathFile.exists || !pbPathFile.isDirectory) {
-    fail(s"${pbPath} aka ${pbPathFile.getAbsolutePath} (specified in /${pbFileName}) does not exist or is not a directory!")
+  val rustPath = IO.readLines(pbConfigFile).headOption.getOrElse(fail(s"./${rustProjectFileName} is empty!"))
+
+  val pbPaths = for (pbPath <- Seq("core/protobuf", "backend/protobuf")) yield {
+    val pbPathFile = new File(rustPath, pbPath)
+    if (!pbPathFile.exists || !pbPathFile.isDirectory) {
+      fail(s"${pbPath} aka ${pbPathFile.getAbsolutePath} (specified in /${rustProjectFileName}) does not exist or is not a directory!")
+    }
+    if (pbPathFile.list((_, n) => n.toLowerCase.endsWith(".proto")).isEmpty) {
+      fail(s"${pbPath} aka ${pbPathFile.getAbsolutePath} (specified in /${rustProjectFileName}) has no *.proto files!")
+    }
+    pbPathFile
   }
-  if (pbPathFile.list((_, n) => n.toLowerCase.endsWith(".proto")).isEmpty) {
-    fail(s"${pbPath} aka ${pbPathFile.getAbsolutePath} (specified in /${pbFileName}) has no *.proto files!")
-  }
-  pbPathFile
+  (new File(rustPath), pbPaths)
 }
 
-Compile / PB.protoSources := Seq(protobufDir.value)
+Compile / PB.deleteTargetDirectory := true
+Compile / PB.includePaths := Seq(protobufDirs.value._1, baseDirectory.value / "target" / "protobuf_external")
+Compile / PB.protoSources := protobufDirs.value._2
 
 Compile / PB.targets := Seq(
   scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
