@@ -38,6 +38,11 @@ protobufDirs := {
     }
     pbPathFile
   }
+
+  // Additionally, delete scalapb.proto (copy made by Rust build process) to avoid conflicts with implicit one
+  val scalapbFile = new File(rustPath, "scalapb/scalapb.proto")
+  if (scalapbFile.exists()) scalapbFile.delete()
+
   (new File(rustPath), pbPaths)
 }
 
