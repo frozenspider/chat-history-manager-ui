@@ -41,6 +41,10 @@ class SelectMergeChatsDialog(
 
   private lazy val forceConflictsCb = new CheckBox("Force treat mismatching message sequences as a single conflict")
 
+  private lazy val masterSelf = masterDao.users(masterDs.uuid).head
+
+  private lazy val slaveSelf = slaveDao.users(slaveDs.uuid).head
+
   private lazy val table = {
     checkEdt()
     new SelectMergesTable[(ChatHistoryDao, ChatWithDetails), SelectedChatMergeOption](models)
@@ -87,7 +91,12 @@ class SelectMergeChatsDialog(
     override val cellsAreInteractive = false
 
     override val renderer = (renderable: ListItemRenderable[(ChatHistoryDao, ChatWithDetails)]) => {
-      val r = new ChatListItem(renderable.v._1, CombinedChat(renderable.v._2, Seq.empty), None, None)
+      val myself = if (renderable.v._1 == masterDao) {
+        masterSelf
+      } else {
+        slaveSelf
+      }
+      val r = new ChatListItem(renderable.v._1, CombinedChat(renderable.v._2, Seq.empty), myself, None, None)
       if (renderable.isCombine) {
         r.inactiveColor = Colors.CombineBg
       } else if (renderable.isAdd) {

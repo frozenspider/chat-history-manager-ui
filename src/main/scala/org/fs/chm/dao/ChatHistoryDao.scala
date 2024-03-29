@@ -31,8 +31,6 @@ trait ChatHistoryDao extends AutoCloseable {
   /** Directory which stores eveything in the dataset. All files are guaranteed to have this as a prefix */
   def datasetRoot(dsUuid: PbUuid): DatasetRoot
 
-  def myself(dsUuid: PbUuid): User
-
   /** Contains myself as the first element. Order must be stable. Method is expected to be fast. */
   def users(dsUuid: PbUuid): Seq[User]
 

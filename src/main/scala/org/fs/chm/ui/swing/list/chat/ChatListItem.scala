@@ -26,6 +26,7 @@ import org.fs.utility.Imports._
 class ChatListItem(
     dao: ChatHistoryDao,
     cc: CombinedChat,
+    myself: User,
     selectionGroupOption: Option[ChatListItemSelectionGroup],
     callbacksOption: Option[Callbacks.ChatCb]
 ) extends BorderPanel { self =>
@@ -156,7 +157,7 @@ class ChatListItem(
   private def showDetailsPopup(): Unit = {
     Dialog.showMessage(
       title       = "Chat Details",
-      message     = new ChatDetailsPane(dao, cc, full = true, callbacksOption).peer,
+      message     = new ChatDetailsPane(dao, cc, myself, full = true, callbacksOption).peer,
       messageType = Dialog.Message.Plain
     )
   }
@@ -166,6 +167,7 @@ class ChatListItem(
     val dialog = new SelectChatDialog(
       dao,
       slaveChat,
+      myself,
       s"Select chat to be combined with ${slaveChat.qualifiedName}",
       "Previously selected chat will be combined with the given one and will no longer \n" +
         "be shown separately in the main list.\n" +
@@ -183,6 +185,7 @@ class ChatListItem(
     val dialog = new SelectChatDialog(
       dao,
       baseChat,
+      myself,
       s"Select chat to be compared with ${baseChat.qualifiedName}",
       "",
       _ => true

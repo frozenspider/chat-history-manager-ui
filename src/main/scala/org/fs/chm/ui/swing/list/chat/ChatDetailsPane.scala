@@ -19,6 +19,7 @@ import scala.util.Try
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.ChatType
+import org.fs.chm.protobuf.User
 import org.fs.chm.ui.swing.Callbacks
 import org.fs.chm.ui.swing.general.SwingUtils._
 import org.fs.chm.ui.swing.general.field.TextComponent
@@ -26,6 +27,7 @@ import org.fs.chm.ui.swing.general.field.TextComponent
 class ChatDetailsPane(
     dao: ChatHistoryDao,
     var cc: CombinedChat,
+    myself: User,
     full: Boolean,
     editCallbacksOption: Option[Callbacks.ChatCb]
 ) extends GridBagPanel {
@@ -44,7 +46,7 @@ class ChatDetailsPane(
       ("Name:", Some(nameC)),
       ("Type:", if (!full) None else Some(tc(mainChat.tpe match {
         case ChatType.Personal     =>
-          val userId = mainChat.memberIds.find(_ != dao.myself(dsUuid).id).map(_.toReadableId).getOrElse("[unknown]")
+          val userId = mainChat.memberIds.find(_ != myself.id).map(_.toReadableId).getOrElse("[unknown]")
           s"Personal (User ID #$userId)"
         case ChatType.PrivateGroup =>
           "Private Group"

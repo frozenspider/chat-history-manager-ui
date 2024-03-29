@@ -50,8 +50,6 @@ class EagerChatHistoryDao(
 
   override def datasetRoot(dsUuid: PbUuid): DatasetRoot = _dataRootFile.getAbsoluteFile.asInstanceOf[DatasetRoot]
 
-  override def myself(dsUuid: PbUuid): User = myself1
-
   override def users(dsUuid: PbUuid): Seq[User] = myself1 +: users1.filter(_ != myself1)
 
   private val chats1: Seq[Chat] = chatsWithMessages.keys.toSeq
@@ -63,9 +61,8 @@ class EagerChatHistoryDao(
   }
 
   private def chatMembers(chat: Chat): Seq[User] = {
-    val me = myself(chat.dsUuid)
-    me +: chat.memberIds
-      .filter(_ != me.id)
+    myself1 +: chat.memberIds
+      .filter(_ != myself1.id)
       .map(mId => users1.find(_.id == mId).getOrElse(throw new IllegalStateException(s"No member with id ${mId} found for chat ${chat.qualifiedName}")))
       .sortBy(_.id)
   }

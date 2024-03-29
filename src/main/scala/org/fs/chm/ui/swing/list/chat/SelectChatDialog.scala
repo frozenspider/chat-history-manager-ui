@@ -7,11 +7,13 @@ import scala.swing._
 import org.fs.chm.dao.ChatHistoryDao
 import org.fs.chm.dao.Entities._
 import org.fs.chm.protobuf.Chat
+import org.fs.chm.protobuf.User
 import org.fs.chm.ui.swing.general.CustomDialog
 import org.fs.chm.ui.swing.general.SwingUtils._
 
 class SelectChatDialog(dao: ChatHistoryDao,
                        baseChat: Chat,
+                       myself: User,
                        titleText: String,
                        override val headerText: String,
                        filterCwd: ChatWithDetails => Boolean) extends CustomDialog[Chat](takeFullHeight = true) {
@@ -32,7 +34,7 @@ class SelectChatDialog(dao: ChatHistoryDao,
           val radio = new RadioButton()
           group.buttons += radio
 
-          val pane = new ChatDetailsPane(dao, CombinedChat(cwd, Seq.empty), full = false, None)
+          val pane = new ChatDetailsPane(dao, CombinedChat(cwd, Seq.empty), myself, full = false, None)
           pane.stylizeName(Colors.forIdx(idx))
           (radio, pane, cwd.chat)
       }

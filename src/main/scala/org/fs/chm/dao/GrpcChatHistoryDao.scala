@@ -40,10 +40,6 @@ class GrpcChatHistoryDao(val key: String,
     }
   }
 
-  override def myself(dsUuid: PbUuid): User = {
-    sendRequest(MyselfRequest(key, dsUuid))(daoRpcStub.myself).myself
-  }
-
   override def users(dsUuid: PbUuid): Seq[User] = {
     sendRequest(UsersRequest(key, dsUuid))(daoRpcStub.users).users
   }
