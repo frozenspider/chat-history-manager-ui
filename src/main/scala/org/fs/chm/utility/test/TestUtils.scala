@@ -37,7 +37,8 @@ object TestUtils {
       firstNameOption   = Some("User"),
       lastNameOption    = Some(idx.toString),
       usernameOption    = Some("user" + idx),
-      phoneNumberOption = Some("xxx xx xx".replaceAll("x", idx.toString))
+      phoneNumberOption = Some("xxx xx xx".replaceAll("x", idx.toString)),
+      profilePictures   = Seq.empty,
     )
 
   def createGroupChat(dsUuid: PbUuid, id: Int, nameSuffix: String, memberIds: Iterable[Long], messagesSize: Int): Chat = {

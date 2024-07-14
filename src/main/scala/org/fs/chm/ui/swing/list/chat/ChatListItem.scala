@@ -32,7 +32,7 @@ class ChatListItem(
 ) extends BorderPanel { self =>
   private val labelPreferredWidth = DaoItem.PanelWidth - 100 // TODO: Remove
 
-  val mainChat = cc.mainCwd.chat
+  val mainChat: Chat = cc.mainCwd.chat
 
   private val labelBorderWidth = 3
 
@@ -55,7 +55,16 @@ class ChatListItem(
       val label = new Label
       label.preferredHeight = 48
       label.preferredWidth = 48
-      for (image <- resolveImage(mainChat.imgPathOption, dao.datasetRoot(mainChat.dsUuid))) {
+      val image = resolveImage(mainChat.imgPathOption, dao.datasetRoot(mainChat.dsUuid)) match {
+        case None if mainChat.tpe == ChatType.Personal =>
+          val user = cc.mainCwd.members.find(_ != myself).get
+          user.profilePictures
+            .map(pic => resolveImage(Some(pic.path), dao.datasetRoot(mainChat.dsUuid)))
+            .yieldDefined
+            .headOption
+        case x => x
+      }
+      for (image <- image) {
         val scaled = image.getScaledInstance(label.preferredWidth, label.preferredHeight, java.awt.Image.SCALE_SMOOTH)
         label.icon = new ImageIcon(scaled)
       }
