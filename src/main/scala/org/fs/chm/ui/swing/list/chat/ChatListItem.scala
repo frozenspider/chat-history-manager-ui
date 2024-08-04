@@ -57,11 +57,16 @@ class ChatListItem(
       label.preferredWidth = 48
       val image = resolveImage(mainChat.imgPathOption, dao.datasetRoot(mainChat.dsUuid)) match {
         case None if mainChat.tpe == ChatType.Personal =>
-          val user = cc.mainCwd.members.find(_ != myself).get
-          user.profilePictures
-            .map(pic => resolveImage(Some(pic.path), dao.datasetRoot(mainChat.dsUuid)))
-            .yieldDefined
-            .headOption
+          cc.mainCwd.members.find(_ != myself) match {
+            case Some(user) =>
+              user.profilePictures
+                .map(pic => resolveImage(Some(pic.path), dao.datasetRoot(mainChat.dsUuid)))
+                .yieldDefined
+                .headOption
+            case _ =>
+              // No other members are known - might happen e.g. when interlocutor didn't write anything
+              None
+          }
         case x => x
       }
       for (image <- image) {
