@@ -199,6 +199,7 @@ object Entities {
       case SourceType.TextImport => "Text import"
       case SourceType.Telegram   => "Telegram"
       case SourceType.WhatsappDb => "WhatsApp"
+      case SourceType.Signal     => "Signal"
       case SourceType.TinderDb   => "Tinder"
       case SourceType.BadooDb    => "Badoo"
       case SourceType.Mra        => "Mail.Ru Agent"
