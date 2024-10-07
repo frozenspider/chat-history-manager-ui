@@ -37,7 +37,7 @@ class AudioMessageComponent(
   } yield d
 
   private val playBtn = new Button("Play") {
-    enabled = durationOption.isDefined
+    enabled = playerOption.map(_.file).exists(_.exists)
   }
   private val slider = new Slider {
     min     = 0
