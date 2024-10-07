@@ -257,7 +257,7 @@ class ChatListItem(
       }
     val text: String = msg.typed match {
       case Message.Typed.Regular(msgRegular) =>
-        msgRegular.contentOption match {
+        msgRegular.contents.headOption.flatten match {
           case _ if msgRegular.isDeleted     => "(message deleted)"
           case None                          => msg.searchableString
           case Some(s: ContentSticker)       => s.emojiOption.map(_ + " ").getOrElse("") + "(sticker)"

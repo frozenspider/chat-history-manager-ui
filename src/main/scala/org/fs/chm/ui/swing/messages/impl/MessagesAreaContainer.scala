@@ -266,14 +266,14 @@ object MessagesAreaContainer {
             isDeleted              = false,
             forwardFromNameOption  = Some("u" + users.head.id),
             replyToMessageIdOption = Some(1L.asInstanceOf[MessageSourceId]),
-            contentOption          = Some(
-              ContentLocation(
+            contents               = Seq(
+              Some(ContentLocation(
                 titleOption       = Some("My Brand New Place"),
                 addressOption     = Some("1 Caesar Ave"),
                 latStr            = "11.11111",
                 lonStr            = "22.22222",
                 durationSecOption = Some(5)
-              )
+              ))
             )
           ))
           val text = Seq(RichText.makePlain(s"Sharing my location"))

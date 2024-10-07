@@ -81,7 +81,7 @@ object TestUtils {
       isDeleted              = false,
       replyToMessageIdOption = replyToMessageIdOption,
       forwardFromNameOption  = Some("u" + userId),
-      contentOption          = Some(ContentPoll(question = s"Hey, ${idx}!"))
+      contents               = Seq(Some(ContentPoll(question = s"Hey, ${idx}!")))
     ))
     val text = Seq(RichText.makePlain(s"Hello there, ${idx}!"))
     Message(

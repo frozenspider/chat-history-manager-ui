@@ -109,8 +109,11 @@ class MessagesDocumentService(val htmlKit: ExtendedHtmlEditorKit) {
     val (msgHtml: String, editDtOption: Option[DateTime], isDeleted: Boolean) = m.typed match {
       case Message.Typed.Regular(rm) =>
         val textHtmlOption = RichTextHtmlRenderer.render(m.text)
-        val contentHtmlOption = rm.contentOption map { ct =>
+        val contentHtmlOption = (rm.contents map (_.get) map { ct =>
           s"""<div class="content">${ContentHtmlRenderer.render(cc, dsRoot, ct)}</div>"""
+        }) match {
+          case seq if seq.isEmpty => None
+          case seq                => Some(seq mkString "")
         }
         val fwdFromHtmlOption  = rm.forwardFromNameOption map (n => renderFwdFrom(cc, n))
         val replySrcHtmlOption = if (isQuote) {
