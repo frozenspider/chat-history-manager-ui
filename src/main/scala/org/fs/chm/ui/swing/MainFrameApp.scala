@@ -1274,6 +1274,10 @@ class MainFrameApp(grpcPort: Int) //
       ) { f => f.getName.startsWith("WhatsApp Chat with ") && f.getName.endsWith(".txt") },
 
       easyFileFilter(
+        s"Signal database"
+      ) { f => f.getName == "db.sqlite" || f.getName == "plaintext.sqlite" },
+
+      easyFileFilter(
         s"Badoo Android database"
       ) { _.getName == "ChatComDatabase" },
 
