@@ -30,8 +30,8 @@ object EntityUtils {
     val options = users map (_.prettyName)
     val res = JOptionPane.showOptionDialog(
       null,
-      "Choose yourself",
       "Which one of them is you?",
+      "Choose yourself",
       Dialog.Options.Default.id,
       Dialog.Message.Question.id,
       Swing.wrapIcon(EmptyIcon),
@@ -39,6 +39,20 @@ object EntityUtils {
       options.head
     )
     if (res == JOptionPane.CLOSED_OPTION) {
+      throw new IllegalArgumentException("Well, tough luck")
+    } else {
+      res
+    }
+  }
+
+  def askForUserInput(prompt: String): String = {
+    val res = JOptionPane.showInputDialog(
+      null,
+      prompt,
+      "Input requested value",
+      Dialog.Message.Question.id
+    )
+    if (res == null) {
       throw new IllegalArgumentException("Well, tough luck")
     } else {
       res
