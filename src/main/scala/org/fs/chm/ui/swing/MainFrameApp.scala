@@ -1215,9 +1215,13 @@ class MainFrameApp(grpcPort: Int) //
         dao             = dao,
         getInnerItems = { ds =>
           val allCwds = dao.chats(ds.uuid)
+          // Combine master/slave chats but preserve chat order
+          val mainChatIds = allCwds.map(_.chat).map(c => c.mainChatId getOrElse c.id).distinct
+          val allCwdsMap = allCwds.map(cwd => (cwd.chat.id, cwd)).toMap
           val myself = dao.users(ds.uuid).head
-          allCwds.filter(_.chat.mainChatId.isEmpty).map(cwd => {
-            val slaveChats = allCwds.filter(_.chat.mainChatId.contains(cwd.chat.id))
+          mainChatIds.map(mainChatId => {
+            val cwd = allCwdsMap(mainChatId)
+            val slaveChats = allCwds.filter(_.chat.mainChatId.contains(mainChatId))
             new ChatListItem(dao, CombinedChat(cwd, slaveChats), myself, Some(chatSelGroup), Some(this))
           })
         },
